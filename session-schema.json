@@ -1,0 +1,2857 @@
+{
+  "$defs": {
+    "ApiError": {
+      "additionalProperties": false,
+      "description": "Complete API error information.",
+      "properties": {
+        "status": {
+          "title": "Status",
+          "type": "integer"
+        },
+        "headers": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Headers",
+          "type": "object"
+        },
+        "requestID": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Requestid"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ApiErrorResponse"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "status",
+        "headers"
+      ],
+      "title": "ApiError",
+      "type": "object"
+    },
+    "ApiErrorDetail": {
+      "additionalProperties": false,
+      "description": "Nested API error details.",
+      "properties": {
+        "type": {
+          "const": "overloaded_error",
+          "title": "Type",
+          "type": "string"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "message"
+      ],
+      "title": "ApiErrorDetail",
+      "type": "object"
+    },
+    "ApiErrorResponse": {
+      "additionalProperties": false,
+      "description": "API error response structure.",
+      "properties": {
+        "type": {
+          "const": "error",
+          "title": "Type",
+          "type": "string"
+        },
+        "error": {
+          "$ref": "#/$defs/ApiErrorDetail"
+        },
+        "request_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Request Id"
+        }
+      },
+      "required": [
+        "type",
+        "error"
+      ],
+      "title": "ApiErrorResponse",
+      "type": "object"
+    },
+    "ApiErrorSystemRecord": {
+      "additionalProperties": false,
+      "description": "System record for API errors (subtype=api_error).",
+      "properties": {
+        "type": {
+          "const": "system",
+          "title": "Type",
+          "type": "string"
+        },
+        "uuid": {
+          "title": "Uuid",
+          "type": "string"
+        },
+        "timestamp": {
+          "title": "Timestamp",
+          "type": "string"
+        },
+        "sessionId": {
+          "title": "Sessionid",
+          "type": "string"
+        },
+        "cwd": {
+          "title": "Cwd",
+          "type": "string"
+        },
+        "parentUuid": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Parentuuid"
+        },
+        "subtype": {
+          "const": "api_error",
+          "title": "Subtype",
+          "type": "string"
+        },
+        "level": {
+          "anyOf": [
+            {
+              "enum": [
+                "error",
+                "warning"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Level"
+        },
+        "isSidechain": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Issidechain"
+        },
+        "userType": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Usertype"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Version"
+        },
+        "gitBranch": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Gitbranch"
+        },
+        "error": {
+          "$ref": "#/$defs/ApiError"
+        },
+        "retryInMs": {
+          "title": "Retryinms",
+          "type": "number"
+        },
+        "retryAttempt": {
+          "title": "Retryattempt",
+          "type": "integer"
+        },
+        "maxRetries": {
+          "title": "Maxretries",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "type",
+        "uuid",
+        "timestamp",
+        "sessionId",
+        "cwd",
+        "parentUuid",
+        "subtype",
+        "error",
+        "retryInMs",
+        "retryAttempt",
+        "maxRetries"
+      ],
+      "title": "ApiErrorSystemRecord",
+      "type": "object"
+    },
+    "AskUserQuestionToolResult": {
+      "additionalProperties": false,
+      "description": "Result from AskUserQuestion tool execution.",
+      "properties": {
+        "questions": {
+          "items": {
+            "$ref": "#/$defs/UserQuestion"
+          },
+          "title": "Questions",
+          "type": "array"
+        },
+        "answers": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Answers",
+          "type": "array"
+        }
+      },
+      "required": [
+        "questions",
+        "answers"
+      ],
+      "title": "AskUserQuestionToolResult",
+      "type": "object"
+    },
+    "AssistantRecord": {
+      "additionalProperties": false,
+      "description": "Assistant message record.",
+      "properties": {
+        "type": {
+          "const": "assistant",
+          "title": "Type",
+          "type": "string"
+        },
+        "uuid": {
+          "title": "Uuid",
+          "type": "string"
+        },
+        "timestamp": {
+          "title": "Timestamp",
+          "type": "string"
+        },
+        "sessionId": {
+          "title": "Sessionid",
+          "type": "string"
+        },
+        "cwd": {
+          "title": "Cwd",
+          "type": "string"
+        },
+        "parentUuid": {
+          "title": "Parentuuid",
+          "type": "string"
+        },
+        "message": {
+          "$ref": "#/$defs/Message"
+        },
+        "usage": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TokenUsage"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Token usage for this request (null for agent records - usage in message instead)"
+        },
+        "stopReason": {
+          "default": null,
+          "description": "Reserved for future use",
+          "status": "reserved",
+          "title": "Stopreason",
+          "type": "null"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Claude model identifier (null for agent records - model in message instead)",
+          "title": "Model"
+        },
+        "requestDuration": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Request duration in milliseconds",
+          "title": "Requestduration"
+        },
+        "requestId": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Claude API request ID",
+          "title": "Requestid"
+        },
+        "agentId": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Agent ID for subprocess/agent records (references agent-{agentId}.jsonl)",
+          "title": "Agentid"
+        },
+        "isSidechain": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Indicates sidechain/subprocess execution (present in agent records)",
+          "title": "Issidechain"
+        },
+        "userType": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "User type (present in agent records)",
+          "title": "Usertype"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Claude Code version (present in agent records)",
+          "title": "Version"
+        },
+        "gitBranch": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Git branch (present in agent records)",
+          "title": "Gitbranch"
+        },
+        "isApiErrorMessage": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Indicates this message represents an API error",
+          "title": "Isapierrormessage"
+        }
+      },
+      "required": [
+        "type",
+        "uuid",
+        "timestamp",
+        "sessionId",
+        "cwd",
+        "parentUuid",
+        "message"
+      ],
+      "title": "AssistantRecord",
+      "type": "object"
+    },
+    "BashToolResult": {
+      "additionalProperties": false,
+      "description": "Result from Bash tool execution.",
+      "properties": {
+        "stdout": {
+          "title": "Stdout",
+          "type": "string"
+        },
+        "stderr": {
+          "title": "Stderr",
+          "type": "string"
+        },
+        "interrupted": {
+          "title": "Interrupted",
+          "type": "boolean"
+        },
+        "isImage": {
+          "title": "Isimage",
+          "type": "boolean"
+        },
+        "returnCodeInterpretation": {
+          "anyOf": [
+            {
+              "enum": [
+                "No matches found",
+                "Some directories were inaccessible",
+                "Files differ"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Returncodeinterpretation"
+        },
+        "backgroundTaskId": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Backgroundtaskid"
+        },
+        "shellId": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Shellid"
+        },
+        "command": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Command"
+        },
+        "exitCode": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Exitcode"
+        },
+        "stdoutLines": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Stdoutlines"
+        },
+        "stderrLines": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Stderrlines"
+        },
+        "timestamp": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Timestamp"
+        },
+        "status": {
+          "anyOf": [
+            {
+              "enum": [
+                "running",
+                "completed",
+                "failed"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Status"
+        },
+        "filterPattern": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Filterpattern"
+        }
+      },
+      "required": [
+        "stdout",
+        "stderr",
+        "interrupted",
+        "isImage"
+      ],
+      "title": "BashToolResult",
+      "type": "object"
+    },
+    "CacheCreation": {
+      "additionalProperties": false,
+      "description": "Cache creation token breakdown.",
+      "properties": {
+        "ephemeral_5m_input_tokens": {
+          "title": "Ephemeral 5M Input Tokens",
+          "type": "integer"
+        },
+        "ephemeral_1h_input_tokens": {
+          "title": "Ephemeral 1H Input Tokens",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "ephemeral_5m_input_tokens",
+        "ephemeral_1h_input_tokens"
+      ],
+      "title": "CacheCreation",
+      "type": "object"
+    },
+    "CompactBoundarySystemRecord": {
+      "additionalProperties": false,
+      "description": "System record for conversation compaction (subtype=compact_boundary).",
+      "properties": {
+        "type": {
+          "const": "system",
+          "title": "Type",
+          "type": "string"
+        },
+        "uuid": {
+          "title": "Uuid",
+          "type": "string"
+        },
+        "timestamp": {
+          "title": "Timestamp",
+          "type": "string"
+        },
+        "sessionId": {
+          "title": "Sessionid",
+          "type": "string"
+        },
+        "cwd": {
+          "title": "Cwd",
+          "type": "string"
+        },
+        "parentUuid": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Parentuuid"
+        },
+        "subtype": {
+          "const": "compact_boundary",
+          "title": "Subtype",
+          "type": "string"
+        },
+        "content": {
+          "title": "Content",
+          "type": "string"
+        },
+        "level": {
+          "anyOf": [
+            {
+              "enum": [
+                "info",
+                "error",
+                "warning",
+                "suggestion"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Level"
+        },
+        "isMeta": {
+          "title": "Ismeta",
+          "type": "boolean"
+        },
+        "isSidechain": {
+          "title": "Issidechain",
+          "type": "boolean"
+        },
+        "userType": {
+          "title": "Usertype",
+          "type": "string"
+        },
+        "version": {
+          "title": "Version",
+          "type": "string"
+        },
+        "gitBranch": {
+          "title": "Gitbranch",
+          "type": "string"
+        },
+        "logicalParentUuid": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Logicalparentuuid"
+        },
+        "compactMetadata": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CompactMetadata"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "type",
+        "uuid",
+        "timestamp",
+        "sessionId",
+        "cwd",
+        "parentUuid",
+        "subtype",
+        "content",
+        "isMeta",
+        "isSidechain",
+        "userType",
+        "version",
+        "gitBranch"
+      ],
+      "title": "CompactBoundarySystemRecord",
+      "type": "object"
+    },
+    "CompactMetadata": {
+      "additionalProperties": false,
+      "description": "Metadata for conversation compaction.",
+      "properties": {
+        "trigger": {
+          "enum": [
+            "auto",
+            "manual"
+          ],
+          "title": "Trigger",
+          "type": "string"
+        },
+        "preTokens": {
+          "title": "Pretokens",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "trigger",
+        "preTokens"
+      ],
+      "title": "CompactMetadata",
+      "type": "object"
+    },
+    "EditToolInput": {
+      "additionalProperties": false,
+      "description": "Input for Edit tool.",
+      "properties": {
+        "file_path": {
+          "title": "File Path",
+          "type": "string"
+        },
+        "old_string": {
+          "title": "Old String",
+          "type": "string"
+        },
+        "new_string": {
+          "title": "New String",
+          "type": "string"
+        },
+        "replace_all": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Replace All"
+        }
+      },
+      "required": [
+        "file_path",
+        "old_string",
+        "new_string"
+      ],
+      "title": "EditToolInput",
+      "type": "object"
+    },
+    "EditToolResult": {
+      "additionalProperties": false,
+      "description": "Result from Edit tool execution.",
+      "properties": {
+        "filePath": {
+          "title": "Filepath",
+          "type": "string"
+        },
+        "oldString": {
+          "title": "Oldstring",
+          "type": "string"
+        },
+        "newString": {
+          "title": "Newstring",
+          "type": "string"
+        },
+        "originalFile": {
+          "title": "Originalfile",
+          "type": "string"
+        },
+        "userModified": {
+          "title": "Usermodified",
+          "type": "boolean"
+        },
+        "replaceAll": {
+          "title": "Replaceall",
+          "type": "boolean"
+        },
+        "structuredPatch": {
+          "items": {
+            "$ref": "#/$defs/PatchHunk"
+          },
+          "title": "Structuredpatch",
+          "type": "array"
+        }
+      },
+      "required": [
+        "filePath",
+        "oldString",
+        "newString",
+        "originalFile",
+        "userModified",
+        "replaceAll",
+        "structuredPatch"
+      ],
+      "title": "EditToolResult",
+      "type": "object"
+    },
+    "ExitPlanModeToolResult": {
+      "additionalProperties": false,
+      "description": "Result from ExitPlanMode tool execution.",
+      "properties": {
+        "plan": {
+          "title": "Plan",
+          "type": "string"
+        },
+        "isAgent": {
+          "title": "Isagent",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "plan",
+        "isAgent"
+      ],
+      "title": "ExitPlanModeToolResult",
+      "type": "object"
+    },
+    "FileBackupInfo": {
+      "additionalProperties": false,
+      "description": "Backup information for a tracked file.",
+      "properties": {
+        "backupFileName": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Backupfilename"
+        },
+        "version": {
+          "title": "Version",
+          "type": "integer"
+        },
+        "backupTime": {
+          "title": "Backuptime",
+          "type": "string"
+        }
+      },
+      "required": [
+        "backupFileName",
+        "version",
+        "backupTime"
+      ],
+      "title": "FileBackupInfo",
+      "type": "object"
+    },
+    "FileHistorySnapshot": {
+      "additionalProperties": false,
+      "description": "Snapshot data for file history tracking.",
+      "properties": {
+        "messageId": {
+          "title": "Messageid",
+          "type": "string"
+        },
+        "trackedFileBackups": {
+          "additionalProperties": {
+            "$ref": "#/$defs/FileBackupInfo"
+          },
+          "title": "Trackedfilebackups",
+          "type": "object"
+        },
+        "timestamp": {
+          "title": "Timestamp",
+          "type": "string"
+        }
+      },
+      "required": [
+        "messageId",
+        "trackedFileBackups",
+        "timestamp"
+      ],
+      "title": "FileHistorySnapshot",
+      "type": "object"
+    },
+    "FileHistorySnapshotRecord": {
+      "additionalProperties": false,
+      "description": "File history snapshot record (different schema from regular records).",
+      "properties": {
+        "type": {
+          "const": "file-history-snapshot",
+          "title": "Type",
+          "type": "string"
+        },
+        "messageId": {
+          "title": "Messageid",
+          "type": "string"
+        },
+        "snapshot": {
+          "$ref": "#/$defs/FileHistorySnapshot"
+        },
+        "isSnapshotUpdate": {
+          "title": "Issnapshotupdate",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "type",
+        "messageId",
+        "snapshot",
+        "isSnapshotUpdate"
+      ],
+      "title": "FileHistorySnapshotRecord",
+      "type": "object"
+    },
+    "FileInfo": {
+      "additionalProperties": false,
+      "description": "File information from Read tool.",
+      "properties": {
+        "filePath": {
+          "title": "Filepath",
+          "type": "string"
+        },
+        "content": {
+          "title": "Content",
+          "type": "string"
+        },
+        "numLines": {
+          "title": "Numlines",
+          "type": "integer"
+        },
+        "startLine": {
+          "title": "Startline",
+          "type": "integer"
+        },
+        "totalLines": {
+          "title": "Totallines",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "filePath",
+        "content",
+        "numLines",
+        "startLine",
+        "totalLines"
+      ],
+      "title": "FileInfo",
+      "type": "object"
+    },
+    "GlobToolResult": {
+      "additionalProperties": false,
+      "description": "Result from Glob/file search tool execution.",
+      "properties": {
+        "mode": {
+          "anyOf": [
+            {
+              "const": "files_with_matches",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Mode"
+        },
+        "filenames": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Filenames",
+          "type": "array"
+        },
+        "numFiles": {
+          "title": "Numfiles",
+          "type": "integer"
+        },
+        "durationMs": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Durationms"
+        },
+        "truncated": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Truncated"
+        }
+      },
+      "required": [
+        "filenames",
+        "numFiles"
+      ],
+      "title": "GlobToolResult",
+      "type": "object"
+    },
+    "GrepToolResult": {
+      "additionalProperties": false,
+      "description": "Result from Grep/content search tool execution.",
+      "properties": {
+        "mode": {
+          "enum": [
+            "content",
+            "count"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "numFiles": {
+          "title": "Numfiles",
+          "type": "integer"
+        },
+        "filenames": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Filenames",
+          "type": "array"
+        },
+        "content": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Content"
+        },
+        "numLines": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Numlines"
+        },
+        "numMatches": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Nummatches"
+        },
+        "appliedLimit": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Appliedlimit"
+        }
+      },
+      "required": [
+        "mode",
+        "numFiles",
+        "filenames"
+      ],
+      "title": "GrepToolResult",
+      "type": "object"
+    },
+    "ImageContent": {
+      "additionalProperties": false,
+      "description": "Image content block from user messages.",
+      "properties": {
+        "type": {
+          "const": "image",
+          "title": "Type",
+          "type": "string"
+        },
+        "source": {
+          "$ref": "#/$defs/ImageSource"
+        }
+      },
+      "required": [
+        "type",
+        "source"
+      ],
+      "title": "ImageContent",
+      "type": "object"
+    },
+    "ImageSource": {
+      "additionalProperties": false,
+      "description": "Image source data for image content.",
+      "properties": {
+        "type": {
+          "const": "base64",
+          "title": "Type",
+          "type": "string"
+        },
+        "media_type": {
+          "const": "image/png",
+          "title": "Media Type",
+          "type": "string"
+        },
+        "data": {
+          "title": "Data",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "media_type",
+        "data"
+      ],
+      "title": "ImageSource",
+      "type": "object"
+    },
+    "InformationalSystemRecord": {
+      "additionalProperties": false,
+      "description": "System record for informational messages (subtype=informational).",
+      "properties": {
+        "type": {
+          "const": "system",
+          "title": "Type",
+          "type": "string"
+        },
+        "uuid": {
+          "title": "Uuid",
+          "type": "string"
+        },
+        "timestamp": {
+          "title": "Timestamp",
+          "type": "string"
+        },
+        "sessionId": {
+          "title": "Sessionid",
+          "type": "string"
+        },
+        "cwd": {
+          "title": "Cwd",
+          "type": "string"
+        },
+        "parentUuid": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Parentuuid"
+        },
+        "subtype": {
+          "const": "informational",
+          "title": "Subtype",
+          "type": "string"
+        },
+        "content": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Content"
+        },
+        "level": {
+          "anyOf": [
+            {
+              "enum": [
+                "info",
+                "error",
+                "warning",
+                "suggestion"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Level"
+        },
+        "isMeta": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ismeta"
+        },
+        "isSidechain": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Issidechain"
+        },
+        "userType": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Usertype"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Version"
+        },
+        "gitBranch": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Gitbranch"
+        }
+      },
+      "required": [
+        "type",
+        "uuid",
+        "timestamp",
+        "sessionId",
+        "cwd",
+        "parentUuid",
+        "subtype"
+      ],
+      "title": "InformationalSystemRecord",
+      "type": "object"
+    },
+    "KillShellToolResult": {
+      "additionalProperties": false,
+      "description": "Result from KillShell tool execution.",
+      "properties": {
+        "success": {
+          "title": "Success",
+          "type": "boolean"
+        },
+        "shellId": {
+          "title": "Shellid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "success",
+        "shellId"
+      ],
+      "title": "KillShellToolResult",
+      "type": "object"
+    },
+    "LocalCommandSystemRecord": {
+      "additionalProperties": false,
+      "description": "System record for local command output (subtype=local_command).",
+      "properties": {
+        "type": {
+          "const": "system",
+          "title": "Type",
+          "type": "string"
+        },
+        "uuid": {
+          "title": "Uuid",
+          "type": "string"
+        },
+        "timestamp": {
+          "title": "Timestamp",
+          "type": "string"
+        },
+        "sessionId": {
+          "title": "Sessionid",
+          "type": "string"
+        },
+        "cwd": {
+          "title": "Cwd",
+          "type": "string"
+        },
+        "parentUuid": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Parentuuid"
+        },
+        "subtype": {
+          "const": "local_command",
+          "title": "Subtype",
+          "type": "string"
+        },
+        "content": {
+          "title": "Content",
+          "type": "string"
+        },
+        "level": {
+          "anyOf": [
+            {
+              "enum": [
+                "info",
+                "error",
+                "warning",
+                "suggestion"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Level"
+        },
+        "isMeta": {
+          "title": "Ismeta",
+          "type": "boolean"
+        },
+        "isSidechain": {
+          "title": "Issidechain",
+          "type": "boolean"
+        },
+        "userType": {
+          "title": "Usertype",
+          "type": "string"
+        },
+        "version": {
+          "title": "Version",
+          "type": "string"
+        },
+        "gitBranch": {
+          "title": "Gitbranch",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "uuid",
+        "timestamp",
+        "sessionId",
+        "cwd",
+        "parentUuid",
+        "subtype",
+        "content",
+        "isMeta",
+        "isSidechain",
+        "userType",
+        "version",
+        "gitBranch"
+      ],
+      "title": "LocalCommandSystemRecord",
+      "type": "object"
+    },
+    "McpResource": {
+      "additionalProperties": false,
+      "description": "A single MCP resource from ListMcpResourcesTool.",
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Title"
+        },
+        "uri": {
+          "title": "Uri",
+          "type": "string"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "mimeType": {
+          "title": "Mimetype",
+          "type": "string"
+        },
+        "server": {
+          "title": "Server",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "uri",
+        "description",
+        "mimeType",
+        "server"
+      ],
+      "title": "McpResource",
+      "type": "object"
+    },
+    "Message": {
+      "additionalProperties": false,
+      "description": "A message within a record.",
+      "properties": {
+        "role": {
+          "enum": [
+            "user",
+            "assistant"
+          ],
+          "title": "Role",
+          "type": "string"
+        },
+        "content": {
+          "anyOf": [
+            {
+              "items": {
+                "discriminator": {
+                  "mapping": {
+                    "image": "#/$defs/ImageContent",
+                    "text": "#/$defs/TextContent",
+                    "thinking": "#/$defs/ThinkingContent",
+                    "tool_result": "#/$defs/ToolResultContent",
+                    "tool_use": "#/$defs/ToolUseContent"
+                  },
+                  "propertyName": "type"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/ThinkingContent"
+                  },
+                  {
+                    "$ref": "#/$defs/TextContent"
+                  },
+                  {
+                    "$ref": "#/$defs/ToolUseContent"
+                  },
+                  {
+                    "$ref": "#/$defs/ToolResultContent"
+                  },
+                  {
+                    "$ref": "#/$defs/ImageContent"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "title": "Content"
+        },
+        "type": {
+          "anyOf": [
+            {
+              "const": "message",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Message type indicator (present in agent/subprocess responses)",
+          "title": "Type"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Claude model identifier (e.g., claude-sonnet-4-5-20250929)",
+          "title": "Model"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Message ID from Claude API",
+          "title": "Id"
+        },
+        "stop_reason": {
+          "anyOf": [
+            {
+              "enum": [
+                "tool_use",
+                "stop_sequence",
+                "end_turn"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Reason why the model stopped generating",
+          "title": "Stop Reason"
+        },
+        "stop_sequence": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The actual stop sequence string that triggered stopping",
+          "title": "Stop Sequence"
+        },
+        "usage": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TokenUsage"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Token usage information (present in nested API responses)"
+        },
+        "container": {
+          "default": null,
+          "description": "Reserved for future use",
+          "status": "reserved",
+          "title": "Container",
+          "type": "null"
+        },
+        "context_management": {
+          "default": null,
+          "description": "Reserved for future use",
+          "status": "reserved",
+          "title": "Context Management",
+          "type": "null"
+        }
+      },
+      "required": [
+        "role",
+        "content"
+      ],
+      "title": "Message",
+      "type": "object"
+    },
+    "PatchHunk": {
+      "additionalProperties": false,
+      "description": "A single hunk in a git-style patch.",
+      "properties": {
+        "oldStart": {
+          "title": "Oldstart",
+          "type": "integer"
+        },
+        "oldLines": {
+          "title": "Oldlines",
+          "type": "integer"
+        },
+        "newStart": {
+          "title": "Newstart",
+          "type": "integer"
+        },
+        "newLines": {
+          "title": "Newlines",
+          "type": "integer"
+        },
+        "lines": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Lines",
+          "type": "array"
+        }
+      },
+      "required": [
+        "oldStart",
+        "oldLines",
+        "newStart",
+        "newLines",
+        "lines"
+      ],
+      "title": "PatchHunk",
+      "type": "object"
+    },
+    "QuestionOption": {
+      "additionalProperties": false,
+      "description": "A single option in a user question.",
+      "properties": {
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        }
+      },
+      "required": [
+        "label",
+        "description"
+      ],
+      "title": "QuestionOption",
+      "type": "object"
+    },
+    "QueueOperationRecord": {
+      "additionalProperties": false,
+      "description": "Queue operation record (minimal schema, no uuid).",
+      "properties": {
+        "type": {
+          "const": "queue-operation",
+          "title": "Type",
+          "type": "string"
+        },
+        "operation": {
+          "enum": [
+            "enqueue",
+            "dequeue",
+            "remove",
+            "popAll"
+          ],
+          "title": "Operation",
+          "type": "string"
+        },
+        "timestamp": {
+          "title": "Timestamp",
+          "type": "string"
+        },
+        "sessionId": {
+          "title": "Sessionid",
+          "type": "string"
+        },
+        "content": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "items": {
+                "discriminator": {
+                  "mapping": {
+                    "image": "#/$defs/ImageContent",
+                    "text": "#/$defs/TextContent",
+                    "thinking": "#/$defs/ThinkingContent",
+                    "tool_result": "#/$defs/ToolResultContent",
+                    "tool_use": "#/$defs/ToolUseContent"
+                  },
+                  "propertyName": "type"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/ThinkingContent"
+                  },
+                  {
+                    "$ref": "#/$defs/TextContent"
+                  },
+                  {
+                    "$ref": "#/$defs/ToolUseContent"
+                  },
+                  {
+                    "$ref": "#/$defs/ToolResultContent"
+                  },
+                  {
+                    "$ref": "#/$defs/ImageContent"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "User input content for the queued operation (string or structured message)",
+          "title": "Content"
+        },
+        "data": {
+          "default": null,
+          "description": "Reserved for future use",
+          "status": "reserved",
+          "title": "Data",
+          "type": "null"
+        }
+      },
+      "required": [
+        "type",
+        "operation",
+        "timestamp",
+        "sessionId"
+      ],
+      "title": "QueueOperationRecord",
+      "type": "object"
+    },
+    "ReadToolInput": {
+      "additionalProperties": false,
+      "description": "Input for Read tool.",
+      "properties": {
+        "file_path": {
+          "title": "File Path",
+          "type": "string"
+        }
+      },
+      "required": [
+        "file_path"
+      ],
+      "title": "ReadToolInput",
+      "type": "object"
+    },
+    "ReadToolResult": {
+      "additionalProperties": false,
+      "description": "Result from Read tool execution.",
+      "properties": {
+        "type": {
+          "const": "text",
+          "title": "Type",
+          "type": "string"
+        },
+        "file": {
+          "$ref": "#/$defs/FileInfo"
+        }
+      },
+      "required": [
+        "type",
+        "file"
+      ],
+      "title": "ReadToolResult",
+      "type": "object"
+    },
+    "ServerToolUse": {
+      "additionalProperties": false,
+      "description": "Server-side tool use tracking.",
+      "properties": {
+        "web_search_requests": {
+          "title": "Web Search Requests",
+          "type": "integer"
+        },
+        "web_fetch_requests": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Web Fetch Requests"
+        }
+      },
+      "required": [
+        "web_search_requests"
+      ],
+      "title": "ServerToolUse",
+      "type": "object"
+    },
+    "SummaryRecord": {
+      "additionalProperties": false,
+      "description": "Session summary record (minimal schema, no uuid/timestamp).",
+      "properties": {
+        "type": {
+          "const": "summary",
+          "title": "Type",
+          "type": "string"
+        },
+        "summary": {
+          "title": "Summary",
+          "type": "string"
+        },
+        "leafUuid": {
+          "title": "Leafuuid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "summary",
+        "leafUuid"
+      ],
+      "title": "SummaryRecord",
+      "type": "object"
+    },
+    "SystemRecord": {
+      "additionalProperties": false,
+      "description": "System message record (standard system messages).",
+      "properties": {
+        "type": {
+          "const": "system",
+          "title": "Type",
+          "type": "string"
+        },
+        "uuid": {
+          "title": "Uuid",
+          "type": "string"
+        },
+        "timestamp": {
+          "title": "Timestamp",
+          "type": "string"
+        },
+        "sessionId": {
+          "title": "Sessionid",
+          "type": "string"
+        },
+        "cwd": {
+          "title": "Cwd",
+          "type": "string"
+        },
+        "parentUuid": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Parentuuid"
+        },
+        "systemType": {
+          "title": "Systemtype",
+          "type": "string"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "uuid",
+        "timestamp",
+        "sessionId",
+        "cwd",
+        "parentUuid",
+        "systemType",
+        "message"
+      ],
+      "title": "SystemRecord",
+      "type": "object"
+    },
+    "TaskToolResult": {
+      "additionalProperties": false,
+      "description": "Result from Task/agent tool execution.",
+      "properties": {
+        "status": {
+          "const": "completed",
+          "title": "Status",
+          "type": "string"
+        },
+        "prompt": {
+          "title": "Prompt",
+          "type": "string"
+        },
+        "content": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "image": "#/$defs/ImageContent",
+                "text": "#/$defs/TextContent",
+                "thinking": "#/$defs/ThinkingContent",
+                "tool_result": "#/$defs/ToolResultContent",
+                "tool_use": "#/$defs/ToolUseContent"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/ThinkingContent"
+              },
+              {
+                "$ref": "#/$defs/TextContent"
+              },
+              {
+                "$ref": "#/$defs/ToolUseContent"
+              },
+              {
+                "$ref": "#/$defs/ToolResultContent"
+              },
+              {
+                "$ref": "#/$defs/ImageContent"
+              }
+            ]
+          },
+          "title": "Content",
+          "type": "array"
+        },
+        "totalDurationMs": {
+          "title": "Totaldurationms",
+          "type": "integer"
+        },
+        "totalTokens": {
+          "title": "Totaltokens",
+          "type": "integer"
+        },
+        "totalToolUseCount": {
+          "title": "Totaltoolusecount",
+          "type": "integer"
+        },
+        "usage": {
+          "$ref": "#/$defs/TokenUsage"
+        },
+        "agentId": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Agentid"
+        }
+      },
+      "required": [
+        "status",
+        "prompt",
+        "content",
+        "totalDurationMs",
+        "totalTokens",
+        "totalToolUseCount",
+        "usage"
+      ],
+      "title": "TaskToolResult",
+      "type": "object"
+    },
+    "TextContent": {
+      "additionalProperties": false,
+      "description": "Text content block from user or assistant messages.",
+      "properties": {
+        "type": {
+          "const": "text",
+          "title": "Type",
+          "type": "string"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "text"
+      ],
+      "title": "TextContent",
+      "type": "object"
+    },
+    "ThinkingContent": {
+      "additionalProperties": false,
+      "description": "Thinking content block from assistant messages.",
+      "properties": {
+        "type": {
+          "const": "thinking",
+          "title": "Type",
+          "type": "string"
+        },
+        "thinking": {
+          "title": "Thinking",
+          "type": "string"
+        },
+        "signature": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Signature"
+        }
+      },
+      "required": [
+        "type",
+        "thinking"
+      ],
+      "title": "ThinkingContent",
+      "type": "object"
+    },
+    "ThinkingMetadata": {
+      "additionalProperties": false,
+      "description": "Thinking configuration metadata.",
+      "properties": {
+        "level": {
+          "enum": [
+            "none",
+            "low",
+            "medium",
+            "high"
+          ],
+          "title": "Level",
+          "type": "string"
+        },
+        "disabled": {
+          "title": "Disabled",
+          "type": "boolean"
+        },
+        "triggers": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Triggers",
+          "type": "array"
+        }
+      },
+      "required": [
+        "level",
+        "disabled",
+        "triggers"
+      ],
+      "title": "ThinkingMetadata",
+      "type": "object"
+    },
+    "TodoItem": {
+      "additionalProperties": false,
+      "description": "A single todo item from TodoWrite tool.",
+      "properties": {
+        "content": {
+          "title": "Content",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "pending",
+            "in_progress",
+            "completed"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "activeForm": {
+          "title": "Activeform",
+          "type": "string"
+        }
+      },
+      "required": [
+        "content",
+        "status",
+        "activeForm"
+      ],
+      "title": "TodoItem",
+      "type": "object"
+    },
+    "TodoToolResult": {
+      "additionalProperties": false,
+      "description": "Result from TodoWrite tool execution.",
+      "properties": {
+        "oldTodos": {
+          "items": {
+            "$ref": "#/$defs/TodoItem"
+          },
+          "title": "Oldtodos",
+          "type": "array"
+        },
+        "newTodos": {
+          "items": {
+            "$ref": "#/$defs/TodoItem"
+          },
+          "title": "Newtodos",
+          "type": "array"
+        }
+      },
+      "required": [
+        "oldTodos",
+        "newTodos"
+      ],
+      "title": "TodoToolResult",
+      "type": "object"
+    },
+    "TokenUsage": {
+      "additionalProperties": false,
+      "description": "Token usage information for assistant messages.",
+      "properties": {
+        "input_tokens": {
+          "title": "Input Tokens",
+          "type": "integer"
+        },
+        "output_tokens": {
+          "title": "Output Tokens",
+          "type": "integer"
+        },
+        "cache_creation_input_tokens": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cache Creation Input Tokens"
+        },
+        "cache_read_input_tokens": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cache Read Input Tokens"
+        },
+        "cache_creation": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CacheCreation"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "service_tier": {
+          "anyOf": [
+            {
+              "const": "standard",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Service Tier"
+        },
+        "server_tool_use": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ServerToolUse"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "input_tokens",
+        "output_tokens"
+      ],
+      "title": "TokenUsage",
+      "type": "object"
+    },
+    "ToolResultContent": {
+      "additionalProperties": false,
+      "description": "Tool result content block from user messages.",
+      "properties": {
+        "type": {
+          "const": "tool_result",
+          "title": "Type",
+          "type": "string"
+        },
+        "tool_use_id": {
+          "title": "Tool Use Id",
+          "type": "string"
+        },
+        "content": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "items": {
+                "discriminator": {
+                  "mapping": {
+                    "image": "#/$defs/ImageContent",
+                    "text": "#/$defs/TextContent"
+                  },
+                  "propertyName": "type"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/TextContent"
+                  },
+                  {
+                    "$ref": "#/$defs/ImageContent"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Content"
+        },
+        "is_error": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Is Error"
+        }
+      },
+      "required": [
+        "type",
+        "tool_use_id"
+      ],
+      "title": "ToolResultContent",
+      "type": "object"
+    },
+    "ToolUseContent": {
+      "additionalProperties": false,
+      "description": "Tool use content block from assistant messages.",
+      "properties": {
+        "type": {
+          "const": "tool_use",
+          "title": "Type",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "input": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ReadToolInput"
+            },
+            {
+              "$ref": "#/$defs/WriteToolInput"
+            },
+            {
+              "$ref": "#/$defs/EditToolInput"
+            },
+            {
+              "additionalProperties": true,
+              "type": "object"
+            }
+          ],
+          "title": "Input"
+        }
+      },
+      "required": [
+        "type",
+        "id",
+        "name",
+        "input"
+      ],
+      "title": "ToolUseContent",
+      "type": "object"
+    },
+    "UserQuestion": {
+      "additionalProperties": false,
+      "description": "A question to ask the user.",
+      "properties": {
+        "question": {
+          "title": "Question",
+          "type": "string"
+        },
+        "header": {
+          "title": "Header",
+          "type": "string"
+        },
+        "options": {
+          "items": {
+            "$ref": "#/$defs/QuestionOption"
+          },
+          "title": "Options",
+          "type": "array"
+        },
+        "multiSelect": {
+          "title": "Multiselect",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "question",
+        "header",
+        "options",
+        "multiSelect"
+      ],
+      "title": "UserQuestion",
+      "type": "object"
+    },
+    "UserRecord": {
+      "additionalProperties": false,
+      "description": "User message record.",
+      "properties": {
+        "type": {
+          "const": "user",
+          "title": "Type",
+          "type": "string"
+        },
+        "uuid": {
+          "title": "Uuid",
+          "type": "string"
+        },
+        "timestamp": {
+          "title": "Timestamp",
+          "type": "string"
+        },
+        "sessionId": {
+          "title": "Sessionid",
+          "type": "string"
+        },
+        "cwd": {
+          "title": "Cwd",
+          "type": "string"
+        },
+        "parentUuid": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Parentuuid"
+        },
+        "isSidechain": {
+          "title": "Issidechain",
+          "type": "boolean"
+        },
+        "userType": {
+          "const": "external",
+          "title": "Usertype",
+          "type": "string"
+        },
+        "version": {
+          "title": "Version",
+          "type": "string"
+        },
+        "gitBranch": {
+          "title": "Gitbranch",
+          "type": "string"
+        },
+        "message": {
+          "$ref": "#/$defs/Message"
+        },
+        "projectPaths": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Additional project paths beyond cwd (each path will be translated)",
+          "title": "Projectpaths"
+        },
+        "budgetTokens": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Token budget limit for this request",
+          "title": "Budgettokens"
+        },
+        "skills": {
+          "default": null,
+          "description": "Reserved for future use",
+          "status": "reserved",
+          "title": "Skills",
+          "type": "null"
+        },
+        "mcp": {
+          "default": null,
+          "description": "Reserved for future use",
+          "status": "reserved",
+          "title": "Mcp",
+          "type": "null"
+        },
+        "agentId": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Agent ID for subprocess/agent records (references agent-{agentId}.jsonl)",
+          "title": "Agentid"
+        },
+        "isMeta": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Indicates meta messages (system-level information)",
+          "title": "Ismeta"
+        },
+        "thinkingMetadata": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ThinkingMetadata"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Extended thinking configuration (Claude 3.7+)"
+        },
+        "isVisibleInTranscriptOnly": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Message visible only in transcript, not in session history",
+          "title": "Isvisibleintranscriptonly"
+        },
+        "isCompactSummary": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Indicates this is a compacted session summary",
+          "title": "Iscompactsummary"
+        },
+        "toolUseResult": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/McpResource"
+              },
+              "type": "array"
+            },
+            {
+              "items": {
+                "$ref": "#/$defs/TextContent"
+              },
+              "type": "array"
+            },
+            {
+              "$ref": "#/$defs/BashToolResult"
+            },
+            {
+              "$ref": "#/$defs/ReadToolResult"
+            },
+            {
+              "$ref": "#/$defs/EditToolResult"
+            },
+            {
+              "$ref": "#/$defs/WriteToolResult"
+            },
+            {
+              "$ref": "#/$defs/GrepToolResult"
+            },
+            {
+              "$ref": "#/$defs/GlobToolResult"
+            },
+            {
+              "$ref": "#/$defs/TodoToolResult"
+            },
+            {
+              "$ref": "#/$defs/TaskToolResult"
+            },
+            {
+              "$ref": "#/$defs/AskUserQuestionToolResult"
+            },
+            {
+              "$ref": "#/$defs/WebSearchToolResult"
+            },
+            {
+              "$ref": "#/$defs/WebFetchToolResult"
+            },
+            {
+              "$ref": "#/$defs/ExitPlanModeToolResult"
+            },
+            {
+              "$ref": "#/$defs/KillShellToolResult"
+            },
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tooluseresult"
+        }
+      },
+      "required": [
+        "type",
+        "uuid",
+        "timestamp",
+        "sessionId",
+        "cwd",
+        "parentUuid",
+        "isSidechain",
+        "userType",
+        "version",
+        "gitBranch",
+        "message"
+      ],
+      "title": "UserRecord",
+      "type": "object"
+    },
+    "WebFetchToolResult": {
+      "additionalProperties": false,
+      "description": "Result from WebFetch tool execution.",
+      "properties": {
+        "url": {
+          "title": "Url",
+          "type": "string"
+        },
+        "code": {
+          "title": "Code",
+          "type": "integer"
+        },
+        "codeText": {
+          "title": "Codetext",
+          "type": "string"
+        },
+        "bytes": {
+          "title": "Bytes",
+          "type": "integer"
+        },
+        "result": {
+          "title": "Result",
+          "type": "string"
+        },
+        "durationMs": {
+          "title": "Durationms",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "url",
+        "code",
+        "codeText",
+        "bytes",
+        "result",
+        "durationMs"
+      ],
+      "title": "WebFetchToolResult",
+      "type": "object"
+    },
+    "WebSearchResult": {
+      "additionalProperties": false,
+      "description": "A single web search result.",
+      "properties": {
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "url": {
+          "title": "Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "title",
+        "url"
+      ],
+      "title": "WebSearchResult",
+      "type": "object"
+    },
+    "WebSearchToolResult": {
+      "additionalProperties": false,
+      "description": "Result from WebSearch tool execution.",
+      "properties": {
+        "query": {
+          "title": "Query",
+          "type": "string"
+        },
+        "results": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/WebSearchResult"
+              },
+              "type": "array"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "title": "Results"
+        },
+        "durationSeconds": {
+          "title": "Durationseconds",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "query",
+        "results",
+        "durationSeconds"
+      ],
+      "title": "WebSearchToolResult",
+      "type": "object"
+    },
+    "WriteToolInput": {
+      "additionalProperties": false,
+      "description": "Input for Write tool.",
+      "properties": {
+        "file_path": {
+          "title": "File Path",
+          "type": "string"
+        },
+        "content": {
+          "title": "Content",
+          "type": "string"
+        }
+      },
+      "required": [
+        "file_path",
+        "content"
+      ],
+      "title": "WriteToolInput",
+      "type": "object"
+    },
+    "WriteToolResult": {
+      "additionalProperties": false,
+      "description": "Result from Write tool execution.",
+      "properties": {
+        "type": {
+          "enum": [
+            "create",
+            "update"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "filePath": {
+          "title": "Filepath",
+          "type": "string"
+        },
+        "content": {
+          "title": "Content",
+          "type": "string"
+        },
+        "structuredPatch": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/PatchHunk"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Structuredpatch"
+        }
+      },
+      "required": [
+        "type",
+        "filePath",
+        "content"
+      ],
+      "title": "WriteToolResult",
+      "type": "object"
+    }
+  },
+  "anyOf": [
+    {
+      "$ref": "#/$defs/UserRecord"
+    },
+    {
+      "$ref": "#/$defs/AssistantRecord"
+    },
+    {
+      "$ref": "#/$defs/SummaryRecord"
+    },
+    {
+      "$ref": "#/$defs/LocalCommandSystemRecord"
+    },
+    {
+      "$ref": "#/$defs/CompactBoundarySystemRecord"
+    },
+    {
+      "$ref": "#/$defs/ApiErrorSystemRecord"
+    },
+    {
+      "$ref": "#/$defs/InformationalSystemRecord"
+    },
+    {
+      "$ref": "#/$defs/SystemRecord"
+    },
+    {
+      "$ref": "#/$defs/FileHistorySnapshotRecord"
+    },
+    {
+      "$ref": "#/$defs/QueueOperationRecord"
+    }
+  ],
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/your-org/claude-session-mcp/session-schema.json",
+  "title": "Claude Code Session Record",
+  "description": "Complete schema for Claude Code session JSONL records",
+  "x-schema-version": "0.1.0",
+  "x-claude-code-compatibility": {
+    "min": "2.0.35",
+    "max": "2.0.36",
+    "last_validated": "2025-01-07",
+    "validation_record_count": 36305
+  }
+}

@@ -34,6 +34,19 @@ import functools
 from typing import Any, Literal, Annotated, Union, get_args
 from pydantic import BaseModel, Field, ConfigDict, TypeAdapter, field_validator, ValidationInfo
 
+from src.markers import PathField, PathListField
+
+
+# ==============================================================================
+# Schema Version
+# ==============================================================================
+
+SCHEMA_VERSION = '0.1.0'
+CLAUDE_CODE_MIN_VERSION = '2.0.35'
+CLAUDE_CODE_MAX_VERSION = '2.0.36'
+LAST_VALIDATED = '2025-01-07'
+VALIDATION_RECORD_COUNT = 36_305
+
 
 # ==============================================================================
 # Base Configuration
@@ -76,20 +89,20 @@ class TextContent(StrictModel):
 class ReadToolInput(StrictModel):
     """Input for Read tool."""
 
-    file_path: str  # PATH TO TRANSLATE
+    file_path: PathField
 
 
 class WriteToolInput(StrictModel):
     """Input for Write tool."""
 
-    file_path: str  # PATH TO TRANSLATE
+    file_path: PathField
     content: str
 
 
 class EditToolInput(StrictModel):
     """Input for Edit tool."""
 
-    file_path: str  # PATH TO TRANSLATE
+    file_path: PathField
     old_string: str
     new_string: str
     replace_all: bool | None = None
@@ -338,7 +351,7 @@ class ApiError(StrictModel):
 class FileInfo(StrictModel):
     """File information from Read tool."""
 
-    filePath: str  # PATH TO TRANSLATE
+    filePath: PathField
     content: str
     numLines: int
     startLine: int
@@ -414,7 +427,7 @@ class GrepToolResult(StrictModel):
 class EditToolResult(StrictModel):
     """Result from Edit tool execution."""
 
-    filePath: str  # PATH TO TRANSLATE
+    filePath: PathField
     oldString: str
     newString: str
     originalFile: str
@@ -427,7 +440,7 @@ class WriteToolResult(StrictModel):
     """Result from Write tool execution."""
 
     type: Literal['create', 'update']
-    filePath: str  # PATH TO TRANSLATE
+    filePath: PathField
     content: str
     structuredPatch: list[PatchHunk] | None = None
 
@@ -578,17 +591,17 @@ class UserRecord(BaseRecord):
     """User message record."""
 
     type: Literal['user']
-    cwd: str  # PATH TO TRANSLATE
+    cwd: PathField
     parentUuid: str | None
     isSidechain: bool
     userType: Literal['external']
     version: str
     gitBranch: str
     message: Message
-    projectPaths: list[str] | None = Field(
+    projectPaths: PathListField | None = Field(
         None,
         description='Additional project paths beyond cwd (each path will be translated)'
-    )  # PATH TO TRANSLATE
+    )
     budgetTokens: int | None = Field(
         None,
         description='Token budget limit for this request'
@@ -637,7 +650,7 @@ class AssistantRecord(BaseRecord):
     """Assistant message record."""
 
     type: Literal['assistant']
-    cwd: str  # PATH TO TRANSLATE
+    cwd: PathField
     parentUuid: str
     message: Message
     # Note: usage/stopReason are optional for agent records (nested in message instead)
@@ -708,7 +721,7 @@ class SystemRecord(BaseRecord):
     """System message record (standard system messages)."""
 
     type: Literal['system']
-    cwd: str  # PATH TO TRANSLATE
+    cwd: PathField
     parentUuid: str | None
     systemType: str
     message: str  # Always string (0 dict occurrences across all sessions)
@@ -722,7 +735,7 @@ class LocalCommandSystemRecord(BaseRecord):
     """System record for local command output (subtype=local_command)."""
 
     type: Literal['system']
-    cwd: str  # PATH TO TRANSLATE
+    cwd: PathField
     parentUuid: str | None
     subtype: Literal['local_command']
     content: str  # Command output XML
@@ -738,7 +751,7 @@ class CompactBoundarySystemRecord(BaseRecord):
     """System record for conversation compaction (subtype=compact_boundary)."""
 
     type: Literal['system']
-    cwd: str  # PATH TO TRANSLATE
+    cwd: PathField
     parentUuid: str | None
     subtype: Literal['compact_boundary']
     content: str  # e.g., "Conversation compacted"
@@ -756,7 +769,7 @@ class ApiErrorSystemRecord(BaseRecord):
     """System record for API errors (subtype=api_error)."""
 
     type: Literal['system']
-    cwd: str  # PATH TO TRANSLATE
+    cwd: PathField
     parentUuid: str | None
     subtype: Literal['api_error']
     level: Literal['error', 'warning'] | None = None
@@ -774,7 +787,7 @@ class InformationalSystemRecord(BaseRecord):
     """System record for informational messages (subtype=informational)."""
 
     type: Literal['system']
-    cwd: str  # PATH TO TRANSLATE
+    cwd: PathField
     parentUuid: str | None
     subtype: Literal['informational']
     content: str | None = None
