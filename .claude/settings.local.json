@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(/Users/chris/claude-session-mcp/scripts/validate_models.py)",
+      "mcp__perplexity__perplexity_ask",
+      "Bash(/Users/chris/claude-session-mcp/scripts/check_corrupted_sessions.py)",
+      "mcp__python-interpreter__execute",
+      "Bash(rg:*)"
+    ],
+    "additionalDirectories": [
+      "/Users/chris/granola-mcp/",
+      "/Users/chris/monorepo/",
+      "/Users/chris/mcps/"
+    ]
+  }
+}

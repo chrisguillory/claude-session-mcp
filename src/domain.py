@@ -19,6 +19,9 @@ Architecture (top-down):
 
 from __future__ import annotations
 
+import datetime
+from typing import Literal
+
 from pydantic import BaseModel, Field, ConfigDict
 
 from .models import SessionRecord
@@ -27,6 +30,7 @@ from .models import SessionRecord
 # ==============================================================================
 # Base Configuration for Domain Models
 # ==============================================================================
+
 
 class DomainModel(BaseModel):
     """Base model for domain/application models."""
@@ -41,6 +45,7 @@ class DomainModel(BaseModel):
 # ==============================================================================
 # Top Level: Complete Session Archive (for memorialization/teleportation)
 # ==============================================================================
+
 
 class CompleteSessionArchive(DomainModel):
     """
@@ -59,6 +64,7 @@ class CompleteSessionArchive(DomainModel):
 # ==============================================================================
 # Session Level: Main and Agent Sessions
 # ==============================================================================
+
 
 class Session(DomainModel):
     """
@@ -88,6 +94,7 @@ class AgentSession(DomainModel):
 # ==============================================================================
 # Analysis Level: Enriched with Costs and Insights
 # ==============================================================================
+
 
 class SessionAnalysis(DomainModel):
     """
@@ -119,6 +126,7 @@ class SessionAnalysis(DomainModel):
 # ==============================================================================
 # Metadata Level: Computed Statistics
 # ==============================================================================
+
 
 class SessionMetadata(DomainModel):
     """
@@ -180,6 +188,7 @@ class TokenCosts(DomainModel):
 # ==============================================================================
 # Discovery Level: Session Lists and Info
 # ==============================================================================
+
 
 class SessionList(DomainModel):
     """

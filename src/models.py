@@ -43,28 +43,30 @@ from src.markers import PathField, PathListField
 
 SCHEMA_VERSION = '0.1.0'
 CLAUDE_CODE_MIN_VERSION = '2.0.35'
-CLAUDE_CODE_MAX_VERSION = '2.0.36'
-LAST_VALIDATED = '2025-01-07'
-VALIDATION_RECORD_COUNT = 36_305
+CLAUDE_CODE_MAX_VERSION = '2.0.42'
+LAST_VALIDATED = '2025-01-16'
+VALIDATION_RECORD_COUNT = 53_750
 
 
 # ==============================================================================
 # Base Configuration
 # ==============================================================================
 
+
 class StrictModel(BaseModel):
     """Base model with strict validation settings."""
 
     model_config = ConfigDict(
         extra='forbid',  # Raise error on unexpected fields
-        strict=True,     # Strict type validation
-        frozen=False,    # Allow modification for path translation
+        strict=True,  # Strict type validation
+        frozen=False,  # Allow modification for path translation
     )
 
 
 # ==============================================================================
 # Message Content Types (Discriminated Union)
 # ==============================================================================
+
 
 class ThinkingContent(StrictModel):
     """Thinking content block from assistant messages."""
@@ -81,10 +83,10 @@ class TextContent(StrictModel):
     text: str
 
 
-
 # ==============================================================================
 # Tool Use Input Types (for tools that use file paths)
 # ==============================================================================
+
 
 class ReadToolInput(StrictModel):
     """Input for Read tool."""
@@ -111,18 +113,16 @@ class EditToolInput(StrictModel):
 # Union of tool inputs with file paths (others remain dict[str, Any])
 ToolInput = Annotated[
     Union[
-        ReadToolInput,
-        WriteToolInput,
-        EditToolInput,
-        dict[str, Any]  # Fallback for all other tools
+        ReadToolInput, WriteToolInput, EditToolInput, dict[str, Any]  # Fallback for all other tools
     ],
-    Field(union_mode='left_to_right')
+    Field(union_mode='left_to_right'),
 ]
 
 
 # ==============================================================================
 # Image Source (must be defined before ImageContent)
 # ==============================================================================
+
 
 class ImageSource(StrictModel):
     """Image source data for image content."""
@@ -169,7 +169,7 @@ class ToolUseContent(StrictModel):
                 if tool_name not in ALLOWED_CLAUDE_TOOL_NAMES and not tool_name.startswith('mcp__'):
                     raise ValueError(
                         f"Unmodeled Claude Code built-in tool: '{tool_name}'. "
-                        f"All Claude Code tools must be explicitly modeled (see MODELED_CLAUDE_TOOLS). "
+                        f'All Claude Code tools must be explicitly modeled (see MODELED_CLAUDE_TOOLS). '
                         f"Only MCP tools (starting with 'mcp__') may use the dict fallback."
                     )
 
@@ -177,10 +177,7 @@ class ToolUseContent(StrictModel):
 
 
 # ToolResultContentBlock - for content inside tool_result
-ToolResultContentBlock = Annotated[
-    Union[TextContent, ImageContent],
-    Field(discriminator='type')
-]
+ToolResultContentBlock = Annotated[Union[TextContent, ImageContent], Field(discriminator='type')]
 
 
 class ToolResultContent(StrictModel):
@@ -194,20 +191,14 @@ class ToolResultContent(StrictModel):
 
 # Discriminated union of all message content types
 MessageContent = Annotated[
-    Union[
-        ThinkingContent,
-        TextContent,
-        ToolUseContent,
-        ToolResultContent,
-        ImageContent
-    ],
-    Field(discriminator='type')
+    Union[ThinkingContent, TextContent, ToolUseContent, ToolResultContent, ImageContent], Field(discriminator='type')
 ]
 
 
 # ==============================================================================
 # Message Structure
 # ==============================================================================
+
 
 class Message(StrictModel):
     """A message within a record."""
@@ -216,44 +207,25 @@ class Message(StrictModel):
     content: list[MessageContent] | str
     # Additional fields that may appear in assistant messages (nested API response)
     type: Literal['message'] | None = Field(
-        None,
-        description='Message type indicator (present in agent/subprocess responses)'
+        None, description='Message type indicator (present in agent/subprocess responses)'
     )
-    model: str | None = Field(
-        None,
-        description='Claude model identifier (e.g., claude-sonnet-4-5-20250929)'
+    model: str | None = Field(None, description='Claude model identifier (e.g., claude-sonnet-4-5-20250929)')
+    id: str | None = Field(None, description='Message ID from Claude API')
+    stop_reason: Literal['tool_use', 'stop_sequence', 'end_turn', 'refusal'] | None = Field(
+        None, description='Reason why the model stopped generating'
     )
-    id: str | None = Field(
-        None,
-        description='Message ID from Claude API'
-    )
-    stop_reason: Literal['tool_use', 'stop_sequence', 'end_turn'] | None = Field(
-        None,
-        description='Reason why the model stopped generating'
-    )
-    stop_sequence: str | None = Field(
-        None,
-        description='The actual stop sequence string that triggered stopping'
-    )
-    usage: TokenUsage | None = Field(
-        None,
-        description='Token usage information (present in nested API responses)'
-    )
-    container: None = Field(
-        None,
-        description='Reserved for future use',
-        json_schema_extra={'status': 'reserved'}
-    )
+    stop_sequence: str | None = Field(None, description='The actual stop sequence string that triggered stopping')
+    usage: TokenUsage | None = Field(None, description='Token usage information (present in nested API responses)')
+    container: None = Field(None, description='Reserved for future use', json_schema_extra={'status': 'reserved'})
     context_management: None = Field(
-        None,
-        description='Reserved for future use',
-        json_schema_extra={'status': 'reserved'}
+        None, description='Reserved for future use', json_schema_extra={'status': 'reserved'}
     )
 
 
 # ==============================================================================
 # Token Usage
 # ==============================================================================
+
 
 class CacheCreation(StrictModel):
     """Cache creation token breakdown."""
@@ -285,6 +257,7 @@ class TokenUsage(StrictModel):
 # Thinking Metadata
 # ==============================================================================
 
+
 class ThinkingMetadata(StrictModel):
     """Thinking configuration metadata."""
 
@@ -296,6 +269,7 @@ class ThinkingMetadata(StrictModel):
 # ==============================================================================
 # Todo Item
 # ==============================================================================
+
 
 class TodoItem(StrictModel):
     """A single todo item from TodoWrite tool."""
@@ -309,6 +283,7 @@ class TodoItem(StrictModel):
 # Compact Metadata
 # ==============================================================================
 
+
 class CompactMetadata(StrictModel):
     """Metadata for conversation compaction."""
 
@@ -319,6 +294,7 @@ class CompactMetadata(StrictModel):
 # ==============================================================================
 # API Error
 # ==============================================================================
+
 
 class ApiErrorDetail(StrictModel):
     """Nested API error details."""
@@ -348,6 +324,7 @@ class ApiError(StrictModel):
 # File Info
 # ==============================================================================
 
+
 class FileInfo(StrictModel):
     """File information from Read tool."""
 
@@ -361,6 +338,7 @@ class FileInfo(StrictModel):
 # ==============================================================================
 # Structured Patch
 # ==============================================================================
+
 
 class PatchHunk(StrictModel):
     """A single hunk in a git-style patch."""
@@ -376,6 +354,7 @@ class PatchHunk(StrictModel):
 # Tool Use Result Structures
 # ==============================================================================
 
+
 class BashToolResult(StrictModel):
     """Result from Bash tool execution."""
 
@@ -383,7 +362,9 @@ class BashToolResult(StrictModel):
     stderr: str
     interrupted: bool
     isImage: bool
-    returnCodeInterpretation: Literal['No matches found', 'Some directories were inaccessible', 'Files differ'] | None = None
+    returnCodeInterpretation: (
+        Literal['No matches found', 'Some directories were inaccessible', 'Files differ'] | None
+    ) = None
     backgroundTaskId: str | None = None
     shellId: str | None = None
     command: str | None = None
@@ -469,6 +450,7 @@ class TaskToolResult(StrictModel):
 # AskUserQuestion Structures
 # ==============================================================================
 
+
 class QuestionOption(StrictModel):
     """A single option in a user question."""
 
@@ -495,6 +477,7 @@ class AskUserQuestionToolResult(StrictModel):
 # ==============================================================================
 # WebSearch Structures
 # ==============================================================================
+
 
 class WebSearchResult(StrictModel):
     """A single web search result."""
@@ -543,6 +526,7 @@ class McpResource(StrictModel):
 # NOTE: ListMcpResourcesTool returns a bare list[McpResource] (not wrapped in a dict)
 # This is handled by UserRecord.toolUseResult: list[McpResource] variant
 
+
 class KillShellToolResult(StrictModel):
     """Result from KillShell tool execution."""
 
@@ -574,6 +558,7 @@ ToolUseResultUnion = (
 # Base Record
 # ==============================================================================
 
+
 class BaseRecord(StrictModel):
     """Base class for all session record types."""
 
@@ -587,6 +572,7 @@ class BaseRecord(StrictModel):
 # User Record
 # ==============================================================================
 
+
 class UserRecord(BaseRecord):
     """User message record."""
 
@@ -599,46 +585,27 @@ class UserRecord(BaseRecord):
     gitBranch: str
     message: Message
     projectPaths: PathListField | None = Field(
-        None,
-        description='Additional project paths beyond cwd (each path will be translated)'
+        None, description='Additional project paths beyond cwd (each path will be translated)'
     )
-    budgetTokens: int | None = Field(
-        None,
-        description='Token budget limit for this request'
-    )
-    skills: None = Field(
-        None,
-        description='Reserved for future use',
-        json_schema_extra={'status': 'reserved'}
-    )
-    mcp: None = Field(
-        None,
-        description='Reserved for future use',
-        json_schema_extra={'status': 'reserved'}
-    )
+    budgetTokens: int | None = Field(None, description='Token budget limit for this request')
+    skills: None = Field(None, description='Reserved for future use', json_schema_extra={'status': 'reserved'})
+    mcp: None = Field(None, description='Reserved for future use', json_schema_extra={'status': 'reserved'})
     agentId: str | None = Field(
-        None,
-        description='Agent ID for subprocess/agent records (references agent-{agentId}.jsonl)'
+        None, description='Agent ID for subprocess/agent records (references agent-{agentId}.jsonl)'
     )
-    isMeta: bool | None = Field(
-        None,
-        description='Indicates meta messages (system-level information)'
-    )
-    thinkingMetadata: ThinkingMetadata | None = Field(
-        None,
-        description='Extended thinking configuration (Claude 3.7+)'
-    )
+    isMeta: bool | None = Field(None, description='Indicates meta messages (system-level information)')
+    thinkingMetadata: ThinkingMetadata | None = Field(None, description='Extended thinking configuration (Claude 3.7+)')
     isVisibleInTranscriptOnly: bool | None = Field(
-        None,
-        description='Message visible only in transcript, not in session history'
+        None, description='Message visible only in transcript, not in session history'
     )
-    isCompactSummary: bool | None = Field(
-        None,
-        description='Indicates this is a compacted session summary'
-    )
+    isCompactSummary: bool | None = Field(None, description='Indicates this is a compacted session summary')
     toolUseResult: Annotated[
-        list[McpResource] | list[TextContent] | ToolUseResultUnion | str | None,  # Ordered left-to-right: MCP resources first (no 'type' field), then TextContent, then structured, then string
-        Field(union_mode='left_to_right')
+        list[McpResource]
+        | list[TextContent]
+        | ToolUseResultUnion
+        | str
+        | None,  # Ordered left-to-right: MCP resources first (no 'type' field), then TextContent, then structured, then string
+        Field(union_mode='left_to_right'),
     ] = None  # Tool execution metadata (validated left-to-right)
 
 
@@ -646,64 +613,40 @@ class UserRecord(BaseRecord):
 # Assistant Record
 # ==============================================================================
 
+
 class AssistantRecord(BaseRecord):
     """Assistant message record."""
 
     type: Literal['assistant']
     cwd: PathField
-    parentUuid: str
+    parentUuid: str | None = Field(..., description='UUID of parent record (null for root agent records)')
     message: Message
     # Note: usage/stopReason are optional for agent records (nested in message instead)
     usage: TokenUsage | None = Field(
-        None,
-        description='Token usage for this request (null for agent records - usage in message instead)'
+        None, description='Token usage for this request (null for agent records - usage in message instead)'
     )
-    stopReason: None = Field(
-        None,
-        description='Reserved for future use',
-        json_schema_extra={'status': 'reserved'}
-    )
+    stopReason: None = Field(None, description='Reserved for future use', json_schema_extra={'status': 'reserved'})
     model: str | None = Field(
-        None,
-        description='Claude model identifier (null for agent records - model in message instead)'
+        None, description='Claude model identifier (null for agent records - model in message instead)'
     )
-    requestDuration: int | None = Field(
-        None,
-        description='Request duration in milliseconds'
-    )
-    requestId: str | None = Field(
-        None,
-        description='Claude API request ID'
-    )
+    requestDuration: int | None = Field(None, description='Request duration in milliseconds')
+    requestId: str | None = Field(None, description='Claude API request ID')
     agentId: str | None = Field(
-        None,
-        description='Agent ID for subprocess/agent records (references agent-{agentId}.jsonl)'
+        None, description='Agent ID for subprocess/agent records (references agent-{agentId}.jsonl)'
     )
     isSidechain: bool | None = Field(
-        None,
-        description='Indicates sidechain/subprocess execution (present in agent records)'
+        None, description='Indicates sidechain/subprocess execution (present in agent records)'
     )
-    userType: str | None = Field(
-        None,
-        description='User type (present in agent records)'
-    )
-    version: str | None = Field(
-        None,
-        description='Claude Code version (present in agent records)'
-    )
-    gitBranch: str | None = Field(
-        None,
-        description='Git branch (present in agent records)'
-    )
-    isApiErrorMessage: bool | None = Field(
-        None,
-        description='Indicates this message represents an API error'
-    )
+    userType: str | None = Field(None, description='User type (present in agent records)')
+    version: str | None = Field(None, description='Claude Code version (present in agent records)')
+    gitBranch: str | None = Field(None, description='Git branch (present in agent records)')
+    isApiErrorMessage: bool | None = Field(None, description='Indicates this message represents an API error')
 
 
 # ==============================================================================
 # Summary Record (does NOT inherit from BaseRecord - different schema)
 # ==============================================================================
+
 
 class SummaryRecord(StrictModel):
     """Session summary record (minimal schema, no uuid/timestamp)."""
@@ -716,6 +659,7 @@ class SummaryRecord(StrictModel):
 # ==============================================================================
 # System Record
 # ==============================================================================
+
 
 class SystemRecord(BaseRecord):
     """System message record (standard system messages)."""
@@ -730,6 +674,7 @@ class SystemRecord(BaseRecord):
 # ==============================================================================
 # System Subtype Records (discriminated by subtype field)
 # ==============================================================================
+
 
 class LocalCommandSystemRecord(BaseRecord):
     """System record for local command output (subtype=local_command)."""
@@ -801,19 +746,15 @@ class InformationalSystemRecord(BaseRecord):
 
 # Union of system subtype records
 SystemSubtypeRecord = Annotated[
-    Union[
-        LocalCommandSystemRecord,
-        CompactBoundarySystemRecord,
-        ApiErrorSystemRecord,
-        InformationalSystemRecord
-    ],
-    Field(discriminator='subtype')
+    Union[LocalCommandSystemRecord, CompactBoundarySystemRecord, ApiErrorSystemRecord, InformationalSystemRecord],
+    Field(discriminator='subtype'),
 ]
 
 
 # ==============================================================================
 # File History Snapshot Record (does NOT inherit from BaseRecord - different schema)
 # ==============================================================================
+
 
 class FileBackupInfo(StrictModel):
     """Backup information for a tracked file."""
@@ -844,6 +785,7 @@ class FileHistorySnapshotRecord(StrictModel):
 # Queue Operation Record (does NOT inherit from BaseRecord - no uuid field)
 # ==============================================================================
 
+
 class QueueOperationRecord(StrictModel):
     """Queue operation record (minimal schema, no uuid)."""
 
@@ -852,14 +794,9 @@ class QueueOperationRecord(StrictModel):
     timestamp: str
     sessionId: str
     content: str | list[MessageContent] | None = Field(
-        None,
-        description='User input content for the queued operation (string or structured message)'
+        None, description='User input content for the queued operation (string or structured message)'
     )
-    data: None = Field(
-        None,
-        description='Reserved for future use',
-        json_schema_extra={'status': 'reserved'}
-    )
+    data: None = Field(None, description='Reserved for future use', json_schema_extra={'status': 'reserved'})
 
 
 # ==============================================================================
@@ -880,9 +817,9 @@ SessionRecord = Annotated[
         InformationalSystemRecord,  # Must be before SystemRecord!
         SystemRecord,
         FileHistorySnapshotRecord,
-        QueueOperationRecord
+        QueueOperationRecord,
     ],
-    Field(union_mode='left_to_right')
+    Field(union_mode='left_to_right'),
 ]
 
 # Type adapter for validating session records (required for union types)
@@ -892,6 +829,7 @@ SessionRecordAdapter = TypeAdapter(SessionRecord)
 # ==============================================================================
 # Session Metadata
 # ==============================================================================
+
 
 class SessionMetadata(StrictModel):
     """Metadata extracted from a session."""
@@ -919,6 +857,7 @@ class SessionMetadata(StrictModel):
 # ==============================================================================
 # Analysis Results
 # ==============================================================================
+
 
 class SessionAnalysis(StrictModel):
     """Complete analysis of a session."""

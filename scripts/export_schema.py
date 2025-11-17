@@ -72,10 +72,7 @@ def export_schema(output_path: str = 'session-schema.json'):
     print(f'  {len(definitions)} model definitions')
 
     # Count discriminated unions
-    discriminated_unions = sum(
-        1 for def_name, def_schema in definitions.items()
-        if 'discriminator' in def_schema
-    )
+    discriminated_unions = sum(1 for def_name, def_schema in definitions.items() if 'discriminator' in def_schema)
     print(f'  {discriminated_unions} discriminated unions')
 
     return schema

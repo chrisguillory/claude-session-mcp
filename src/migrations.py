@@ -112,9 +112,7 @@ def needs_migration(record_data: dict[str, Any], target_version: str) -> bool:
 # ==============================================================================
 
 
-def apply_migration(
-    record_data: dict[str, Any], from_version: str, to_version: str
-) -> dict[str, Any]:
+def apply_migration(record_data: dict[str, Any], from_version: str, to_version: str) -> dict[str, Any]:
     """
     Apply a specific migration to a record.
 
@@ -133,8 +131,7 @@ def apply_migration(
 
     if migration_key not in MIGRATIONS:
         raise KeyError(
-            f'No migration found from {from_version} to {to_version}. '
-            f'Available migrations: {list(MIGRATIONS.keys())}'
+            f'No migration found from {from_version} to {to_version}. Available migrations: {list(MIGRATIONS.keys())}'
         )
 
     migration_func = MIGRATIONS[migration_key]
@@ -178,9 +175,7 @@ def auto_migrate(record_data: dict[str, Any], target_version: str) -> dict[str, 
 # ==============================================================================
 
 
-def migrate_session_file(
-    input_path: Path, output_path: Path, target_version: str
-) -> dict[str, int]:
+def migrate_session_file(input_path: Path, output_path: Path, target_version: str) -> dict[str, int]:
     """
     Migrate an entire session JSONL file.
 

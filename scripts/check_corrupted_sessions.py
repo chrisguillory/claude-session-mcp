@@ -35,24 +35,24 @@ def check_file(jsonl_file: Path) -> tuple[bool, int, str | None]:
                 try:
                     json.loads(line)
                 except json.JSONDecodeError as e:
-                    return (False, total_lines, f"Line {line_num}: {e}")
+                    return (False, total_lines, f'Line {line_num}: {e}')
 
         return (True, total_lines, None)
 
     except Exception as e:
-        return (False, 0, f"Failed to read file: {e}")
+        return (False, 0, f'Failed to read file: {e}')
 
 
 def main():
-    print("=" * 80)
-    print("Claude Code Session Corruption Check")
-    print("=" * 80)
+    print('=' * 80)
+    print('Claude Code Session Corruption Check')
+    print('=' * 80)
     print()
 
     claude_dir = Path.home() / '.claude' / 'projects'
 
     if not claude_dir.exists():
-        print(f"Directory not found: {claude_dir}")
+        print(f'Directory not found: {claude_dir}')
         sys.exit(1)
 
     all_files = []
@@ -65,7 +65,7 @@ def main():
 
     all_files.sort()
 
-    print(f"Found {len(all_files)} session files")
+    print(f'Found {len(all_files)} session files')
     print()
 
     corrupted_files = []
@@ -76,32 +76,32 @@ def main():
 
         if not is_valid:
             corrupted_files.append((jsonl_file, error))
-            print(f"✗ CORRUPTED: {jsonl_file.name}")
-            print(f"  Project: {jsonl_file.parent.name}")
-            print(f"  Error: {error}")
+            print(f'✗ CORRUPTED: {jsonl_file.name}')
+            print(f'  Project: {jsonl_file.parent.name}')
+            print(f'  Error: {error}')
             print()
         else:
             total_records += record_count
 
     print()
-    print("SUMMARY")
-    print("-" * 80)
-    print(f"Total files checked: {len(all_files)}")
-    print(f"Valid files: {len(all_files) - len(corrupted_files)}")
-    print(f"Corrupted files: {len(corrupted_files)}")
-    print(f"Total valid records: {total_records:,}")
+    print('SUMMARY')
+    print('-' * 80)
+    print(f'Total files checked: {len(all_files)}')
+    print(f'Valid files: {len(all_files) - len(corrupted_files)}')
+    print(f'Corrupted files: {len(corrupted_files)}')
+    print(f'Total valid records: {total_records:,}')
     print()
 
     if corrupted_files:
-        print("CORRUPTED FILES:")
+        print('CORRUPTED FILES:')
         for file, error in corrupted_files:
-            print(f"  {file}")
-            print(f"    {error}")
+            print(f'  {file}')
+            print(f'    {error}')
         print()
-        print("✗ Found corrupted files!")
+        print('✗ Found corrupted files!')
         sys.exit(1)
     else:
-        print("✓ All session files are valid JSON!")
+        print('✓ All session files are valid JSON!')
         sys.exit(0)
 
 

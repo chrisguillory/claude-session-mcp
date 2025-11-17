@@ -10,6 +10,7 @@ Check that all path fields are marked with # PATH TO TRANSLATE comments.
 import re
 from pathlib import Path
 
+
 def check_path_markers():
     """Check all path fields have translation markers."""
 
@@ -48,12 +49,12 @@ def check_path_markers():
                 marked_correctly.append((field, line_text.strip()))
             else:
                 # Check if it's in a comment or docstring (skip these)
-                line_num = content[:match.start()].count('\n') + 1
+                line_num = content[: match.start()].count('\n') + 1
 
                 # Get context
                 lines = content.split('\n')
                 context_start = max(0, line_num - 3)
-                context = '\n'.join(lines[context_start:line_num+1])
+                context = '\n'.join(lines[context_start : line_num + 1])
 
                 # Skip if in docstring or comment
                 in_docstring = '"""' in context or "'''" in context
@@ -79,6 +80,7 @@ def check_path_markers():
         print()
         return True
 
+
 def find_potential_path_fields():
     """Find fields that might contain paths but aren't marked."""
 
@@ -101,7 +103,7 @@ def find_potential_path_fields():
         for match in matches:
             field_name = match.group(1)
             line = match.group(0).strip()
-            line_num = content[:match.start()].count('\n') + 1
+            line_num = content[: match.start()].count('\n') + 1
 
             # Skip if already has marker
             if '# PATH TO TRANSLATE' not in line:
@@ -109,7 +111,7 @@ def find_potential_path_fields():
                 lines = content.split('\n')
                 context_start = max(0, line_num - 2)
                 context_end = min(len(lines), line_num + 1)
-                context = '\n'.join(f'  {i+1}: {lines[i]}' for i in range(context_start, context_end))
+                context = '\n'.join(f'  {i + 1}: {lines[i]}' for i in range(context_start, context_end))
 
                 print(f'\nLine {line_num}: {field_name}')
                 print(context)
@@ -118,6 +120,7 @@ def find_potential_path_fields():
     if not found_any:
         print('  None found - all look good!')
     print()
+
 
 if __name__ == '__main__':
     all_marked = check_path_markers()

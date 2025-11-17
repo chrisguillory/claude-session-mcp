@@ -201,21 +201,21 @@ def print_model_summary(model: Type[BaseModel]) -> None:
     """
     summary = model_summary(model)
 
-    print(f"Model: {summary['model_name']}")
-    print(f"  Total fields: {summary['total_fields']}")
-    print(f"  Required: {len(summary['required_fields'])}")
-    print(f"  Optional: {len(summary['optional_fields'])}")
+    print(f'Model: {summary["model_name"]}')
+    print(f'  Total fields: {summary["total_fields"]}')
+    print(f'  Required: {len(summary["required_fields"])}')
+    print(f'  Optional: {len(summary["optional_fields"])}')
 
     if summary['path_fields']:
-        print(f"  Path fields: {', '.join(summary['path_fields'])}")
+        print(f'  Path fields: {", ".join(summary["path_fields"])}')
 
     if summary['reserved_fields']:
-        print(f"  Reserved fields: {', '.join(summary['reserved_fields'])}")
+        print(f'  Reserved fields: {", ".join(summary["reserved_fields"])}')
 
     if summary['versioned_fields']:
-        print(f"  Versioned fields:")
+        print(f'  Versioned fields:')
         for field, version in summary['versioned_fields'].items():
-            print(f"    {field}: added in {version}")
+            print(f'    {field}: added in {version}')
 
 
 if __name__ == '__main__':

@@ -122,9 +122,7 @@ def validate_session_file(session_file: Path):
                                         'image',
                                     ]
                                     if item_type not in known_content_types:
-                                        results['unknown_content_types'].add(
-                                            item_type
-                                        )
+                                        results['unknown_content_types'].add(item_type)
 
                     # Track missing fields
                     if 'Validation error' in str(e) or 'Field required' in str(e):
@@ -176,13 +174,13 @@ def main():
     # Print summary
     print('SUMMARY')
     print('-' * 80)
-    print(f"Total files processed: {total_stats['files']}")
-    print(f"Total records: {total_stats['total_records']}")
+    print(f'Total files processed: {total_stats["files"]}')
+    print(f'Total records: {total_stats["total_records"]}')
     print(
-        f"Valid records: {total_stats['valid_records']} ({total_stats['valid_records']/total_stats['total_records']*100:.1f}%)"
+        f'Valid records: {total_stats["valid_records"]} ({total_stats["valid_records"] / total_stats["total_records"] * 100:.1f}%)'
     )
     print(
-        f"Invalid records: {total_stats['invalid_records']} ({total_stats['invalid_records']/total_stats['total_records']*100:.1f}%)"
+        f'Invalid records: {total_stats["invalid_records"]} ({total_stats["invalid_records"] / total_stats["total_records"] * 100:.1f}%)'
     )
     print()
 
@@ -210,11 +208,11 @@ def main():
         print('FILES WITH VALIDATION ERRORS')
         print('-' * 80)
         for result in files_with_errors[:10]:  # Show first 10 files with errors
-            print(f"\nFile: {Path(result['file']).name}")
+            print(f'\nFile: {Path(result["file"]).name}')
             print(
-                f"  Total: {result['total_records']}, Valid: {result['valid_records']}, Invalid: {result['invalid_records']}"
+                f'  Total: {result["total_records"]}, Valid: {result["valid_records"]}, Invalid: {result["invalid_records"]}'
             )
-            print(f"  Record types: {dict(result['record_types'])}")
+            print(f'  Record types: {dict(result["record_types"])}')
 
             if result['errors']:
                 print(f'  First 3 errors:')
@@ -228,7 +226,7 @@ def main():
         sys.exit(0)
     else:
         print()
-        print(f"✗ Validation failed for {total_stats['invalid_records']} records")
+        print(f'✗ Validation failed for {total_stats["invalid_records"]} records')
         sys.exit(1)
 
 
