@@ -85,7 +85,10 @@ The MCP server exposes archive/restore as Claude Code tools:
   "mcpServers": {
     "claude-session": {
       "command": "uv",
-      "args": ["run", "mcp-server.py"],
+      "args": [
+        "run",
+        "mcp-server.py"
+      ],
       "cwd": "/path/to/claude-session-mcp"
     }
   }
@@ -93,12 +96,14 @@ The MCP server exposes archive/restore as Claude Code tools:
 ```
 
 **Tools:**
+
 - `save_current_session` - Archive current session (local storage only)
 - `restore_session` - Restore archived session (local files only)
 
 ## Technical Details
 
-**Pydantic Models**: 899 lines, 54 classes covering 10 record types. Tested on 74K+ records (99.98% valid).
+**Pydantic Models**: 899 lines, 54 classes covering 10 record types (user, assistant, system, local commands, compact
+boundaries, API errors, summaries, file history snapshots, queue operations). Tested on 74K+ records (99.98% valid).
 
 **Compatibility**: Claude Code 2.0.35 - 2.0.47
 

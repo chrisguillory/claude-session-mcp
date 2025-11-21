@@ -2,3 +2,10 @@ __pycache__/
 *.pyc
 .venv/
 .claude/settings.local.json
+
+# IDE
+.idea/
+.vscode/
+.cursor/
+.cursorrules
+.specstory/
