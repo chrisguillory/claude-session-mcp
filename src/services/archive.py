@@ -7,15 +7,25 @@ archive creation, compression, and format detection.
 
 from __future__ import annotations
 
+import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal, Protocol
 
 from src.base_model import StrictModel
-from src.models import SessionRecord
+from src.models import (
+    SessionRecord,
+    UserRecord,
+    AssistantRecord,
+    LocalCommandSystemRecord,
+    CompactBoundarySystemRecord,
+    ApiErrorSystemRecord,
+    InformationalSystemRecord,
+)
 from src.storage.protocol import StorageBackend
 from src.config.mcp import settings
 from src.services.parser import SessionParserService
+from src.types import JsonDatetime
 
 
 # ==============================================================================
@@ -74,8 +84,9 @@ class SessionArchive(StrictModel):
 
     version: str = '1.0'  # Archive format version
     session_id: str
-    archived_at: datetime
+    archived_at: JsonDatetime
     original_project_path: str
+    claude_code_version: str  # Claude Code version at archive time
     files: dict[str, list[SessionRecord]]  # filename -> records
 
 
@@ -170,6 +181,16 @@ class FormatDetector:
 # Session Archive Service
 # ==============================================================================
 
+# All record types that have a version field
+VERSION_RECORD_TYPES = (
+    UserRecord,
+    AssistantRecord,
+    LocalCommandSystemRecord,
+    CompactBoundarySystemRecord,
+    ApiErrorSystemRecord,
+    InformationalSystemRecord,
+)
+
 
 class SessionArchiveService:
     """
@@ -228,6 +249,12 @@ class SessionArchiveService:
         if output_path:
             output_file = Path(output_path)
 
+            # Check if file already exists
+            if output_file.exists():
+                raise FileExistsError(
+                    f'File already exists: {output_file}\nUse a different filename or delete the existing file first.'
+                )
+
             # Fail fast: validate directory exists
             if not output_file.parent.exists():
                 raise ValueError(f'Output directory does not exist: {output_file.parent}. Please create it first.')
@@ -252,11 +279,15 @@ class SessionArchiveService:
         files_data, total_records = await self._load_session_files(session_files, logger)
         await logger.info(f'Loaded {total_records} total records')
 
+        # Extract Claude Code version from records
+        claude_code_version = await self._extract_claude_code_version(files_data, logger)
+
         # Create archive structure
         archive = SessionArchive(
             session_id=self.session_id,
             archived_at=datetime.now(timezone.utc),
             original_project_path=str(self.project_path),
+            claude_code_version=claude_code_version,
             files=files_data,
         )
 
@@ -336,8 +367,18 @@ class SessionArchiveService:
 
         session_files = [main_file]
 
-        # Find agent files
-        agent_files = list(project_folder.glob('agent-*.jsonl'))
+        # Find agent files that belong to this session using rg
+        result = subprocess.run(
+            ['rg', '--files-with-matches', f'"sessionId":"{self.session_id}"', '--glob', 'agent-*.jsonl', str(project_folder)],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+
+        agent_files = []
+        if result.stdout.strip():
+            agent_files = [Path(line) for line in result.stdout.strip().split('\n')]
+
         session_files.extend(agent_files)
 
         await logger.info(f'Found {len(session_files)} files: 1 main + {len(agent_files)} agents')
@@ -368,6 +409,38 @@ class SessionArchiveService:
         total_records = sum(len(records) for records in files_data.values())
 
         return files_data, total_records
+
+    async def _extract_claude_code_version(
+        self, files_data: dict[str, list[SessionRecord]], logger: LoggerProtocol
+    ) -> str:
+        """
+        Extract Claude Code version from session records.
+
+        Strategy:
+        1. Find first record with a version field (check all types that have version)
+        2. Fallback: subprocess call to `claude --version` (if data corrupted)
+
+        Args:
+            files_data: Parsed session records
+            logger: Logger instance
+
+        Returns:
+            Claude Code version string (e.g., '2.0.37')
+        """
+        # Try to find first record with a version field
+        for filename, records in files_data.items():
+            for record in records:
+                # Single isinstance check for all types with version
+                if isinstance(record, VERSION_RECORD_TYPES) and record.version:
+                    await logger.info(f'Extracted Claude version from {record.__class__.__name__}: {record.version}')
+                    return record.version
+
+        # Fallback: get from subprocess (data is corrupted if we reach here)
+        await logger.warning('No records with version field found - using subprocess fallback')
+        result = subprocess.run(['claude', '--version'], capture_output=True, text=True, timeout=5)
+        version = result.stdout.strip()
+        await logger.info(f'Extracted Claude version from subprocess: {version}')
+        return version
 
     async def _serialize_json(self, archive: SessionArchive, logger: LoggerProtocol) -> bytes:
         """Serialize archive to uncompressed JSON."""

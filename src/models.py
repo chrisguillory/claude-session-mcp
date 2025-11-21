@@ -5,9 +5,10 @@ This module defines strict types for all record types found in Claude Code sessi
 Uses discriminated unions for type-safe parsing of heterogeneous JSONL data.
 
 CLAUDE CODE VERSION COMPATIBILITY:
-- Validated against: Claude Code 2.0.35 - 2.0.36
-- Last validated: 2025-01-07
-- Validation coverage: 36,305 records across 415 session files (100% success)
+- Validated against: Claude Code 2.0.35 - 2.0.47
+- Last validated: 2025-11-20
+- Validation coverage: 74,744 records across 981 session files
+- Added todos field support in schema v0.1.1 for Claude Code 2.0.47+
 - If validation fails, Claude Code schema may have changed - update models accordingly
 
 Key findings from analyzing real session files:
@@ -41,11 +42,11 @@ from src.markers import PathField, PathListField
 # Schema Version
 # ==============================================================================
 
-SCHEMA_VERSION = '0.1.0'
+SCHEMA_VERSION = '0.1.1'
 CLAUDE_CODE_MIN_VERSION = '2.0.35'
-CLAUDE_CODE_MAX_VERSION = '2.0.42'
-LAST_VALIDATED = '2025-01-16'
-VALIDATION_RECORD_COUNT = 53_750
+CLAUDE_CODE_MAX_VERSION = '2.0.47'
+LAST_VALIDATED = '2025-11-20'
+VALIDATION_RECORD_COUNT = 74_744
 
 
 # ==============================================================================
@@ -607,6 +608,7 @@ class UserRecord(BaseRecord):
         | None,  # Ordered left-to-right: MCP resources first (no 'type' field), then TextContent, then structured, then string
         Field(union_mode='left_to_right'),
     ] = None  # Tool execution metadata (validated left-to-right)
+    todos: list[TodoItem] | None = Field(None, description='Todo list state (Claude Code 2.0.47+)')
 
 
 # ==============================================================================

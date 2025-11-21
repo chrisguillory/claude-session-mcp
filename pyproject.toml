@@ -10,8 +10,13 @@ dependencies = [
     "lazy-object-proxy>=1.12.0",
     "pydantic>=2.12.4",
     "pydantic-settings>=2.12.0",
+    "typer>=0.20.0",
+    "uuid6>=2025.0.1",
     "zstandard>=0.25.0",
 ]
+
+[project.scripts]
+claude-session = "src.cli:main"
 
 [build-system]
 requires = ["hatchling"]
@@ -35,3 +40,8 @@ select = [
 
 [tool.ruff.format]
 quote-style = "single"
+
+[dependency-groups]
+dev = [
+    "uuid6>=2025.0.1",
+]
