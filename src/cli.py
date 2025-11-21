@@ -8,10 +8,12 @@ Provides commands to archive and restore Claude Code sessions.
 from __future__ import annotations
 
 import asyncio
+import os
 import sys
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Literal, Optional
 
 import typer
 
@@ -20,6 +22,7 @@ from src.services.archive import SessionArchiveService
 from src.services.discovery import SessionDiscoveryService
 from src.services.parser import SessionParserService
 from src.services.restore import SessionRestoreService
+from src.storage.gist import GistStorage
 from src.storage.local import LocalFileSystemStorage
 
 app = typer.Typer(
@@ -32,26 +35,40 @@ app = typer.Typer(
 @app.command()
 def archive(
     session_id: str = typer.Argument(..., help='Session ID to archive'),
-    output: Path = typer.Argument(..., help='Output file path (e.g., session.json or session.json.zst)'),
+    output: str = typer.Argument(..., help='Output path or Gist URL (gist://<gist-id> or gist:// or file path)'),
     format: Optional[str] = typer.Option(None, '--format', '-f', help='Archive format: json or zst'),
+    gist_token: Optional[str] = typer.Option(None, '--gist-token', help='GitHub token (or use GITHUB_TOKEN env)'),
+    gist_visibility: Literal['public', 'secret'] = typer.Option(
+        'secret', '--gist-visibility', help='Gist visibility (public or secret)'
+    ),
+    gist_description: str = typer.Option('Claude Code Session Archive', '--gist-description', help='Gist description'),
     verbose: bool = typer.Option(False, '--verbose', '-v', help='Verbose output'),
 ) -> None:
-    """Archive a Claude Code session by ID."""
-    asyncio.run(_archive_async(session_id, output, format, verbose))
+    """Archive a Claude Code session to local file or GitHub Gist."""
+    asyncio.run(_archive_async(session_id, output, format, gist_token, gist_visibility, gist_description, verbose))
 
 
 @app.command()
 def restore(
-    archive_path: Path = typer.Argument(..., help='Path to archive file'),
+    archive: str = typer.Argument(..., help='Archive path or Gist URL (gist://<gist-id> or file path)'),
     project: Optional[Path] = typer.Option(None, '--project', '-p', help='Target project directory (default: current)'),
     no_translate: bool = typer.Option(False, '--no-translate', help="Don't translate file paths"),
+    gist_token: Optional[str] = typer.Option(None, '--gist-token', help='GitHub token for private gists'),
     verbose: bool = typer.Option(False, '--verbose', '-v', help='Verbose output'),
 ) -> None:
-    """Restore a Claude Code session from an archive."""
-    asyncio.run(_restore_async(archive_path, project, not no_translate, verbose))
+    """Restore a Claude Code session from local file or GitHub Gist."""
+    asyncio.run(_restore_async(archive, project, not no_translate, gist_token, verbose))
 
 
-async def _archive_async(session_id: str, output: Path, format: Optional[str], verbose: bool) -> None:
+async def _archive_async(
+    session_id: str,
+    output: str,
+    format: Optional[str],
+    gist_token: Optional[str],
+    gist_visibility: str,
+    gist_description: str,
+    verbose: bool,
+) -> None:
     """Async implementation of archive command."""
     logger = CLILogger(verbose=verbose)
 
@@ -67,6 +84,37 @@ async def _archive_async(session_id: str, output: Path, format: Optional[str], v
 
         await logger.info(f'Found session in project: {session_info.project_path}')
 
+        # Parse output parameter - check if it's a Gist URL
+        use_gist = output.startswith('gist://')
+        gist_id = None
+
+        if use_gist:
+            # Extract gist ID if provided: gist://abc123 or just gist://
+            gist_id = output[7:] if len(output) > 7 else None
+
+            # Get token from CLI or environment
+            token = gist_token or os.environ.get('GITHUB_TOKEN')
+            if not token:
+                typer.secho('Error: GitHub token required for Gist storage.', fg=typer.colors.RED, err=True)
+                typer.echo('Provide via --gist-token or set GITHUB_TOKEN environment variable.')
+                typer.echo()
+                typer.echo('To create a token:')
+                typer.echo('  1. Go to https://github.com/settings/tokens')
+                typer.echo('  2. Generate new token (classic)')
+                typer.echo("  3. Select 'gist' scope")
+                typer.echo('  4. Copy the token')
+                raise typer.Exit(1)
+
+            # Warn about compression with Gists
+            if format == 'zst':
+                typer.secho(
+                    'Warning: Compressed format (.zst) not recommended for Gists.',
+                    fg=typer.colors.YELLOW,
+                )
+                typer.echo('Gists only support UTF-8 text. Binary data will be rejected.')
+                typer.echo('Consider using --format json instead.')
+                typer.echo()
+
         # Initialize services
         with tempfile.TemporaryDirectory(prefix='claude-session-') as temp_dir:
             parser_service = SessionParserService()
@@ -78,25 +126,54 @@ async def _archive_async(session_id: str, output: Path, format: Optional[str], v
             )
 
             # Create storage backend
-            storage = LocalFileSystemStorage(output.parent.resolve())
+            if use_gist:
+                # Generate filename for Gist
+                timestamp = datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')
+                filename = f'session-{session_id[:8]}-{timestamp}.json'
+
+                storage = GistStorage(
+                    token=token,
+                    gist_id=gist_id,
+                    visibility=gist_visibility,
+                    description=gist_description,
+                )
+                output_path = None  # Don't pass to archive service
+                await logger.info(f'Creating Gist archive: {filename}')
+            else:
+                # Local filesystem
+                output_file = Path(output)
+                storage = LocalFileSystemStorage(output_file.parent.resolve())
+                output_path = str(output)
+                filename = output_file.name
+                await logger.info(f'Creating archive: {output}')
 
             # Create archive
-            await logger.info(f'Creating archive: {output}')
             metadata = await archive_service.create_archive(
-                storage=storage, output_path=str(output), format_param=format, logger=logger
+                storage=storage, output_path=output_path, format_param=format, logger=logger
             )
 
             # Print success
-            typer.secho(f'✓ Archive created successfully!', fg=typer.colors.GREEN)
-            typer.echo(f'  Path: {metadata.file_path}')
-            typer.echo(f'  Format: {metadata.format}')
-            typer.echo(f'  Size: {metadata.size_mb} MB')
-            typer.echo(f'  Records: {metadata.record_count:,}')
-            typer.echo(f'  Files: {metadata.file_count}')
-            if verbose:
-                typer.echo('\n  File breakdown:')
-                for file_meta in metadata.files:
-                    typer.echo(f'    - {file_meta.filename}: {file_meta.record_count} records')
+            if use_gist:
+                typer.secho(f'✓ Archive uploaded to GitHub Gist!', fg=typer.colors.GREEN)
+                typer.echo(f'  URL: {metadata.file_path}')
+                typer.echo(f'  Gist ID: {storage.gist_id}')
+                typer.echo(f'  Format: {metadata.format}')
+                typer.echo(f'  Size: {metadata.size_mb} MB')
+                typer.echo(f'  Records: {metadata.record_count:,}')
+                typer.echo()
+                typer.echo(f'To restore, use:')
+                typer.secho(f'  claude-session restore gist://{storage.gist_id}', fg=typer.colors.CYAN)
+            else:
+                typer.secho(f'✓ Archive created successfully!', fg=typer.colors.GREEN)
+                typer.echo(f'  Path: {metadata.file_path}')
+                typer.echo(f'  Format: {metadata.format}')
+                typer.echo(f'  Size: {metadata.size_mb} MB')
+                typer.echo(f'  Records: {metadata.record_count:,}')
+                typer.echo(f'  Files: {metadata.file_count}')
+                if verbose:
+                    typer.echo('\n  File breakdown:')
+                    for file_meta in metadata.files:
+                        typer.echo(f'    - {file_meta.filename}: {file_meta.record_count} records')
 
     except FileExistsError as e:
         typer.secho(f'Error: {e}', fg=typer.colors.RED, err=True)
@@ -111,16 +188,77 @@ async def _archive_async(session_id: str, output: Path, format: Optional[str], v
 
 
 async def _restore_async(
-    archive_path: Path, project: Optional[Path], translate_paths: bool, verbose: bool
+    archive: str, project: Optional[Path], translate_paths: bool, gist_token: Optional[str], verbose: bool
 ) -> None:
     """Async implementation of restore command."""
     logger = CLILogger(verbose=verbose)
 
     try:
-        # Validate archive exists
-        if not archive_path.exists():
-            typer.secho(f'Error: Archive not found: {archive_path}', fg=typer.colors.RED, err=True)
-            raise typer.Exit(1)
+        # Check if it's a Gist URL
+        if archive.startswith('gist://'):
+            gist_id = archive[7:]
+
+            if not gist_id:
+                typer.secho('Error: Gist ID required in format gist://<gist-id>', fg=typer.colors.RED, err=True)
+                raise typer.Exit(1)
+
+            # Get token (public gists don't need auth for reading, but use it if provided)
+            token = gist_token or os.environ.get('GITHUB_TOKEN') or ''
+
+            await logger.info(f'Downloading from Gist: {gist_id}')
+
+            # Create Gist storage
+            storage = GistStorage(token=token, gist_id=gist_id)
+
+            # Find the archive file in the gist (look for .json or .json.zst)
+            import httpx
+
+            async with httpx.AsyncClient() as client:
+                headers = {'Accept': 'application/vnd.github.v3+json', 'X-GitHub-Api-Version': '2022-11-28'}
+                if token:
+                    headers['Authorization'] = f'Bearer {token}'
+
+                response = await client.get(f'https://api.github.com/gists/{gist_id}', headers=headers, timeout=10.0)
+
+                if response.status_code == 404:
+                    typer.secho(f'Error: Gist not found: {gist_id}', fg=typer.colors.RED, err=True)
+                    typer.echo('Check the gist ID and ensure it exists.')
+                    raise typer.Exit(1)
+
+                response.raise_for_status()
+                gist_data = response.json()
+
+                # Find archive file
+                files = gist_data['files']
+                archive_file = None
+                for filename in files:
+                    if filename.endswith('.json') or filename.endswith('.json.zst'):
+                        archive_file = filename
+                        break
+
+                if not archive_file:
+                    typer.secho(f'Error: No archive file found in gist {gist_id}', fg=typer.colors.RED, err=True)
+                    typer.echo(f'Available files: {", ".join(files.keys())}')
+                    raise typer.Exit(1)
+
+            # Download to temp file
+            await logger.info(f'Downloading {archive_file}...')
+            data = await storage.load(archive_file)
+
+            with tempfile.NamedTemporaryFile(suffix=f'-{archive_file}', delete=False) as temp_file:
+                temp_file.write(data)
+                archive_path = Path(temp_file.name)
+
+            await logger.info(f'Downloaded {len(data):,} bytes')
+
+        else:
+            # Local file
+            archive_path = Path(archive)
+
+            # Validate archive exists
+            if not archive_path.exists():
+                typer.secho(f'Error: Archive not found: {archive_path}', fg=typer.colors.RED, err=True)
+                raise typer.Exit(1)
 
         # Determine project path
         if project:
@@ -141,6 +279,10 @@ async def _restore_async(
         result = await restore_service.restore_archive(
             archive_path=str(archive_path), translate_paths=translate_paths, logger=logger
         )
+
+        # Clean up temp file if we downloaded from Gist
+        if archive.startswith('gist://'):
+            archive_path.unlink()
 
         # Print success
         typer.secho(f'✓ Session restored successfully!', fg=typer.colors.GREEN)

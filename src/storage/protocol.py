@@ -41,3 +41,20 @@ class StorageBackend(Protocol):
             True if archive exists
         """
         ...
+
+    async def load(self, filename: str) -> bytes:
+        """
+        Load archive data (optional - not all backends support loading).
+
+        Args:
+            filename: Name of archive file
+
+        Returns:
+            Archive data as bytes
+
+        Raises:
+            NotImplementedError: If backend doesn't support loading
+            ValueError: If file not found
+            RuntimeError: If load operation fails
+        """
+        raise NotImplementedError(f'{type(self).__name__} does not support loading')
