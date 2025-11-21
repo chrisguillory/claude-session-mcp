@@ -445,7 +445,7 @@ class SessionArchiveService:
     async def _serialize_json(self, archive: SessionArchive, logger: LoggerProtocol) -> bytes:
         """Serialize archive to uncompressed JSON."""
         await logger.info('Serializing to JSON')
-        json_str = archive.model_dump_json(indent=2, exclude_none=True)
+        json_str = archive.model_dump_json(indent=2, exclude_unset=True)
         return json_str.encode('utf-8')
 
     async def _serialize_zst(self, archive: SessionArchive, logger: LoggerProtocol) -> bytes:
@@ -458,7 +458,7 @@ class SessionArchiveService:
             raise RuntimeError('zstandard library not available. Install with: uv add zstandard')
 
         # Serialize to JSON
-        json_str = archive.model_dump_json(indent=2, exclude_none=True)
+        json_str = archive.model_dump_json(indent=2, exclude_unset=True)
         json_bytes = json_str.encode('utf-8')
 
         # Compress with zstd (level from settings)
