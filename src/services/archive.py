@@ -474,6 +474,6 @@ class SessionArchiveService:
         """
         Encode filesystem path for folder name.
 
-        Claude uses pattern: /Users/chris/project → -Users-chris-project
+        Claude uses pattern: /Users/rushi.arumalla/project → -Users-rushi-arumalla-project
         """
-        return str(path).replace('/', '-')
+        return str(path).replace('/', '-').replace('.', '-')

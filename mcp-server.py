@@ -33,6 +33,7 @@ from mcp.server.fastmcp import Context, FastMCP
 from mcp_utils import DualLogger
 from src.services.archive import ArchiveMetadata, SessionArchiveService
 from src.services.parser import SessionParserService
+from src.services.restore import RestoreResult, SessionRestoreService
 from src.storage.local import LocalFileSystemStorage
 
 
@@ -332,6 +333,58 @@ def register_tools(state: ServerState) -> None:
         )
 
         return metadata
+
+    @server.tool()
+    async def restore_session(
+        archive_path: str,
+        translate_paths: bool = True,
+        ctx: Context = None,
+    ) -> RestoreResult:
+        """
+        Restore a saved session archive with a new session ID.
+
+        Works like Claude's teleport feature - creates a new session ID
+        while preserving the full conversation history. Loads the session
+        into ~/.claude/projects/ allowing you to continue the conversation.
+
+        Args:
+            archive_path: Path to session archive file (JSON or .zst)
+            translate_paths: Translate paths to current project (default: True)
+
+        Returns:
+            RestoreResult with new session ID and restoration details
+
+        Examples:
+            # Restore from Downloads
+            result = await restore_session('/Users/chris/Downloads/claude-session.json')
+            # Returns: RestoreResult(new_session_id='abc123...', ...)
+
+            # Restore without path translation
+            result = await restore_session(
+                archive_path='/path/to/archive.json',
+                translate_paths=False
+            )
+
+        Note:
+            After restoration, use `claude --resume {new_session_id}` in CLI
+            to continue the conversation with the restored history.
+        """
+        logger = DualLogger(ctx)
+
+        # Create restore service for current project
+        restore_service = SessionRestoreService(state.project_path)
+
+        # Restore the archive
+        result = await restore_service.restore_archive(
+            archive_path=archive_path,
+            translate_paths=translate_paths,
+            logger=logger,
+        )
+
+        await logger.info(f'Session restored with new ID: {result.new_session_id}')
+        await logger.info(f'Use: claude --resume {result.new_session_id}')
+
+        return result
 
 
 # ==============================================================================

@@ -330,7 +330,7 @@ class SessionRestoreService:
         """
         Encode path for Claude's directory naming.
 
-        Claude uses hyphens to replace forward slashes in paths.
-        Example: /Users/chris/project -> -Users-chris-project
+        Claude uses hyphens to replace forward slashes and periods in paths.
+        Example: /Users/rushi.arumalla/project -> -Users-rushi-arumalla-project
         """
-        return str(path).replace('/', '-')
+        return str(path).replace('/', '-').replace('.', '-')
