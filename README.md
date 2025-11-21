@@ -102,8 +102,7 @@ The MCP server exposes archive/restore as Claude Code tools:
 
 ## Technical Details
 
-**Pydantic Models**: 899 lines, 54 classes covering 10 record types (user, assistant, system, local commands, compact
-boundaries, API errors, summaries, file history snapshots, queue operations). Tested on 74K+ records (99.98% valid).
+**Pydantic Models**: 914 lines, 56 classes covering 10 record types (user, assistant, system, local commands, compact boundaries, API errors, summaries, file history snapshots, queue operations). Validated on 78K+ records (100% valid).
 
 **Compatibility**: Claude Code 2.0.35 - 2.0.47
 

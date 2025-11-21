@@ -321,6 +321,20 @@ class ApiError(StrictModel):
     error: ApiErrorResponse | None = None  # Can be missing for some errors (e.g., 503)
 
 
+class ConnectionError(StrictModel):
+    """Connection error details for network failures."""
+
+    code: Literal['ConnectionRefused', 'FailedToOpenSocket']
+    path: str  # URL that failed (e.g., "https://api.anthropic.com/v1/messages?beta=true")
+    errno: int
+
+
+class NetworkError(StrictModel):
+    """Network error wrapper (for connection failures)."""
+
+    cause: ConnectionError
+
+
 # ==============================================================================
 # File Info
 # ==============================================================================
@@ -724,7 +738,8 @@ class ApiErrorSystemRecord(BaseRecord):
     userType: str | None = None  # Optional for api_error
     version: str | None = None  # Optional for api_error
     gitBranch: str | None = None  # Optional for api_error
-    error: ApiError  # Error details with status, headers, requestID
+    cause: ConnectionError | None = None  # Connection error details (for network failures)
+    error: ApiError | NetworkError  # API error (status/headers) or network error (connection failure)
     retryInMs: float
     retryAttempt: int
     maxRetries: int
