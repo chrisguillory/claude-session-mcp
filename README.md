@@ -40,7 +40,7 @@ claude --resume <new-session-id>
 - **GitHub Gist**: Private/public Gist storage (100MB limit)
 - **Path translation**: Automatically translates file paths when restoring to different directories
 - **Agent sessions**: Captures main session + all agent sub-sessions
-- **New session IDs**: Generates UUIDv7 for restored sessions (vs Claude's UUIDv4)
+- **UUIDv7 session IDs**: Restored sessions use time-ordered UUIDv7 (vs Claude's random UUIDv4)
 
 ## Commands
 
@@ -98,27 +98,9 @@ The MCP server exposes archive/restore as Claude Code tools:
 
 ## Technical Details
 
-### Models
+**Pydantic Models**: 899 lines, 54 classes covering 10 record types. Tested on 74K+ records (99.98% valid).
 
-- **935 lines**, 54 Pydantic classes covering all 6 record types
-- **Compatible with**: Claude Code 2.0.35 - 2.0.47
-- **Round-trip fidelity**: Uses `exclude_unset=True` to preserve original structure
-- **Validation**: Tested on 74K+ records across 983 sessions (99.98% valid)
-
-### Path Encoding
-
-Claude encodes project paths in directory names:
-```
-/Users/chris/project      → -Users-chris-project
-/Users/rushi.arumalla/app → -Users-rushi-arumalla-app
-```
-
-Both slashes and periods are replaced with dashes.
-
-### Session ID Format
-
-- **Claude sessions**: UUIDv4 (random)
-- **Restored sessions**: UUIDv7 (time-ordered, identifiable)
+**Compatibility**: Claude Code 2.0.35 - 2.0.47
 
 ## License
 
