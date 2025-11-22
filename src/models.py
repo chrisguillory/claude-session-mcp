@@ -5,9 +5,9 @@ This module defines strict types for all record types found in Claude Code sessi
 Uses discriminated unions for type-safe parsing of heterogeneous JSONL data.
 
 CLAUDE CODE VERSION COMPATIBILITY:
-- Validated against: Claude Code 2.0.35 - 2.0.49
+- Validated against: Claude Code 2.0.35 - 2.0.50
 - Last validated: 2025-11-21
-- Validation coverage: 80,951 records across 1,044 session files
+- Validation coverage: 85,313 records across 1,109 session files
 - Added todos field support in schema v0.1.1 for Claude Code 2.0.47+
 - Added error field to AssistantRecord in schema v0.1.2 for Claude Code 2.0.49+
 - If validation fails, Claude Code schema may have changed - update models accordingly
@@ -45,9 +45,9 @@ from src.markers import PathField, PathListField
 
 SCHEMA_VERSION = '0.1.2'
 CLAUDE_CODE_MIN_VERSION = '2.0.35'
-CLAUDE_CODE_MAX_VERSION = '2.0.49'
+CLAUDE_CODE_MAX_VERSION = '2.0.50'
 LAST_VALIDATED = '2025-11-21'
-VALIDATION_RECORD_COUNT = 80_951
+VALIDATION_RECORD_COUNT = 85_313
 
 
 # ==============================================================================
@@ -658,7 +658,9 @@ class AssistantRecord(BaseRecord):
     version: str | None = Field(None, description='Claude Code version (present in agent records)')
     gitBranch: str | None = Field(None, description='Git branch (present in agent records)')
     isApiErrorMessage: bool | None = Field(None, description='Indicates this message represents an API error')
-    error: Literal['rate_limit', 'unknown'] | None = Field(None, description='Error type for API error messages')
+    error: Literal['rate_limit', 'unknown', 'invalid_request', 'authentication_failed'] | None = Field(
+        None, description='Error type for API error messages'
+    )
 
 
 # ==============================================================================
