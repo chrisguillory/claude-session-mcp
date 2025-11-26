@@ -5,12 +5,49 @@ This module defines strict types for all record types found in Claude Code sessi
 Uses discriminated unions for type-safe parsing of heterogeneous JSONL data.
 
 CLAUDE CODE VERSION COMPATIBILITY:
-- Validated against: Claude Code 2.0.35 - 2.0.50
-- Last validated: 2025-11-21
-- Validation coverage: 85,313 records across 1,109 session files
-- Added todos field support in schema v0.1.1 for Claude Code 2.0.47+
-- Added error field to AssistantRecord in schema v0.1.2 for Claude Code 2.0.49+
+- Validated against: Claude Code 2.0.35 - 2.0.54
+- Last validated: 2025-11-26
+- Validation coverage: 34,028 records across 688 session files
+- Schema v0.1.1: Added todos field for Claude Code 2.0.47+
+- Schema v0.1.2: Added error field to AssistantRecord for Claude Code 2.0.49+
+- Schema v0.1.3: Added slug, DocumentContent, ContextManagement, SkillToolInput,
+                 image/jpeg support, ECONNRESET error code for Claude Code 2.0.51+
 - If validation fails, Claude Code schema may have changed - update models accordingly
+
+NEW FIELDS IN CLAUDE CODE 2.0.51+ (Schema v0.1.3):
+
+slug field:
+  Human-readable conversation identifier using adjective-verb-animal format
+  (e.g., "jiggly-churning-rabbit", "floofy-singing-crab").
+  - NOT a permanent session identifier - can change within same session file
+  - Regenerated when session is resumed after extended inactivity (~hours)
+  - Appears on: UserRecord, AssistantRecord, LocalCommandSystemRecord, ApiErrorSystemRecord
+  - Some records have slug: null during transitions
+  - Purpose: Makes sessions easier to reference than UUIDs
+  - Related GitHub issues: #2112, #10943, #11408 (custom session naming requests)
+
+context_management field:
+  Tracks server-side context optimization operations on Message objects.
+  Structure: {"applied_edits": []} - records which context clearing operations were executed.
+  - Part of Claude API's context editing feature (Nov 2025)
+  - Automatically clears older tool results when context exceeds thresholds
+  - Helps maintain long-running sessions without context window exhaustion
+  - Previously always null, now populated during context optimization
+
+document content type:
+  New MessageContent type for PDF uploads with structure:
+  {"type": "document", "source": {"type": "base64", "media_type": "application/pdf", "data": "..."}}
+  - Part of Claude API's PDF support, not Claude Code specific
+  - Enables visual + textual understanding of PDF documents
+  - Max 32MB, 100 pages per request
+
+Skill tool:
+  New tool for invoking Agent Skills - auto-discovered capabilities.
+  Input: {"command": "canvas-design"} or {"skill": "..."}
+  - Skills differ from slash commands: auto-discovered vs explicit invocation
+  - Skills are folders with SKILL.md + resources (templates, scripts, examples)
+  - Claude examines available skills and uses them when relevant to task
+  - Built-in skills: Excel, PowerPoint, Word, PDF form-filling
 
 Key findings from analyzing real session files:
 - Assistant records from agents/subprocesses have nested API response structure
@@ -21,7 +58,7 @@ Key findings from analyzing real session files:
 
 Important pattern for unused/reserved fields:
 - Fields that are present in JSON but ALWAYS null are typed as None (not Any | None)
-- This includes: AssistantRecord.stopReason, Message.container, Message.context_management
+- This includes: AssistantRecord.stopReason, Message.container
 - These are reserved/future fields in the Claude API schema but currently unpopulated
 - Using None type prevents accidental usage and makes the schema more accurate
 
@@ -43,11 +80,11 @@ from src.markers import PathField, PathListField
 # Schema Version
 # ==============================================================================
 
-SCHEMA_VERSION = '0.1.2'
+SCHEMA_VERSION = '0.1.3'
 CLAUDE_CODE_MIN_VERSION = '2.0.35'
-CLAUDE_CODE_MAX_VERSION = '2.0.50'
-LAST_VALIDATED = '2025-11-21'
-VALIDATION_RECORD_COUNT = 85_313
+CLAUDE_CODE_MAX_VERSION = '2.0.54'
+LAST_VALIDATED = '2025-11-26'
+VALIDATION_RECORD_COUNT = 34_028
 
 
 # ==============================================================================
@@ -112,10 +149,16 @@ class EditToolInput(StrictModel):
     replace_all: bool | None = None
 
 
-# Union of tool inputs with file paths (others remain dict[str, Any])
+class SkillToolInput(StrictModel):
+    """Input for Skill tool."""
+
+    command: str  # Skill name to invoke (e.g., 'canvas-design')
+
+
+# Union of tool inputs (typed models first, dict fallback for MCP tools)
 ToolInput = Annotated[
     Union[
-        ReadToolInput, WriteToolInput, EditToolInput, dict[str, Any]  # Fallback for all other tools
+        ReadToolInput, WriteToolInput, EditToolInput, SkillToolInput, dict[str, Any]  # Fallback for MCP tools
     ],
     Field(union_mode='left_to_right'),
 ]
@@ -130,7 +173,7 @@ class ImageSource(StrictModel):
     """Image source data for image content."""
 
     type: Literal['base64']
-    media_type: Literal['image/png']  # Only value observed across all sessions
+    media_type: Literal['image/jpeg', 'image/png']  # Only value observed across all sessions
     data: str  # Base64 encoded image data
 
 
@@ -139,6 +182,21 @@ class ImageContent(StrictModel):
 
     type: Literal['image']
     source: ImageSource
+
+
+class DocumentSource(StrictModel):
+    """Document source data for document content (PDFs, etc.)."""
+
+    type: Literal['base64']
+    media_type: str  # e.g., 'application/pdf'
+    data: str  # Base64 encoded document data
+
+
+class DocumentContent(StrictModel):
+    """Document content block from user messages (PDF uploads, etc.)."""
+
+    type: Literal['document']
+    source: DocumentSource
 
 
 class ToolUseContent(StrictModel):
@@ -193,8 +251,20 @@ class ToolResultContent(StrictModel):
 
 # Discriminated union of all message content types
 MessageContent = Annotated[
-    Union[ThinkingContent, TextContent, ToolUseContent, ToolResultContent, ImageContent], Field(discriminator='type')
+    Union[ThinkingContent, TextContent, ToolUseContent, ToolResultContent, ImageContent, DocumentContent],
+    Field(discriminator='type'),
 ]
+
+
+# ==============================================================================
+# Context Management (Claude Code 2.0.51+)
+# ==============================================================================
+
+
+class ContextManagement(StrictModel):
+    """Context management metadata for message responses (Claude Code 2.0.51+)."""
+
+    applied_edits: list[Any]  # List of applied edits (empty in observed data)
 
 
 # ==============================================================================
@@ -219,8 +289,8 @@ class Message(StrictModel):
     stop_sequence: str | None = Field(None, description='The actual stop sequence string that triggered stopping')
     usage: TokenUsage | None = Field(None, description='Token usage information (present in nested API responses)')
     container: None = Field(None, description='Reserved for future use', json_schema_extra={'status': 'reserved'})
-    context_management: None = Field(
-        None, description='Reserved for future use', json_schema_extra={'status': 'reserved'}
+    context_management: ContextManagement | None = Field(
+        None, description='Context management metadata (Claude Code 2.0.51+)'
     )
 
 
@@ -325,7 +395,7 @@ class ApiError(StrictModel):
 class ConnectionError(StrictModel):
     """Connection error details for network failures."""
 
-    code: Literal['ConnectionRefused', 'FailedToOpenSocket']
+    code: Literal['ConnectionRefused', 'ECONNRESET', 'FailedToOpenSocket']
     path: str  # URL that failed (e.g., "https://api.anthropic.com/v1/messages?beta=true")
     errno: int
 
@@ -624,6 +694,7 @@ class UserRecord(BaseRecord):
         Field(union_mode='left_to_right'),
     ] = None  # Tool execution metadata (validated left-to-right)
     todos: list[TodoItem] | None = Field(None, description='Todo list state (Claude Code 2.0.47+)')
+    slug: str | None = Field(None, description='Human-readable session slug (Claude Code 2.0.51+)')
 
 
 # ==============================================================================
@@ -661,6 +732,7 @@ class AssistantRecord(BaseRecord):
     error: Literal['rate_limit', 'unknown', 'invalid_request', 'authentication_failed'] | None = Field(
         None, description='Error type for API error messages'
     )
+    slug: str | None = Field(None, description='Human-readable session slug (Claude Code 2.0.51+)')
 
 
 # ==============================================================================
@@ -710,6 +782,7 @@ class LocalCommandSystemRecord(BaseRecord):
     userType: str
     version: str
     gitBranch: str
+    slug: str | None = Field(None, description='Human-readable session slug (Claude Code 2.0.51+)')
 
 
 class CompactBoundarySystemRecord(BaseRecord):
@@ -742,6 +815,7 @@ class ApiErrorSystemRecord(BaseRecord):
     userType: str | None = None  # Optional for api_error
     version: str | None = None  # Optional for api_error
     gitBranch: str | None = None  # Optional for api_error
+    slug: str | None = Field(None, description='Human-readable session slug (Claude Code 2.0.51+)')
     cause: ConnectionError | None = None  # Connection error details (for network failures)
     error: ApiError | NetworkError  # API error (status/headers) or network error (connection failure)
     retryInMs: float
@@ -912,6 +986,7 @@ MODELED_CLAUDE_TOOLS = [
     (ExitPlanModeToolResult, 'ExitPlanMode'),
     (KillShellToolResult, 'KillShell'),
     (McpResource, 'ListMcpResourcesTool'),  # Returns list[McpResource], not dict result
+    (SkillToolInput, 'Skill'),  # Input typed, result is string
 ]
 
 # Allowed tool names (extracted from mapping)
