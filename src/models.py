@@ -5,14 +5,15 @@ This module defines strict types for all record types found in Claude Code sessi
 Uses discriminated unions for type-safe parsing of heterogeneous JSONL data.
 
 CLAUDE CODE VERSION COMPATIBILITY:
-- Validated against: Claude Code 2.0.35 - 2.0.62
+- Validated against: Claude Code 2.0.35 - 2.0.64
 - Last validated: 2025-12-09
-- Validation coverage: 71,593 records across 840+ session files
+- Validation coverage: 75,812 records across 888 session files
 - Schema v0.1.1: Added todos field for Claude Code 2.0.47+
 - Schema v0.1.2: Added error field to AssistantRecord for Claude Code 2.0.49+
 - Schema v0.1.3: Added slug, DocumentContent, ContextManagement, SkillToolInput,
                  image/jpeg support, ECONNRESET error code for Claude Code 2.0.51+
 - Schema v0.1.4: Added EnterPlanMode tool, slug to CompactBoundarySystemRecord for 2.0.62+
+- Schema v0.1.5: Added AgentOutputTool input model for Claude Code 2.0.64+
 - If validation fails, Claude Code schema may have changed - update models accordingly
 
 NEW FIELDS IN CLAUDE CODE 2.0.51+ (Schema v0.1.3):
@@ -81,11 +82,11 @@ from src.markers import PathField, PathListField
 # Schema Version
 # ==============================================================================
 
-SCHEMA_VERSION = '0.1.4'
+SCHEMA_VERSION = '0.1.5'
 CLAUDE_CODE_MIN_VERSION = '2.0.35'
-CLAUDE_CODE_MAX_VERSION = '2.0.62'
+CLAUDE_CODE_MAX_VERSION = '2.0.64'
 LAST_VALIDATED = '2025-12-09'
-VALIDATION_RECORD_COUNT = 71_593
+VALIDATION_RECORD_COUNT = 75_812
 
 
 # ==============================================================================
@@ -162,10 +163,26 @@ class EnterPlanModeToolInput(StrictModel):
     pass
 
 
+class AgentOutputToolInput(StrictModel):
+    """Input for AgentOutputTool - retrieves output from background agents."""
+
+    agentId: str  # Agent ID to retrieve output from
+    block: bool | None = None  # Whether to block waiting for agent completion
+    wait_up_to: int | None = None  # Optional timeout in seconds
+
+
 # Union of tool inputs (typed models first, dict fallback for MCP tools)
+# NOTE: Order matters! More specific (more required fields) should come first.
+# EnterPlanModeToolInput is empty (no fields), so it must come last before dict fallback.
 ToolInput = Annotated[
     Union[
-        ReadToolInput, WriteToolInput, EditToolInput, SkillToolInput, EnterPlanModeToolInput, dict[str, Any]  # Fallback for MCP tools
+        ReadToolInput,       # file_path required
+        WriteToolInput,      # file_path, content required
+        EditToolInput,       # file_path, old_string, new_string required
+        AgentOutputToolInput,  # agentId required
+        SkillToolInput,      # command required
+        EnterPlanModeToolInput,  # No required fields - must be last before dict!
+        dict[str, Any]       # Fallback for MCP tools
     ],
     Field(union_mode='left_to_right'),
 ]
@@ -995,7 +1012,8 @@ MODELED_CLAUDE_TOOLS = [
     (EnterPlanModeToolInput, 'EnterPlanMode'),  # No-param tool input
     (KillShellToolResult, 'KillShell'),
     (McpResource, 'ListMcpResourcesTool'),  # Returns list[McpResource], not dict result
-    (SkillToolInput, 'Skill'),  # Input typed, result is string
+    (SkillToolInput, 'Skill'),  # Input typed
+    (AgentOutputToolInput, 'AgentOutputTool'),  # Input typed
 ]
 
 # Allowed tool names (extracted from mapping)
