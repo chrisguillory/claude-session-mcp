@@ -11,14 +11,18 @@ import asyncio
 import os
 import sys
 import tempfile
+import traceback
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal, Optional
 
+import httpx
 import typer
 
 from src.cli_logger import CLILogger
+from src.launcher import launch_claude_with_session
 from src.services.archive import SessionArchiveService
+from src.services.clone import AmbiguousSessionError, SessionCloneService
 from src.services.discovery import SessionDiscoveryService
 from src.services.parser import SessionParserService
 from src.services.restore import SessionRestoreService
@@ -53,11 +57,12 @@ def restore(
     archive: str = typer.Argument(..., help='Archive path or Gist URL (gist://<gist-id> or file path)'),
     project: Optional[Path] = typer.Option(None, '--project', '-p', help='Target project directory (default: current)'),
     no_translate: bool = typer.Option(False, '--no-translate', help="Don't translate file paths"),
+    launch: bool = typer.Option(False, '--launch', '-l', help='Launch Claude Code after restore'),
     gist_token: Optional[str] = typer.Option(None, '--gist-token', help='GitHub token for private gists'),
     verbose: bool = typer.Option(False, '--verbose', '-v', help='Verbose output'),
 ) -> None:
     """Restore a Claude Code session from local file or GitHub Gist."""
-    asyncio.run(_restore_async(archive, project, not no_translate, gist_token, verbose))
+    asyncio.run(_restore_async(archive, project, not no_translate, launch, gist_token, verbose))
 
 
 async def _archive_async(
@@ -181,14 +186,12 @@ async def _archive_async(
     except Exception as e:
         await logger.error(f'Failed to create archive: {e}')
         if verbose:
-            import traceback
-
             traceback.print_exc()
         raise typer.Exit(1)
 
 
 async def _restore_async(
-    archive: str, project: Optional[Path], translate_paths: bool, gist_token: Optional[str], verbose: bool
+    archive: str, project: Optional[Path], translate_paths: bool, launch: bool, gist_token: Optional[str], verbose: bool
 ) -> None:
     """Async implementation of restore command."""
     logger = CLILogger(verbose=verbose)
@@ -211,8 +214,6 @@ async def _restore_async(
             storage = GistStorage(token=token, gist_id=gist_id)
 
             # Find the archive file in the gist (look for .json or .json.zst)
-            import httpx
-
             async with httpx.AsyncClient() as client:
                 headers = {'Accept': 'application/vnd.github.v3+json', 'X-GitHub-Api-Version': '2022-11-28'}
                 if token:
@@ -292,15 +293,98 @@ async def _restore_async(
         typer.echo(f'  Files restored: {result.files_restored}')
         typer.echo(f'  Records restored: {result.records_restored:,}')
         typer.echo(f'  Paths translated: {result.paths_translated}')
-        typer.echo()
-        typer.echo(f'To continue this session, run:')
-        typer.secho(f'  claude --resume {result.new_session_id}', fg=typer.colors.CYAN)
+
+        if launch:
+            typer.echo()
+            typer.echo('Launching Claude Code...')
+            launch_claude_with_session(result.new_session_id)
+            # Note: launch_claude_with_session uses execvp, so we never reach here
+        else:
+            typer.echo()
+            typer.echo(f'To continue this session, run:')
+            typer.secho(f'  claude --resume {result.new_session_id}', fg=typer.colors.CYAN)
 
     except Exception as e:
         await logger.error(f'Failed to restore session: {e}')
         if verbose:
-            import traceback
+            traceback.print_exc()
+        raise typer.Exit(1)
 
+
+@app.command()
+def clone(
+    session_id: str = typer.Argument(..., help='Session ID to clone (full UUID or prefix)'),
+    project: Optional[Path] = typer.Option(None, '--project', '-p', help='Target project directory (default: current)'),
+    no_translate: bool = typer.Option(False, '--no-translate', help="Don't translate file paths"),
+    launch: bool = typer.Option(False, '--launch', '-l', help='Launch Claude Code after clone'),
+    verbose: bool = typer.Option(False, '--verbose', '-v', help='Verbose output'),
+) -> None:
+    """Clone a session directly (no archive file needed)."""
+    asyncio.run(_clone_async(session_id, project, not no_translate, launch, verbose))
+
+
+async def _clone_async(
+    session_id: str,
+    project: Optional[Path],
+    translate_paths: bool,
+    launch: bool,
+    verbose: bool,
+) -> None:
+    """Async implementation of clone command."""
+    logger = CLILogger(verbose=verbose)
+
+    try:
+        # Determine project path
+        if project:
+            project_path = project.resolve()
+            if not project_path.exists():
+                typer.secho(f'Error: Project directory does not exist: {project_path}', fg=typer.colors.RED, err=True)
+                raise typer.Exit(1)
+        else:
+            project_path = Path.cwd()
+
+        await logger.info(f'Cloning to project: {project_path}')
+
+        # Initialize clone service
+        clone_service = SessionCloneService(project_path)
+
+        # Clone the session
+        result = await clone_service.clone(
+            source_session_id=session_id,
+            translate_paths=translate_paths,
+            logger=logger,
+        )
+
+        # Print success
+        typer.secho(f'✓ Session cloned successfully!', fg=typer.colors.GREEN)
+        typer.echo(f'  New session ID: {result.new_session_id}')
+        typer.echo(f'  Original session ID: {result.original_session_id}')
+        typer.echo(f'  Project: {result.project_path}')
+        typer.echo(f'  Files cloned: {result.files_restored}')
+        typer.echo(f'  Records cloned: {result.records_restored:,}')
+        typer.echo(f'  Paths translated: {result.paths_translated}')
+
+        if launch:
+            typer.echo()
+            typer.echo('Launching Claude Code...')
+            launch_claude_with_session(result.new_session_id)
+            # Note: launch_claude_with_session uses execvp, so we never reach here
+        else:
+            typer.echo()
+            typer.echo(f'To continue this session, run:')
+            typer.secho(f'  claude --resume {result.new_session_id}', fg=typer.colors.CYAN)
+
+    except FileNotFoundError as e:
+        typer.secho(f'Error: {e}', fg=typer.colors.RED, err=True)
+        raise typer.Exit(1)
+    except AmbiguousSessionError as e:
+        typer.secho(f'Error: {e}', fg=typer.colors.RED, err=True)
+        typer.echo()
+        typer.echo('Please provide a more specific session ID prefix.')
+        raise typer.Exit(1)
+    except Exception as e:
+        await logger.error(f'Failed to clone session: {e}')
+        if verbose:
             traceback.print_exc()
         raise typer.Exit(1)
 

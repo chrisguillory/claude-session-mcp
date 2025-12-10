@@ -32,6 +32,7 @@ from mcp.server.fastmcp import Context, FastMCP
 
 from mcp_utils import DualLogger
 from src.services.archive import ArchiveMetadata, SessionArchiveService
+from src.services.clone import AmbiguousSessionError, SessionCloneService
 from src.services.parser import SessionParserService
 from src.services.restore import RestoreResult, SessionRestoreService
 from src.storage.local import LocalFileSystemStorage
@@ -385,6 +386,65 @@ def register_tools(state: ServerState) -> None:
         await logger.info(f'Use: claude --resume {result.new_session_id}')
 
         return result
+
+    @server.tool()
+    async def clone_session(
+        source_session_id: str,
+        translate_paths: bool = True,
+        ctx: Context = None,
+    ) -> RestoreResult:
+        """
+        Clone a session directly without creating an archive file.
+
+        Faster alternative to archive+restore when cloning sessions on the
+        same machine. Creates a new session with a fresh UUIDv7 session ID,
+        copying all conversation history from the source session.
+
+        Args:
+            source_session_id: Session ID to clone (full UUID or prefix)
+            translate_paths: Translate paths to current project (default: True)
+
+        Returns:
+            RestoreResult with new session ID and clone details
+
+        Examples:
+            # Clone by full session ID
+            result = await clone_session('dbae570a-8b88-43e0-a6da-71d649ec07b0')
+
+            # Clone by prefix (must be unique)
+            result = await clone_session('dbae570a')
+
+            # Clone without path translation
+            result = await clone_session(
+                source_session_id='dbae570a',
+                translate_paths=False
+            )
+
+        Note:
+            After cloning, use `claude --resume {new_session_id}` in CLI
+            to continue the conversation with the cloned history.
+        """
+        logger = DualLogger(ctx)
+
+        # Create clone service for current project
+        clone_service = SessionCloneService(state.project_path)
+
+        try:
+            # Clone the session
+            result = await clone_service.clone(
+                source_session_id=source_session_id,
+                translate_paths=translate_paths,
+                logger=logger,
+            )
+
+            await logger.info(f'Session cloned with new ID: {result.new_session_id}')
+            await logger.info(f'Use: claude --resume {result.new_session_id}')
+
+            return result
+
+        except AmbiguousSessionError as e:
+            # Re-raise with more context for MCP
+            raise ValueError(str(e)) from e
 
 
 # ==============================================================================
