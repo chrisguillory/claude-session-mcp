@@ -123,7 +123,42 @@ The MCP server exposes archive/restore as Claude Code tools:
 
 **Pydantic Models**: 914 lines, 56 classes covering 10 record types (user, assistant, system, local commands, compact boundaries, API errors, summaries, file history snapshots, queue operations). Validated on 78K+ records (100% valid).
 
-**Compatibility**: Claude Code 2.0.35 - 2.0.47
+**Compatibility**: Claude Code 2.0.35 - 2.0.64
+
+## Claude Code Version Sources
+
+Authoritative sources for checking Claude Code versions:
+
+| Source | URL | Type | Update Speed | Best For |
+|--------|-----|------|--------------|----------|
+| **NPM Package** | https://www.npmjs.com/package/@anthropic-ai/claude-code | Distribution | Immediate | Definitive latest version |
+| **NPM Versions Tab** | https://www.npmjs.com/package/@anthropic-ai/claude-code?activeTab=versions | History | Immediate | Full version history + downloads |
+| **NPM JSON API** | https://registry.npmjs.org/@anthropic-ai/claude-code | API | Immediate | Programmatic version checks |
+| **GitHub Releases** | https://github.com/anthropics/claude-code/releases | Releases | Same day | Release notes, binaries |
+| **GitHub Releases API** | https://api.github.com/repos/anthropics/claude-code/releases/latest | API | Same day | Programmatic release info |
+| **CHANGELOG.md** | https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md | Docs | Same day | Detailed change history |
+| **GitHub Repo** | https://github.com/anthropics/claude-code | Source | Continuous | Issues, source code |
+| **Official Docs** | https://code.claude.com/docs/en/home | Docs | Release-aligned | Feature documentation |
+| **Platform Release Notes** | https://platform.claude.com/docs/en/release-notes/overview | Docs | Major releases | API + Claude Code combined |
+| **Support Release Notes** | https://support.claude.com/en/articles/12138966-release-notes | Support | Major releases | User-facing release notes |
+| **ClaudeLog Changelog** | https://www.claudelog.com/claude-code-changelog/ | Community | ~Daily | Human-readable summaries |
+| **ClaudeLog News** | https://www.claudelog.com/claude-news/ | Community | ~Daily | Announcement timeline |
+| **Anthropic Newsroom** | https://www.anthropic.com/news | Announcements | Major only | Strategic announcements |
+| **CLI** | `claude --version` | Local | N/A | Installed version |
+
+> **Note**: The deprecated `claude-ai` NPM package has been superseded by `@anthropic-ai/claude-code`.
+
+## Updating for New Claude Code Versions
+
+When a new Claude Code version is released:
+
+1. **Detect** - Run `uv run scripts/validate_models.py` to find schema gaps
+2. **Analyze** - Run `uv run scripts/analyze_model_quality.py` to study new fields
+3. **Update** - Add new Pydantic models/fields in `src/models.py` with version annotations
+4. **Bump** - Update `SCHEMA_VERSION` and `CLAUDE_CODE_MAX_VERSION` in `src/models.py`
+5. **Validate** - Re-run validation for 100% success rate
+6. **Export** - Run `uv run scripts/export_schema.py` to regenerate `session-schema.json`
+7. **Commit** - Format: `Update models for Claude Code X.X.X compatibility (schema vX.X.X)`
 
 ## License
 
