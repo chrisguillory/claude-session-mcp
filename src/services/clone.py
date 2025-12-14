@@ -295,5 +295,21 @@ class SessionCloneService:
         return self.claude_sessions_dir / encoded
 
     def _encode_path(self, path: Path) -> str:
-        """Encode path for Claude's directory naming."""
-        return str(path).replace('/', '-').replace('.', '-')
+        """
+        Encode path for Claude's directory naming.
+
+        Claude Code encodes paths by replacing special characters with hyphens:
+        - Forward slashes (/) → hyphens (-)
+        - Periods (.) → hyphens (-)
+        - Spaces ( ) → hyphens (-)
+        - Tildes (~) → hyphens (-)
+
+        Example: /Users/user/Library/Mobile Documents/com~apple~CloudDocs/project
+              → -Users-user-Library-Mobile-Documents-com-apple-CloudDocs-project
+        """
+        result = str(path)
+        result = result.replace('/', '-')
+        result = result.replace('.', '-')
+        result = result.replace(' ', '-')
+        result = result.replace('~', '-')
+        return result

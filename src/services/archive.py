@@ -474,6 +474,18 @@ class SessionArchiveService:
         """
         Encode filesystem path for folder name.
 
-        Claude uses pattern: /Users/rushi.arumalla/project → -Users-rushi-arumalla-project
+        Claude Code encodes paths by replacing special characters with hyphens:
+        - Forward slashes (/) → hyphens (-)
+        - Periods (.) → hyphens (-)
+        - Spaces ( ) → hyphens (-)
+        - Tildes (~) → hyphens (-)
+
+        Example: /Users/user/Library/Mobile Documents/com~apple~CloudDocs/project
+              → -Users-user-Library-Mobile-Documents-com-apple-CloudDocs-project
         """
-        return str(path).replace('/', '-').replace('.', '-')
+        result = str(path)
+        result = result.replace('/', '-')
+        result = result.replace('.', '-')
+        result = result.replace(' ', '-')
+        result = result.replace('~', '-')
+        return result
