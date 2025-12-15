@@ -5,15 +5,16 @@ This module defines strict types for all record types found in Claude Code sessi
 Uses discriminated unions for type-safe parsing of heterogeneous JSONL data.
 
 CLAUDE CODE VERSION COMPATIBILITY:
-- Validated against: Claude Code 2.0.35 - 2.0.64
-- Last validated: 2025-12-09
-- Validation coverage: 75,812 records across 888 session files
+- Validated against: Claude Code 2.0.35 - 2.0.65
+- Last validated: 2025-12-15
+- Validation coverage: 157,640 records across 1,039 session files
 - Schema v0.1.1: Added todos field for Claude Code 2.0.47+
 - Schema v0.1.2: Added error field to AssistantRecord for Claude Code 2.0.49+
 - Schema v0.1.3: Added slug, DocumentContent, ContextManagement, SkillToolInput,
                  image/jpeg support, ECONNRESET error code for Claude Code 2.0.51+
 - Schema v0.1.4: Added EnterPlanMode tool, slug to CompactBoundarySystemRecord for 2.0.62+
 - Schema v0.1.5: Added AgentOutputTool input model for Claude Code 2.0.64+
+- Schema v0.1.6: Added TaskOutput tool input model for Claude Code 2.0.65+
 - If validation fails, Claude Code schema may have changed - update models accordingly
 
 NEW FIELDS IN CLAUDE CODE 2.0.51+ (Schema v0.1.3):
@@ -82,11 +83,11 @@ from src.markers import PathField, PathListField
 # Schema Version
 # ==============================================================================
 
-SCHEMA_VERSION = '0.1.5'
+SCHEMA_VERSION = '0.1.6'
 CLAUDE_CODE_MIN_VERSION = '2.0.35'
-CLAUDE_CODE_MAX_VERSION = '2.0.64'
-LAST_VALIDATED = '2025-12-09'
-VALIDATION_RECORD_COUNT = 75_812
+CLAUDE_CODE_MAX_VERSION = '2.0.65'
+LAST_VALIDATED = '2025-12-15'
+VALIDATION_RECORD_COUNT = 157_640
 
 
 # ==============================================================================
@@ -171,6 +172,14 @@ class AgentOutputToolInput(StrictModel):
     wait_up_to: int | None = None  # Optional timeout in seconds
 
 
+class TaskOutputToolInput(StrictModel):
+    """Input for TaskOutput tool - retrieves output from running/completed tasks."""
+
+    task_id: str  # Task ID to retrieve output from
+    block: bool | None = None  # Whether to block waiting for task completion
+    timeout: int | None = None  # Optional timeout in milliseconds
+
+
 # Union of tool inputs (typed models first, dict fallback for MCP tools)
 # NOTE: Order matters! More specific (more required fields) should come first.
 # EnterPlanModeToolInput is empty (no fields), so it must come last before dict fallback.
@@ -180,6 +189,7 @@ ToolInput = Annotated[
         WriteToolInput,      # file_path, content required
         EditToolInput,       # file_path, old_string, new_string required
         AgentOutputToolInput,  # agentId required
+        TaskOutputToolInput,   # task_id required
         SkillToolInput,      # command required
         EnterPlanModeToolInput,  # No required fields - must be last before dict!
         dict[str, Any]       # Fallback for MCP tools
@@ -1014,6 +1024,7 @@ MODELED_CLAUDE_TOOLS = [
     (McpResource, 'ListMcpResourcesTool'),  # Returns list[McpResource], not dict result
     (SkillToolInput, 'Skill'),  # Input typed
     (AgentOutputToolInput, 'AgentOutputTool'),  # Input typed
+    (TaskOutputToolInput, 'TaskOutput'),  # Input typed
 ]
 
 # Allowed tool names (extracted from mapping)
