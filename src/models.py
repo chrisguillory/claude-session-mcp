@@ -15,6 +15,7 @@ CLAUDE CODE VERSION COMPATIBILITY:
 - Schema v0.1.4: Added EnterPlanMode tool, slug to CompactBoundarySystemRecord for 2.0.62+
 - Schema v0.1.5: Added AgentOutputTool input model for Claude Code 2.0.64+
 - Schema v0.1.6: Added TaskOutput tool input model for Claude Code 2.0.65+
+- Schema v0.1.7: Added model_context_window_exceeded stop_reason for context overflow handling
 - If validation fails, Claude Code schema may have changed - update models accordingly
 
 NEW FIELDS IN CLAUDE CODE 2.0.51+ (Schema v0.1.3):
@@ -83,11 +84,11 @@ from src.markers import PathField, PathListField
 # Schema Version
 # ==============================================================================
 
-SCHEMA_VERSION = '0.1.6'
+SCHEMA_VERSION = '0.1.7'
 CLAUDE_CODE_MIN_VERSION = '2.0.35'
 CLAUDE_CODE_MAX_VERSION = '2.0.65'
-LAST_VALIDATED = '2025-12-15'
-VALIDATION_RECORD_COUNT = 157_640
+LAST_VALIDATED = '2025-12-16'
+VALIDATION_RECORD_COUNT = 177_939
 
 
 # ==============================================================================
@@ -317,7 +318,7 @@ class Message(StrictModel):
     )
     model: str | None = Field(None, description='Claude model identifier (e.g., claude-sonnet-4-5-20250929)')
     id: str | None = Field(None, description='Message ID from Claude API')
-    stop_reason: Literal['tool_use', 'stop_sequence', 'end_turn', 'refusal'] | None = Field(
+    stop_reason: Literal['tool_use', 'stop_sequence', 'end_turn', 'refusal', 'model_context_window_exceeded'] | None = Field(
         None, description='Reason why the model stopped generating'
     )
     stop_sequence: str | None = Field(None, description='The actual stop sequence string that triggered stopping')
