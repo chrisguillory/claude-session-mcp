@@ -42,6 +42,24 @@ claude-session restore gist://<gist-id> --launch
 - **Agent sessions**: Captures main session + all agent sub-sessions
 - **UUIDv7 session IDs**: Restored sessions use time-ordered UUIDv7 (vs Claude's random UUIDv4)
 
+## Clone vs Native Fork
+
+Claude Code 2.0.73+ supports `--fork-session`. Here's how it compares to our `clone` command:
+
+| | Claude Native Fork | MCP Clone |
+|---|---|---|
+| **Command** | `claude --resume <id> --fork-session` | `claude-session clone <id>` |
+| **Mechanism** | Compact (summary) | Full copy |
+| **Session size** | ~34 KB | ~1.1 MB |
+| **Context** | Summary blob | Complete history |
+| **Fidelity** | Lossy | Lossless |
+| **Agent history** | Not preserved | Preserved |
+| **Cross-machine** | No | Yes |
+| **Gist support** | No | Yes |
+| **Path translation** | No | Yes |
+
+**Key difference**: Native fork is `/compact` under the hood - it copies a summary + recent messages, not actual conversation history. Our clone preserves everything: all tool calls, thinking blocks, agent sub-sessions, and intermediate steps.
+
 ## Commands
 
 ### Clone
