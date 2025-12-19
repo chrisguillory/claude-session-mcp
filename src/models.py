@@ -78,6 +78,7 @@ from typing import Any, Literal, Annotated, Union, get_args
 from pydantic import BaseModel, Field, ConfigDict, TypeAdapter, field_validator, ValidationInfo
 
 from src.markers import PathField, PathListField
+from src.types import ModelId
 
 
 # ==============================================================================
@@ -316,7 +317,7 @@ class Message(StrictModel):
     type: Literal['message'] | None = Field(
         None, description='Message type indicator (present in agent/subprocess responses)'
     )
-    model: str | None = Field(None, description='Claude model identifier (e.g., claude-sonnet-4-5-20250929)')
+    model: ModelId | None = Field(None, description='Claude model identifier (e.g., claude-sonnet-4-5-20250929)')
     id: str | None = Field(None, description='Message ID from Claude API')
     stop_reason: Literal['tool_use', 'stop_sequence', 'end_turn', 'refusal', 'model_context_window_exceeded'] | None = Field(
         None, description='Reason why the model stopped generating'
@@ -721,11 +722,11 @@ class UserRecord(BaseRecord):
     )
     isCompactSummary: bool | None = Field(None, description='Indicates this is a compacted session summary')
     toolUseResult: Annotated[
-        list[McpResource]
-        | list[TextContent]
+        list[ToolResultContentBlock]  # TextContent/ImageContent with 'type' discriminator - must come first
+        | list[McpResource]  # MCP resources (no 'type' field, has 'name', 'uri', etc.)
         | ToolUseResultUnion
         | str
-        | None,  # Ordered left-to-right: MCP resources first (no 'type' field), then TextContent, then structured, then string
+        | None,
         Field(union_mode='left_to_right'),
     ] = None  # Tool execution metadata (validated left-to-right)
     todos: list[TodoItem] | None = Field(None, description='Todo list state (Claude Code 2.0.47+)')
@@ -749,7 +750,7 @@ class AssistantRecord(BaseRecord):
         None, description='Token usage for this request (null for agent records - usage in message instead)'
     )
     stopReason: None = Field(None, description='Reserved for future use', json_schema_extra={'status': 'reserved'})
-    model: str | None = Field(
+    model: ModelId | None = Field(
         None, description='Claude model identifier (null for agent records - model in message instead)'
     )
     requestDuration: int | None = Field(None, description='Request duration in milliseconds')
