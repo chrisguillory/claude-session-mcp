@@ -1,11 +1,10 @@
-__pycache__/
 *.pyc
-.venv/
 .claude/settings.local.json
-
-# IDE
-.idea/
-.vscode/
 .cursor/
 .cursorrules
+.idea/
 .specstory/
+.venv/
+.vscode/
+/scratch/
+__pycache__/

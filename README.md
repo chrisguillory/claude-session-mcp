@@ -2,6 +2,47 @@
 
 Archive and restore Claude Code sessions across machines with full conversation history.
 
+## ⚠️ Critical: Prevent Automatic Session Deletion
+
+**Claude Code deletes session `.jsonl` files after 30 days by default.** Add this to `~/.claude/settings.json` **before using this tool**:
+
+```json
+{
+  "cleanupPeriodDays": 99999
+}
+```
+
+<details>
+<summary><b>Why this matters and how it works</b></summary>
+
+### The Problem
+
+Claude Code silently deletes session transcripts from `~/.claude/projects/` after 30 days (based on last activity), running cleanup on every launch. This destroys the `.jsonl` files this project depends on, while leaving orphaned metadata in `~/.claude/todos/` and `~/.claude/debug/` - explaining "Session not found" errors even when `rg <session-id>` finds matches.
+
+### Settings File Location
+
+- **macOS/Linux**: `~/.claude/settings.json`
+- **Windows**: `%USERPROFILE%\.claude\settings.json`
+
+Create the file if it doesn't exist.
+
+### How Cleanup Works
+
+- **Default retention**: 30 days from last activity ([official docs](https://docs.anthropic.com/en/docs/claude-code/settings))
+- **Cleanup timing**: Automatic on every Claude Code launch
+- **No warning**: Files deleted silently without notification
+- **Not recoverable**: Once deleted, transcripts cannot be restored
+
+**⚠️ Warning**: Setting `cleanupPeriodDays: 0` immediately wipes ALL sessions.
+
+### References
+
+- [GitHub Issue #4172](https://github.com/anthropics/claude-code/issues/4172) - Auto-deletion disable request (resolved)
+- [GitHub Issue #2543](https://github.com/anthropics/claude-code/issues/2543) - Documentation clarification
+- [Official Settings Docs](https://docs.anthropic.com/en/docs/claude-code/settings) | [Data Usage Docs](https://docs.anthropic.com/en/docs/claude-code/data-usage)
+
+</details>
+
 ## Installation
 
 ```bash
@@ -59,6 +100,8 @@ Claude Code 2.0.73+ supports `--fork-session`. Here's how it compares to our `cl
 | **Path translation** | No | Yes |
 
 **Key difference**: Native fork is `/compact` under the hood - it copies a summary + recent messages, not actual conversation history. Our clone preserves everything: all tool calls, thinking blocks, agent sub-sessions, and intermediate steps.
+
+**Why compaction loses context**: Auto-compaction triggers at ~75% context utilization (not 90%+). Claude Code reserves 25% headroom for reasoning quality. When forking, you get the summary blob, not the rich history that led to decisions.
 
 ## Commands
 
@@ -139,9 +182,102 @@ The MCP server exposes archive/restore as Claude Code tools:
 
 ## Technical Details
 
-**Pydantic Models**: 914 lines, 56 classes covering 10 record types (user, assistant, system, local commands, compact boundaries, API errors, summaries, file history snapshots, queue operations). Validated on 78K+ records (100% valid).
+### Session Storage
 
-**Compatibility**: Claude Code 2.0.35 - 2.0.64
+Sessions are stored as JSONL files at `~/.claude/projects/<encoded-path>/<session-id>.jsonl`.
+
+**Path Encoding**: Claude Code encodes working directory paths for filesystem safety:
+- `/` → `-`
+- `.` → `-`
+- ` ` (space) → `-`
+- `~` (tilde) → `-`
+
+Example: `/Users/chris/My Project.app` → `-Users-chris-My-Project-app`
+
+**Session IDs**: Claude Code uses UUIDv4 (random). This tool generates UUIDv7 (time-ordered) for cloned/restored sessions:
+
+| Type | Source | Pattern | Example |
+|------|--------|---------|---------|
+| UUIDv4 | Claude Code native | `xxxxxxxx-xxxx-4xxx-...` | `a1b2c3d4-e5f6-4a7b-...` |
+| UUIDv7 | Cloned/restored | `01xxxxxx-xxxx-7xxx-...` | `01934a2b-c3d4-7e5f-...` |
+
+The version digit (4 or 7) is at position 15 (first digit of third group).
+
+### Pydantic Models
+
+914 lines, 56 classes covering 10 record types (user, assistant, system, local commands, compact boundaries, API errors, summaries, file history snapshots, queue operations). Validated on 78K+ records (100% valid).
+
+### Compatibility
+
+Claude Code 2.0.35 - 2.0.64
+
+### Claude Code Architecture Reference
+
+Understanding what gets captured in session files.
+
+**Built-in Agents**:
+
+| Agent | Model | Purpose | Creates Sidechain |
+|-------|-------|---------|-------------------|
+| Plan | Opus/Sonnet | Software architect (read-only) | Yes |
+| Explore | Haiku | File search specialist | Yes |
+| General-purpose | Sonnet | Complex multi-step tasks | Yes |
+
+Agent invocations create separate `agent-{agentId}.jsonl` files, referenced via `isSidechain: true` in the main session. Our clone/archive captures all sidechains; native fork does not.
+
+**Pre-flight Requests** (not stored in session files):
+
+| Request | Model | Purpose |
+|---------|-------|---------|
+| Topic detection | Haiku | Extract 2-3 word session title |
+| Agent warmup | Opus/Haiku | Pre-populate prompt cache |
+| Token counting | N/A | ~100 `/count_tokens` calls (one per tool) |
+
+**Extended Thinking**:
+
+| Trigger | Budget | Notes |
+|---------|--------|-------|
+| `think` | Basic | Default for complex tasks |
+| `think hard` | Increased | More reasoning depth |
+| `think harder` | Significant | Extended analysis |
+| `ultrathink` | Maximum (31,999 tokens) | Full reasoning budget |
+
+- Stored in `thinking` content blocks with `signature` field
+- NOT counted in context window (output tokens only)
+- Configure cap via `MAX_THINKING_TOKENS` env var
+
+**Prompt Cache** (explains `cache_read_input_tokens` field):
+
+| Type | TTL | Write Premium | Read Savings |
+|------|-----|---------------|--------------|
+| Ephemeral (default) | 5 min | 25% | 90% |
+| Extended | 1 hour | 100% | 90% |
+
+Cache invalidates when: user edits/rewinds message, TTL expires, or content prefix changes. Minimum cacheable: ~1,024 tokens.
+
+**Token Economics** (December 2025):
+
+| Model | Base Input | Cache Write (5m) | Cache Read | Output |
+|-------|------------|------------------|------------|--------|
+| Opus 4.5 | $5/M | $6.25/M | $0.50/M | $15/M |
+| Sonnet 4.5 | $3/M | $3.75/M | $0.30/M | $15/M |
+| Haiku 4.5 | $1/M | $1.25/M | $0.10/M | $5/M |
+
+**API-only Features** (not in Claude Code):
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Effort control | Beta API | Levels: high/medium/low. Medium = 76% fewer output tokens |
+| Batch API | Production | 50% discount, async (incompatible with interactive CLI) |
+
+**Session Startup Overhead**:
+
+First response latency depends heavily on MCP configuration. With many MCPs:
+- ~100 `/count_tokens` calls (one per tool)
+- MCP OAuth handshakes (Linear, Sentry, Notion, etc.)
+- Agent warmup requests (Plan/Explore)
+
+Observed: ~5 minutes first response with 108 tools loaded. Reduce MCPs for faster startup.
 
 ## Claude Code Version Sources
 
