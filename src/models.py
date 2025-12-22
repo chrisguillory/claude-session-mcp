@@ -74,7 +74,7 @@ Round-trip serialization:
 from __future__ import annotations
 
 import functools
-from typing import Any, Literal, Annotated, Union, get_args
+from typing import Any, Literal, Annotated, Union, Sequence, get_args
 from pydantic import BaseModel, Field, ConfigDict, TypeAdapter, field_validator, ValidationInfo
 
 from src.markers import PathField, PathListField
@@ -281,7 +281,7 @@ class ToolResultContent(StrictModel):
 
     type: Literal['tool_result']
     tool_use_id: str
-    content: str | list[ToolResultContentBlock] | None = None  # Can be string, list of content blocks, or missing
+    content: str | Sequence[ToolResultContentBlock] | None = None  # Can be string, sequence of content blocks, or missing
     is_error: bool | None = None
 
 
@@ -300,7 +300,7 @@ MessageContent = Annotated[
 class ContextManagement(StrictModel):
     """Context management metadata for message responses (Claude Code 2.0.51+)."""
 
-    applied_edits: list[Any]  # List of applied edits (empty in observed data)
+    applied_edits: Sequence[Any]  # List of applied edits (empty in observed data)
 
 
 # ==============================================================================
@@ -312,7 +312,7 @@ class Message(StrictModel):
     """A message within a record."""
 
     role: Literal['user', 'assistant']
-    content: list[MessageContent] | str
+    content: Sequence[MessageContent] | str
     # Additional fields that may appear in assistant messages (nested API response)
     type: Literal['message'] | None = Field(
         None, description='Message type indicator (present in agent/subprocess responses)'
@@ -366,12 +366,20 @@ class TokenUsage(StrictModel):
 # ==============================================================================
 
 
+class ThinkingTrigger(StrictModel):
+    """A thinking trigger with position information."""
+
+    start: int
+    end: int
+    text: Literal['ultrathink', 'UltraThink']  # Case variants observed in sessions
+
+
 class ThinkingMetadata(StrictModel):
     """Thinking configuration metadata."""
 
     level: Literal['none', 'low', 'medium', 'high']  # Strict validation
     disabled: bool
-    triggers: list[str]
+    triggers: Sequence[str | ThinkingTrigger]  # Can be strings or trigger objects
 
 
 # ==============================================================================
@@ -469,7 +477,7 @@ class PatchHunk(StrictModel):
     oldLines: int
     newStart: int
     newLines: int
-    lines: list[str]
+    lines: Sequence[str]
 
 
 # ==============================================================================
@@ -509,7 +517,7 @@ class GlobToolResult(StrictModel):
     """Result from Glob/file search tool execution."""
 
     mode: Literal['files_with_matches'] | None = None
-    filenames: list[str]
+    filenames: Sequence[str]
     numFiles: int
     durationMs: int | None = None
     truncated: bool | None = None
@@ -520,7 +528,7 @@ class GrepToolResult(StrictModel):
 
     mode: Literal['content', 'count']
     numFiles: int
-    filenames: list[str]
+    filenames: Sequence[str]
     content: str | None = None
     numLines: int | None = None
     numMatches: int | None = None
@@ -536,7 +544,7 @@ class EditToolResult(StrictModel):
     originalFile: str
     userModified: bool
     replaceAll: bool
-    structuredPatch: list[PatchHunk]
+    structuredPatch: Sequence[PatchHunk]
 
 
 class WriteToolResult(StrictModel):
@@ -545,14 +553,14 @@ class WriteToolResult(StrictModel):
     type: Literal['create', 'update']
     filePath: PathField
     content: str
-    structuredPatch: list[PatchHunk] | None = None
+    structuredPatch: Sequence[PatchHunk] | None = None
 
 
 class TodoToolResult(StrictModel):
     """Result from TodoWrite tool execution."""
 
-    oldTodos: list[TodoItem]
-    newTodos: list[TodoItem]
+    oldTodos: Sequence[TodoItem]
+    newTodos: Sequence[TodoItem]
 
 
 class TaskToolResult(StrictModel):
@@ -560,7 +568,7 @@ class TaskToolResult(StrictModel):
 
     status: Literal['completed']
     prompt: str
-    content: list[MessageContent]
+    content: Sequence[MessageContent]
     totalDurationMs: int
     totalTokens: int
     totalToolUseCount: int
@@ -585,15 +593,15 @@ class UserQuestion(StrictModel):
 
     question: str
     header: str
-    options: list[QuestionOption]
+    options: Sequence[QuestionOption]
     multiSelect: bool
 
 
 class AskUserQuestionToolResult(StrictModel):
     """Result from AskUserQuestion tool execution."""
 
-    questions: list[UserQuestion]
-    answers: list[str]  # List of question text that was answered
+    questions: Sequence[UserQuestion]
+    answers: Sequence[str]  # List of question text that was answered
 
 
 # ==============================================================================
@@ -612,7 +620,7 @@ class WebSearchToolResult(StrictModel):
     """Result from WebSearch tool execution."""
 
     query: str
-    results: list[WebSearchResult] | str  # Can be list of results or string explanation
+    results: Sequence[WebSearchResult] | str  # Can be list of results or string explanation
     durationSeconds: int
 
 
@@ -722,15 +730,16 @@ class UserRecord(BaseRecord):
     )
     isCompactSummary: bool | None = Field(None, description='Indicates this is a compacted session summary')
     toolUseResult: Annotated[
-        list[ToolResultContentBlock]  # TextContent/ImageContent with 'type' discriminator - must come first
-        | list[McpResource]  # MCP resources (no 'type' field, has 'name', 'uri', etc.)
+        Sequence[ToolResultContentBlock]  # TextContent/ImageContent with 'type' discriminator - must come first
+        | Sequence[McpResource]  # MCP resources (no 'type' field, has 'name', 'uri', etc.)
         | ToolUseResultUnion
         | str
         | None,
         Field(union_mode='left_to_right'),
     ] = None  # Tool execution metadata (validated left-to-right)
-    todos: list[TodoItem] | None = Field(None, description='Todo list state (Claude Code 2.0.47+)')
+    todos: Sequence[TodoItem] | None = Field(None, description='Todo list state (Claude Code 2.0.47+)')
     slug: str | None = Field(None, description='Human-readable session slug (Claude Code 2.0.51+)')
+    imagePasteIds: Sequence[int] | None = Field(None, description='IDs of pasted images in this message')
 
 
 # ==============================================================================
@@ -925,7 +934,7 @@ class QueueOperationRecord(StrictModel):
     operation: Literal['enqueue', 'dequeue', 'remove', 'popAll']  # Queue operation type
     timestamp: str
     sessionId: str
-    content: str | list[MessageContent] | None = Field(
+    content: str | Sequence[MessageContent] | None = Field(
         None, description='User input content for the queued operation (string or structured message)'
     )
     data: None = Field(None, description='Reserved for future use', json_schema_extra={'status': 'reserved'})
@@ -970,8 +979,8 @@ class SessionMetadata(StrictModel):
     record_count: int
     first_timestamp: str
     last_timestamp: str
-    unique_cwds: list[str]
-    unique_project_paths: list[str]
+    unique_cwds: Sequence[str]
+    unique_project_paths: Sequence[str]
     user_message_count: int
     assistant_message_count: int
     summary_count: int
@@ -980,10 +989,10 @@ class SessionMetadata(StrictModel):
     total_output_tokens: int
     total_cache_creation_tokens: int
     total_cache_read_tokens: int
-    models_used: list[str]
-    tools_used: list[str]
-    files_touched: list[str]
-    git_branches: list[str]
+    models_used: Sequence[str]
+    tools_used: Sequence[str]
+    files_touched: Sequence[str]
+    git_branches: Sequence[str]
 
 
 # ==============================================================================
@@ -1026,7 +1035,7 @@ MODELED_CLAUDE_TOOLS = [
     (McpResource, 'ListMcpResourcesTool'),  # Returns list[McpResource], not dict result
     (SkillToolInput, 'Skill'),  # Input typed
     (AgentOutputToolInput, 'AgentOutputTool'),  # Input typed
-    (TaskOutputToolInput, 'TaskOutput'),  # Input typed
+    (TaskOutputToolInput, 'TaskOutput'),  # Input typed - uses task_id, timeout (ms)
 ]
 
 # Allowed tool names (extracted from mapping)
