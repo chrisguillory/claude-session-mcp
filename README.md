@@ -237,14 +237,13 @@ Agent invocations create separate `agent-{agentId}.jsonl` files, referenced via 
 
 | Trigger | Budget | Notes |
 |---------|--------|-------|
-| `think` | Basic | Default for complex tasks |
-| `think hard` | Increased | More reasoning depth |
-| `think harder` | Significant | Extended analysis |
 | `ultrathink` | Maximum (31,999 tokens) | Full reasoning budget |
+| Shift+Tab | Configurable | Toggle thinking on/off |
 
 - Stored in `thinking` content blocks with `signature` field
 - NOT counted in context window (output tokens only)
 - Configure cap via `MAX_THINKING_TOKENS` env var
+- See [docs/thinking.md](docs/thinking.md) for deeper research on ThinkingMetadata structure
 
 **Prompt Cache** (explains `cache_read_input_tokens` field):
 
