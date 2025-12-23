@@ -16,6 +16,7 @@ CLAUDE CODE VERSION COMPATIBILITY:
 - Schema v0.1.5: Added AgentOutputTool input model for Claude Code 2.0.64+
 - Schema v0.1.6: Added TaskOutput tool input model for Claude Code 2.0.65+
 - Schema v0.1.7: Added model_context_window_exceeded stop_reason for context overflow handling
+- Schema v0.1.8: Added sourceToolUseID, EmptyError, BeforeValidator for ultrathink case normalization (2.0.76+)
 - If validation fails, Claude Code schema may have changed - update models accordingly
 
 NEW FIELDS IN CLAUDE CODE 2.0.51+ (Schema v0.1.3):
@@ -75,7 +76,7 @@ from __future__ import annotations
 
 import functools
 from typing import Any, Literal, Annotated, Union, Sequence, get_args
-from pydantic import BaseModel, Field, ConfigDict, TypeAdapter, field_validator, ValidationInfo
+from pydantic import BaseModel, Field, ConfigDict, TypeAdapter, field_validator, ValidationInfo, BeforeValidator
 
 from src.markers import PathField, PathListField
 from src.types import ModelId
@@ -85,11 +86,11 @@ from src.types import ModelId
 # Schema Version
 # ==============================================================================
 
-SCHEMA_VERSION = '0.1.7'
+SCHEMA_VERSION = '0.1.8'
 CLAUDE_CODE_MIN_VERSION = '2.0.35'
-CLAUDE_CODE_MAX_VERSION = '2.0.65'
-LAST_VALIDATED = '2025-12-16'
-VALIDATION_RECORD_COUNT = 177_939
+CLAUDE_CODE_MAX_VERSION = '2.0.76'
+LAST_VALIDATED = '2025-12-23'
+VALIDATION_RECORD_COUNT = 14_615
 
 
 # ==============================================================================
@@ -366,12 +367,19 @@ class TokenUsage(StrictModel):
 # ==============================================================================
 
 
+def _normalize_ultrathink(v: Any) -> str:
+    """Normalize any casing of 'ultrathink' to lowercase."""
+    if isinstance(v, str) and v.lower() == 'ultrathink':
+        return 'ultrathink'
+    return v  # Let Literal validation fail with original value
+
+
 class ThinkingTrigger(StrictModel):
     """A thinking trigger with position information."""
 
     start: int
     end: int
-    text: Literal['ultrathink', 'UltraThink']  # Case variants observed in sessions
+    text: Annotated[Literal['ultrathink'], BeforeValidator(_normalize_ultrathink)]  # Any casing normalized to lowercase
 
 
 class ThinkingMetadata(StrictModel):
@@ -448,6 +456,12 @@ class NetworkError(StrictModel):
     """Network error wrapper (for connection failures)."""
 
     cause: ConnectionError
+
+
+class EmptyError(StrictModel):
+    """Empty error object for unknown/unspecified API errors (Claude Code 2.0.76+)."""
+
+    pass
 
 
 # ==============================================================================
@@ -740,6 +754,7 @@ class UserRecord(BaseRecord):
     todos: Sequence[TodoItem] | None = Field(None, description='Todo list state (Claude Code 2.0.47+)')
     slug: str | None = Field(None, description='Human-readable session slug (Claude Code 2.0.51+)')
     imagePasteIds: Sequence[int] | None = Field(None, description='IDs of pasted images in this message')
+    sourceToolUseID: str | None = Field(None, description='Tool use ID that generated this message (e.g., toolu_015eZkLKZz5JVkGC1zZrnnKm) (Claude Code 2.0.76+)')
 
 
 # ==============================================================================
@@ -863,7 +878,7 @@ class ApiErrorSystemRecord(BaseRecord):
     gitBranch: str | None = None  # Optional for api_error
     slug: str | None = Field(None, description='Human-readable session slug (Claude Code 2.0.51+)')
     cause: ConnectionError | None = None  # Connection error details (for network failures)
-    error: ApiError | NetworkError  # API error (status/headers) or network error (connection failure)
+    error: ApiError | NetworkError | EmptyError  # API error, network error, or empty error (EmptyError must be last - no required fields)
     retryInMs: float
     retryAttempt: int
     maxRetries: int

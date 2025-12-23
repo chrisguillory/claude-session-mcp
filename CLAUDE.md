@@ -151,10 +151,15 @@ jq -r 'select(.type=="summary") | .summary' ~/.claude/projects/*/*.jsonl | rg -i
 ## Validation
 
 ```bash
-uv run ./scripts/validate_models.py
+./scripts/validate_models.py
 ```
 
 Validates all session files against Pydantic models. 100% pass rate expected.
+
+To inspect a failing record:
+```bash
+cd ~/.claude/projects && find . -name "<session-id>.jsonl" -exec sed -n "<line>p" {} \; | jq .
+```
 
 ## Analyzing Session Token Usage
 
@@ -374,7 +379,7 @@ This is why `/context` shows 43k tokens for a simple "Hello" message.
 ## Schema Updates
 
 When Claude Code updates break validation:
-1. Run validate_models.py to find failures
-2. Check field paths in error messages
+1. Run `./scripts/validate_models.py` to find failures
+2. Inspect failing records using the command above
 3. Update `src/models.py` with new fields/types
 4. Bump schema version in models.py header
