@@ -11,7 +11,7 @@ import json
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Protocol
+from typing import Protocol, Mapping, Sequence
 
 import uuid6
 import zstandard
@@ -19,6 +19,7 @@ import zstandard
 from src.base_model import StrictModel
 from src.models import SessionRecord, SessionRecordAdapter
 from src.services.archive import SessionArchive, LoggerProtocol
+from src.services.plan_files import write_plan_files, apply_slug_mapping
 from src.introspection import get_path_fields
 from src.types import JsonDatetime
 
@@ -217,6 +218,15 @@ class SessionRestoreService:
             await logger.info(f'Generated new session ID (UUIDv7): {new_session_id}')
             await logger.info(f'Original session ID: {archive.session_id}')
 
+        # Restore plan files and get slug mapping (v1.1+ archives only)
+        slug_mapping: Mapping[str, str] = {}
+        if archive.plan_files:
+            slug_mapping = write_plan_files(archive.plan_files, new_session_id)
+            if logger:
+                await logger.info(f'Restored {len(slug_mapping)} plan files')
+                for old_slug, new_slug in slug_mapping.items():
+                    await logger.info(f'  {old_slug} -> {new_slug}')
+
         # Create path translator if needed
         translator = None
         if translate_paths and archive.original_project_path != str(self.project_path):
@@ -267,9 +277,9 @@ class SessionRestoreService:
 
                 updated_records.append(updated_record)
 
-            # Write JSONL file
+            # Write JSONL file (with slug mapping applied to JSON strings)
             output_path = target_dir / new_filename
-            await self._write_jsonl(output_path, updated_records, logger)
+            await self._write_jsonl(output_path, updated_records, slug_mapping, logger)
             total_records += len(updated_records)
 
             if logger:
@@ -312,13 +322,25 @@ class SessionRestoreService:
 
         return SessionArchive(**data)
 
-    async def _write_jsonl(self, path: Path, records: list[SessionRecord], logger: LoggerProtocol | None) -> None:
-        """Write records to JSONL file."""
+    async def _write_jsonl(
+        self,
+        path: Path,
+        records: Sequence[SessionRecord],
+        slug_mapping: Mapping[str, str],
+        logger: LoggerProtocol | None,
+    ) -> None:
+        """Write records to JSONL file, applying slug mapping to JSON strings."""
         with open(path, 'w', encoding='utf-8') as f:
             for record in records:
                 # Use exclude_unset for round-trip fidelity
                 json_data = record.model_dump(exclude_unset=True, mode='json')
-                f.write(json.dumps(json_data) + '\n')
+                json_str = json.dumps(json_data)
+
+                # Apply slug mapping to catch all slug references in the JSON
+                if slug_mapping:
+                    json_str = apply_slug_mapping(json_str, slug_mapping)
+
+                f.write(json_str + '\n')
 
     def _get_session_directory(self) -> Path:
         """Get the session directory for the current project."""

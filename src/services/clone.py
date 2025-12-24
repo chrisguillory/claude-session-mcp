@@ -11,6 +11,7 @@ import json
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Mapping, Sequence
 
 import uuid6
 
@@ -18,6 +19,12 @@ from src.models import SessionRecord, SessionRecordAdapter
 from src.services.archive import LoggerProtocol
 from src.services.discovery import SessionDiscoveryService, SessionInfo
 from src.services.parser import SessionParserService
+from src.services.plan_files import (
+    extract_slugs_from_records,
+    collect_plan_files,
+    write_plan_files,
+    apply_slug_mapping,
+)
 from src.services.restore import PathTranslator, RestoreResult
 
 
@@ -100,10 +107,25 @@ class SessionCloneService:
         # Load all records
         files_data = await self.parser_service.load_session_files(session_files, logger)
 
+        # Extract slugs and collect plan files from source session
+        slugs = extract_slugs_from_records(files_data)
+        plan_files = collect_plan_files(slugs)
+        if logger:
+            await logger.info(f'Found {len(slugs)} slugs, {len(plan_files)} plan files')
+
         # Generate new session ID (UUIDv7 for identification)
         new_session_id = str(uuid6.uuid7())
         if logger:
             await logger.info(f'Generated new session ID (UUIDv7): {new_session_id}')
+
+        # Write plan files with new slugs and get the mapping
+        slug_mapping: Mapping[str, str] = {}
+        if plan_files:
+            slug_mapping = write_plan_files(plan_files, new_session_id)
+            if logger:
+                await logger.info(f'Wrote {len(slug_mapping)} plan files with new slugs')
+                for old_slug, new_slug in slug_mapping.items():
+                    await logger.info(f'  {old_slug} -> {new_slug}')
 
         # Create path translator if needed
         translator = None
@@ -152,9 +174,9 @@ class SessionCloneService:
 
                 updated_records.append(updated_record)
 
-            # Write JSONL file
+            # Write JSONL file (with slug mapping applied to JSON strings)
             output_path = target_dir / new_filename
-            await self._write_jsonl(output_path, updated_records)
+            await self._write_jsonl(output_path, updated_records, slug_mapping)
             total_records += len(updated_records)
 
             if logger:
@@ -282,12 +304,23 @@ class SessionCloneService:
 
         return session_files
 
-    async def _write_jsonl(self, path: Path, records: list[SessionRecord]) -> None:
-        """Write records to JSONL file."""
+    async def _write_jsonl(
+        self,
+        path: Path,
+        records: Sequence[SessionRecord],
+        slug_mapping: Mapping[str, str],
+    ) -> None:
+        """Write records to JSONL file, applying slug mapping to JSON strings."""
         with open(path, 'w', encoding='utf-8') as f:
             for record in records:
                 json_data = record.model_dump(exclude_unset=True, mode='json')
-                f.write(json.dumps(json_data) + '\n')
+                json_str = json.dumps(json_data)
+
+                # Apply slug mapping to catch all slug references in the JSON
+                if slug_mapping:
+                    json_str = apply_slug_mapping(json_str, slug_mapping)
+
+                f.write(json_str + '\n')
 
     def _get_session_directory(self) -> Path:
         """Get the session directory for the target project."""

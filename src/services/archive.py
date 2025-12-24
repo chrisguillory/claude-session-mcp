@@ -10,7 +10,8 @@ from __future__ import annotations
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Literal, Protocol
+from types import MappingProxyType
+from typing import Literal, Mapping, Protocol
 
 from src.base_model import StrictModel
 from src.models import (
@@ -25,6 +26,7 @@ from src.models import (
 from src.storage.protocol import StorageBackend
 from src.config.mcp import settings
 from src.services.parser import SessionParserService
+from src.services.plan_files import extract_slugs_from_records, collect_plan_files
 from src.types import JsonDatetime
 
 
@@ -74,6 +76,12 @@ class ArchiveMetadata(StrictModel):
 # Archive Structure (Serialized to JSON)
 # ==============================================================================
 
+# Archive format version - single source of truth for what this code creates
+ARCHIVE_FORMAT_VERSION = '1.1'
+
+# Immutable empty mapping for default value (not a mutable {})
+_EMPTY_PLAN_FILES: Mapping[str, str] = MappingProxyType({})
+
 
 class SessionArchive(StrictModel):
     """
@@ -82,12 +90,13 @@ class SessionArchive(StrictModel):
     This is the JSON file structure that gets saved to disk.
     """
 
-    version: str = '1.0'  # Archive format version
+    version: str  # Required - use ARCHIVE_FORMAT_VERSION when creating
     session_id: str
     archived_at: JsonDatetime
     original_project_path: str
     claude_code_version: str  # Claude Code version at archive time
     files: dict[str, list[SessionRecord]]  # filename -> records
+    plan_files: Mapping[str, str] = _EMPTY_PLAN_FILES  # slug -> plan file content (v1.1+)
 
 
 # ==============================================================================
@@ -282,13 +291,22 @@ class SessionArchiveService:
         # Extract Claude Code version from records
         claude_code_version = await self._extract_claude_code_version(files_data, logger)
 
+        # Extract slugs and collect plan files
+        slugs = extract_slugs_from_records(files_data)
+        await logger.info(f'Found {len(slugs)} unique slugs in session')
+
+        plan_files = collect_plan_files(slugs)
+        await logger.info(f'Collected {len(plan_files)} plan files (of {len(slugs)} slugs)')
+
         # Create archive structure
         archive = SessionArchive(
+            version=ARCHIVE_FORMAT_VERSION,
             session_id=self.session_id,
             archived_at=datetime.now(timezone.utc),
             original_project_path=str(self.project_path),
             claude_code_version=claude_code_version,
             files=files_data,
+            plan_files=plan_files,
         )
 
         # Serialize and compress
