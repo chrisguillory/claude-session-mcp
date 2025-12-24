@@ -8,9 +8,10 @@ from __future__ import annotations
 
 import os
 import shutil
+from typing import Sequence
 
 
-def launch_claude_with_session(session_id: str) -> None:
+def launch_claude_with_session(session_id: str, extra_args: Sequence[str]) -> None:
     """
     Launch Claude Code with --resume, replacing current process.
 
@@ -19,6 +20,7 @@ def launch_claude_with_session(session_id: str) -> None:
 
     Args:
         session_id: Session ID to resume
+        extra_args: Additional arguments to pass to claude CLI (e.g., --chrome)
 
     Raises:
         RuntimeError: If Claude Code CLI is not found in PATH
@@ -30,5 +32,10 @@ def launch_claude_with_session(session_id: str) -> None:
             'Install from: https://claude.ai/code'
         )
 
+    # Build command with optional extra args
+    cmd = ['claude', '--resume', session_id]
+    if extra_args:
+        cmd.extend(extra_args)
+
     # Replace current process with Claude
-    os.execvp('claude', ['claude', '--resume', session_id])
+    os.execvp('claude', cmd)

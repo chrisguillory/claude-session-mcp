@@ -14,7 +14,7 @@ import tempfile
 import traceback
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Literal, Sequence
 
 import httpx
 import typer
@@ -40,8 +40,8 @@ app = typer.Typer(
 def archive(
     session_id: str = typer.Argument(..., help='Session ID to archive'),
     output: str = typer.Argument(..., help='Output path or Gist URL (gist://<gist-id> or gist:// or file path)'),
-    format: Optional[str] = typer.Option(None, '--format', '-f', help='Archive format: json or zst'),
-    gist_token: Optional[str] = typer.Option(None, '--gist-token', help='GitHub token (or use GITHUB_TOKEN env)'),
+    format: str | None = typer.Option(None, '--format', '-f', help='Archive format: json or zst'),
+    gist_token: str | None = typer.Option(None, '--gist-token', help='GitHub token (or use GITHUB_TOKEN env)'),
     gist_visibility: Literal['public', 'secret'] = typer.Option(
         'secret', '--gist-visibility', help='Gist visibility (public or secret)'
     ),
@@ -52,24 +52,30 @@ def archive(
     asyncio.run(_archive_async(session_id, output, format, gist_token, gist_visibility, gist_description, verbose))
 
 
-@app.command()
+@app.command(context_settings={'allow_extra_args': True, 'ignore_unknown_options': True})
 def restore(
+    ctx: typer.Context,
     archive: str = typer.Argument(..., help='Archive path or Gist URL (gist://<gist-id> or file path)'),
-    project: Optional[Path] = typer.Option(None, '--project', '-p', help='Target project directory (default: current)'),
+    project: Path | None = typer.Option(None, '--project', '-p', help='Target project directory (default: current)'),
     no_translate: bool = typer.Option(False, '--no-translate', help="Don't translate file paths"),
     launch: bool = typer.Option(False, '--launch', '-l', help='Launch Claude Code after restore'),
-    gist_token: Optional[str] = typer.Option(None, '--gist-token', help='GitHub token for private gists'),
+    gist_token: str | None = typer.Option(None, '--gist-token', help='GitHub token for private gists'),
     verbose: bool = typer.Option(False, '--verbose', '-v', help='Verbose output'),
 ) -> None:
-    """Restore a Claude Code session from local file or GitHub Gist."""
-    asyncio.run(_restore_async(archive, project, not no_translate, launch, gist_token, verbose))
+    """Restore a Claude Code session from local file or GitHub Gist.
+
+    Extra arguments after -- are passed to claude CLI:
+
+        claude-session restore ARCHIVE --launch -- --chrome
+    """
+    asyncio.run(_restore_async(archive, project, not no_translate, launch, gist_token, verbose, ctx.args))
 
 
 async def _archive_async(
     session_id: str,
     output: str,
-    format: Optional[str],
-    gist_token: Optional[str],
+    format: str | None,
+    gist_token: str | None,
     gist_visibility: str,
     gist_description: str,
     verbose: bool,
@@ -191,7 +197,13 @@ async def _archive_async(
 
 
 async def _restore_async(
-    archive: str, project: Optional[Path], translate_paths: bool, launch: bool, gist_token: Optional[str], verbose: bool
+    archive: str,
+    project: Path | None,
+    translate_paths: bool,
+    launch: bool,
+    gist_token: str | None,
+    verbose: bool,
+    extra_args: Sequence[str],
 ) -> None:
     """Async implementation of restore command."""
     logger = CLILogger(verbose=verbose)
@@ -297,7 +309,7 @@ async def _restore_async(
         if launch:
             typer.echo()
             typer.echo('Launching Claude Code...')
-            launch_claude_with_session(result.new_session_id)
+            launch_claude_with_session(result.new_session_id, extra_args=extra_args)
             # Note: launch_claude_with_session uses execvp, so we never reach here
         else:
             typer.echo()
@@ -311,24 +323,31 @@ async def _restore_async(
         raise typer.Exit(1)
 
 
-@app.command()
+@app.command(context_settings={'allow_extra_args': True, 'ignore_unknown_options': True})
 def clone(
+    ctx: typer.Context,
     session_id: str = typer.Argument(..., help='Session ID to clone (full UUID or prefix)'),
-    project: Optional[Path] = typer.Option(None, '--project', '-p', help='Target project directory (default: current)'),
+    project: Path | None = typer.Option(None, '--project', '-p', help='Target project directory (default: current)'),
     no_translate: bool = typer.Option(False, '--no-translate', help="Don't translate file paths"),
     launch: bool = typer.Option(False, '--launch', '-l', help='Launch Claude Code after clone'),
     verbose: bool = typer.Option(False, '--verbose', '-v', help='Verbose output'),
 ) -> None:
-    """Clone a session directly (no archive file needed)."""
-    asyncio.run(_clone_async(session_id, project, not no_translate, launch, verbose))
+    """Clone a session directly (no archive file needed).
+
+    Extra arguments after -- are passed to claude CLI:
+
+        claude-session clone SESSION_ID --launch -- --chrome
+    """
+    asyncio.run(_clone_async(session_id, project, not no_translate, launch, verbose, ctx.args))
 
 
 async def _clone_async(
     session_id: str,
-    project: Optional[Path],
+    project: Path | None,
     translate_paths: bool,
     launch: bool,
     verbose: bool,
+    extra_args: Sequence[str],
 ) -> None:
     """Async implementation of clone command."""
     logger = CLILogger(verbose=verbose)
@@ -367,7 +386,7 @@ async def _clone_async(
         if launch:
             typer.echo()
             typer.echo('Launching Claude Code...')
-            launch_claude_with_session(result.new_session_id)
+            launch_claude_with_session(result.new_session_id, extra_args=extra_args)
             # Note: launch_claude_with_session uses execvp, so we never reach here
         else:
             typer.echo()
