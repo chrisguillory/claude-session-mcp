@@ -29,6 +29,7 @@ from src.services.artifacts import (
     get_tool_results_dir,
 )
 from src.services.parser import SessionParserService
+from src.storage.local import LocalFileSystemStorage
 
 # Backup location - separate from ~/.claude/
 DELETED_SESSIONS_DIR = Path.home() / '.claude-session-mcp' / 'deleted'
@@ -478,7 +479,7 @@ class SessionDeleteService:
     async def _create_backup(
         self,
         session_id: str,
-        logger: LoggerProtocol | None,
+        logger: LoggerProtocol,
     ) -> str:
         """
         Create a backup archive before deletion.
@@ -488,7 +489,7 @@ class SessionDeleteService:
 
         Args:
             session_id: Session ID to backup
-            logger: Optional logger
+            logger: Logger for progress messages
 
         Returns:
             Path to created backup archive
@@ -496,7 +497,12 @@ class SessionDeleteService:
         # Ensure backup directory exists
         DELETED_SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
 
-        # Create archive using existing service
+        # Generate backup filename with timestamp
+        timestamp = datetime.now(UTC).strftime('%Y%m%d-%H%M%S')
+        backup_filename = f'{session_id}-{timestamp}.json'
+        backup_path = DELETED_SESSIONS_DIR / backup_filename
+
+        # Create archive service
         archive_service = SessionArchiveService(
             session_id=session_id,
             project_path=self.project_path,
@@ -504,22 +510,16 @@ class SessionDeleteService:
             parser_service=self.parser_service,
         )
 
-        # Generate backup filename with timestamp
-        timestamp = datetime.now(UTC).strftime('%Y%m%d-%H%M%S')
-        backup_filename = f'{session_id}-{timestamp}.json'
-        backup_path = DELETED_SESSIONS_DIR / backup_filename
+        # Create storage backend and archive
+        storage = LocalFileSystemStorage(DELETED_SESSIONS_DIR)
+        metadata = await archive_service.create_archive(
+            storage=storage,
+            output_path=str(backup_path),
+            format_param='json',
+            logger=logger,
+        )
 
-        # Create archive
-        archive = await archive_service.create_archive(logger)
-
-        # Write to backup location
-        import json
-        with open(backup_path, 'w', encoding='utf-8') as f:
-            # Convert archive to dict for JSON serialization
-            archive_dict = archive.model_dump(mode='json')
-            json.dump(archive_dict, f, indent=2)
-
-        return str(backup_path)
+        return metadata.file_path
 
     async def _cleanup_empty_dirs(
         self,

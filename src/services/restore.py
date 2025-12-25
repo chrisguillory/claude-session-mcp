@@ -303,10 +303,16 @@ class SessionRestoreService:
                     new_filename = transform_todo_filename(old_filename, archive.session_id, new_session_id)
                     all_output_paths.append(TODOS_DIR / new_filename)
 
-        # 4. Plan files (non-in-place mode only)
-        if not in_place and archive.plan_files:
-            for new_slug in slug_mapping.values():
-                all_output_paths.append(plans_dir / f'{new_slug}.md')
+        # 4. Plan files
+        if archive.plan_files:
+            if in_place:
+                # In-place: use original slugs
+                for old_slug in archive.plan_files:
+                    all_output_paths.append(plans_dir / f'{old_slug}.md')
+            else:
+                # Normal: use new slugs
+                for new_slug in slug_mapping.values():
+                    all_output_paths.append(plans_dir / f'{new_slug}.md')
 
         # Check ALL paths before writing ANYTHING
         existing_files = [p for p in all_output_paths if p.exists()]
@@ -327,17 +333,26 @@ class SessionRestoreService:
         if logger:
             await logger.info(f'Target directory: {target_dir}')
 
-        # Write plan files (non-in-place mode only)
-        if not in_place and archive.plan_files:
+        # Write plan files
+        if archive.plan_files:
             plans_dir.mkdir(parents=True, exist_ok=True)
-            for old_slug, content in archive.plan_files.items():
-                new_slug = slug_mapping[old_slug]
-                plan_path = plans_dir / f'{new_slug}.md'
-                plan_path.write_text(content, encoding='utf-8')
-            if logger:
-                await logger.info(f'Restored {len(slug_mapping)} plan files')
-                for old_slug, new_slug in slug_mapping.items():
-                    await logger.info(f'  {old_slug} -> {new_slug}')
+            if in_place:
+                # In-place: use original slugs
+                for old_slug, content in archive.plan_files.items():
+                    plan_path = plans_dir / f'{old_slug}.md'
+                    plan_path.write_text(content, encoding='utf-8')
+                if logger:
+                    await logger.info(f'Restored {len(archive.plan_files)} plan files (in-place)')
+            else:
+                # Normal: use new slugs
+                for old_slug, content in archive.plan_files.items():
+                    new_slug = slug_mapping[old_slug]
+                    plan_path = plans_dir / f'{new_slug}.md'
+                    plan_path.write_text(content, encoding='utf-8')
+                if logger:
+                    await logger.info(f'Restored {len(slug_mapping)} plan files')
+                    for old_slug, new_slug in slug_mapping.items():
+                        await logger.info(f'  {old_slug} -> {new_slug}')
 
         # Write tool results (v1.2+ archives)
         if archive.tool_results:
