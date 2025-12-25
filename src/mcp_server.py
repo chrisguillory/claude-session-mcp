@@ -1,11 +1,10 @@
-#!/usr/bin/env -S uv run
 """
 Claude Code Session MCP Server.
 
 Provides tools for archiving and managing Claude Code session files.
 
 Setup:
-    claude mcp add --transport stdio claude-session -- uv run "$REPO_ROOT/mcp-server.py"
+    claude mcp add --scope user claude-session -- uvx --refresh --from git+https://github.com/chrisguillory/claude-session-mcp mcp-server
 
 Example:
     # Save current session to temp file
@@ -30,12 +29,13 @@ from typing import AsyncIterator, Literal
 import attrs
 from mcp.server.fastmcp import Context, FastMCP
 
-from mcp_utils import DualLogger
-from src.services.archive import ArchiveMetadata, SessionArchiveService
-from src.services.clone import AmbiguousSessionError, SessionCloneService
-from src.services.parser import SessionParserService
-from src.services.restore import RestoreResult, SessionRestoreService
-from src.storage.local import LocalFileSystemStorage
+from .mcp_utils import DualLogger
+from .services.archive import ArchiveMetadata, SessionArchiveService
+from .services.clone import AmbiguousSessionError, SessionCloneService
+from .services.delete import DeleteResult, SessionDeleteService
+from .services.parser import SessionParserService
+from .services.restore import RestoreResult, SessionRestoreService
+from .storage.local import LocalFileSystemStorage
 
 
 # ==============================================================================
@@ -193,7 +193,6 @@ def _discover_session_id(session_marker: str) -> str:
         ],
         capture_output=True,
         text=True,
-        timeout=2,
     )
 
     if not result.stdout.strip():
@@ -445,6 +444,80 @@ def register_tools(state: ServerState) -> None:
         except AmbiguousSessionError as e:
             # Re-raise with more context for MCP
             raise ValueError(str(e)) from e
+
+    @server.tool()
+    async def delete_session(
+        session_id: str,
+        force: bool = False,
+        no_backup: bool = False,
+        dry_run: bool = False,
+        ctx: Context = None,
+    ) -> DeleteResult:
+        """
+        Delete session artifacts with auto-backup.
+
+        By default, only cloned/restored sessions (UUIDv7) can be deleted.
+        Native Claude sessions (UUIDv4) require force=True.
+
+        Before deletion, an archive is automatically created at
+        ~/.claude-session-mcp/deleted/<session-id>-<timestamp>.json
+        unless no_backup=True.
+
+        Use restore --in-place on the backup to undo a delete.
+
+        Args:
+            session_id: Session ID to delete
+            force: Required to delete native (UUIDv4) sessions
+            no_backup: Skip auto-backup before deletion
+            dry_run: If True, show what would be deleted without actually deleting
+
+        Returns:
+            DeleteResult with deletion details and backup path
+
+        Examples:
+            # Delete a cloned session (auto-backup created)
+            result = await delete_session('019b5232-1234-7abc-...')
+            # Returns: DeleteResult(backup_path='~/.claude-session-mcp/deleted/...', ...)
+
+            # Preview what would be deleted
+            result = await delete_session('019b5232-...', dry_run=True)
+
+            # Delete native session (requires force)
+            result = await delete_session('a1b2c3d4-...', force=True)
+
+            # Delete without backup
+            result = await delete_session('019b5232-...', no_backup=True)
+
+        Note:
+            To undo a delete, run:
+            claude-session restore --in-place <backup_path>
+        """
+        logger = DualLogger(ctx)
+
+        # Create delete service for current project
+        delete_service = SessionDeleteService(state.project_path)
+
+        # Delete the session
+        result = await delete_service.delete_session(
+            session_id=session_id,
+            force=force,
+            no_backup=no_backup,
+            dry_run=dry_run,
+            logger=logger,
+        )
+
+        if result.success:
+            if dry_run:
+                await logger.info(f'Dry run: would delete {result.files_deleted} files ({result.size_freed_bytes:,} bytes)')
+            else:
+                await logger.info(f'Deleted {result.files_deleted} files ({result.size_freed_bytes:,} bytes)')
+                if result.backup_path:
+                    await logger.info(f'Backup: {result.backup_path}')
+                    await logger.info(f'To undo: claude-session restore --in-place {result.backup_path}')
+        else:
+            await logger.error(f'Delete failed: {result.error_message}')
+
+        return result
 
 
 # ==============================================================================
