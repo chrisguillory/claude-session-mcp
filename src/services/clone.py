@@ -9,22 +9,34 @@ from __future__ import annotations
 
 import json
 import subprocess
-from datetime import datetime, timezone
+from collections.abc import Mapping, Sequence
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Mapping, Sequence
 
 import uuid6
 
 from src.models import SessionRecord, SessionRecordAdapter
 from src.services.archive import LoggerProtocol
+from src.services.artifacts import (
+    TODOS_DIR,
+    apply_agent_id_mapping,
+    apply_slug_mapping,
+    collect_plan_files,
+    collect_todos,
+    collect_tool_results,
+    create_session_env_dir,
+    extract_agent_ids_from_files,
+    extract_slugs_from_records,
+    generate_agent_id_mapping,
+    generate_clone_slug,
+    transform_agent_filename,
+    transform_todo_filename,
+    validate_session_env_empty,
+    write_todos,
+    write_tool_results,
+)
 from src.services.discovery import SessionDiscoveryService, SessionInfo
 from src.services.parser import SessionParserService
-from src.services.plan_files import (
-    extract_slugs_from_records,
-    collect_plan_files,
-    write_plan_files,
-    apply_slug_mapping,
-)
 from src.services.restore import PathTranslator, RestoreResult
 
 
@@ -89,6 +101,7 @@ class SessionCloneService:
 
         Raises:
             FileNotFoundError: If source session not found
+            FileExistsError: If any output file already exists (checked before writing)
             AmbiguousSessionError: If session ID prefix matches multiple sessions
         """
         # Resolve session ID (handle prefix matching)
@@ -98,6 +111,10 @@ class SessionCloneService:
             await logger.info(f'Cloning session: {session_info.session_id}')
             await logger.info(f'Source project: {session_info.project_path}')
 
+        # Compute source session directory (needed for tool_results collection)
+        encoded_source_path = self._encode_path(session_info.project_path)
+        source_session_dir = self.claude_sessions_dir / encoded_source_path
+
         # Discover all session files (main + agents)
         session_files = await self._discover_session_files(session_info, logger)
 
@@ -106,6 +123,19 @@ class SessionCloneService:
 
         # Load all records
         files_data = await self.parser_service.load_session_files(session_files, logger)
+
+        # Collect tool results from source session
+        tool_results = collect_tool_results(source_session_dir, session_info.session_id)
+        if logger:
+            await logger.info(f'Found {len(tool_results)} tool result files')
+
+        # Collect todos from source session
+        todos = collect_todos(session_info.session_id)
+        if logger:
+            await logger.info(f'Found {len(todos)} todo files')
+
+        # Validate session-env is empty (fail fast if Claude starts using it)
+        validate_session_env_empty(session_info.session_id)
 
         # Extract slugs and collect plan files from source session
         slugs = extract_slugs_from_records(files_data)
@@ -117,15 +147,23 @@ class SessionCloneService:
         new_session_id = str(uuid6.uuid7())
         if logger:
             await logger.info(f'Generated new session ID (UUIDv7): {new_session_id}')
+            await logger.info(f'Original session ID: {session_info.session_id}')
 
-        # Write plan files with new slugs and get the mapping
+        # Pre-compute slug mapping (but don't write yet - fail-fast check first!)
         slug_mapping: Mapping[str, str] = {}
         if plan_files:
-            slug_mapping = write_plan_files(plan_files, new_session_id)
-            if logger:
-                await logger.info(f'Wrote {len(slug_mapping)} plan files with new slugs')
-                for old_slug, new_slug in slug_mapping.items():
-                    await logger.info(f'  {old_slug} -> {new_slug}')
+            slug_mapping = {
+                old_slug: generate_clone_slug(old_slug, new_session_id)
+                for old_slug in plan_files
+            }
+
+        # Generate agent ID mapping (CRITICAL for same-project forking)
+        agent_ids = extract_agent_ids_from_files(files_data)
+        agent_id_mapping = generate_agent_id_mapping(agent_ids, new_session_id)
+        if logger and agent_id_mapping:
+            await logger.info(f'Generated {len(agent_id_mapping)} agent ID mappings')
+            for old_id, new_id in agent_id_mapping.items():
+                await logger.info(f'  {old_id} -> {new_id}')
 
         # Create path translator if needed
         translator = None
@@ -134,13 +172,93 @@ class SessionCloneService:
             if logger:
                 await logger.info(f'Path translation: {session_info.project_path} -> {self.target_project_path}')
 
-        # Create target directory
+        # Get target directory and plans directory
         target_dir = self._get_session_directory()
+        plans_dir = Path.home() / '.claude' / 'plans'
+
+        # =========================================================================
+        # FAIL-FAST: Pre-compute ALL output paths and check for existence
+        # This must happen BEFORE writing anything to avoid partial clones
+        # =========================================================================
+        all_output_paths: list[Path] = []
+
+        # 1. Session files (main + agents with transformed names)
+        for filename in files_data:
+            if filename == f'{session_info.session_id}.jsonl':
+                all_output_paths.append(target_dir / f'{new_session_id}.jsonl')
+            elif filename.startswith('agent-'):
+                new_filename = transform_agent_filename(filename, agent_id_mapping)
+                all_output_paths.append(target_dir / new_filename)
+            else:
+                all_output_paths.append(target_dir / filename)
+
+        # 2. Tool results
+        if tool_results:
+            tool_results_dir = target_dir / new_session_id / 'tool-results'
+            for tool_use_id in tool_results:
+                all_output_paths.append(tool_results_dir / f'{tool_use_id}.txt')
+
+        # 3. Todos
+        if todos:
+            for old_filename in todos:
+                new_filename = transform_todo_filename(old_filename, session_info.session_id, new_session_id)
+                all_output_paths.append(TODOS_DIR / new_filename)
+
+        # 4. Plan files
+        if plan_files:
+            for new_slug in slug_mapping.values():
+                all_output_paths.append(plans_dir / f'{new_slug}.md')
+
+        # Check ALL paths before writing ANYTHING
+        existing_files = [p for p in all_output_paths if p.exists()]
+        if existing_files:
+            existing_list = '\n  '.join(str(p) for p in existing_files[:5])
+            more = f'\n  ... and {len(existing_files) - 5} more' if len(existing_files) > 5 else ''
+            raise FileExistsError(
+                f'Cannot clone: {len(existing_files)} file(s) already exist:\n  {existing_list}{more}\n'
+                'This may indicate cloning into an existing session or a previous failed clone.'
+            )
+
+        if logger:
+            await logger.info(f'Verified {len(all_output_paths)} output paths are available')
+
+        # =========================================================================
+        # Now safe to write - no files will be overwritten
+        # =========================================================================
+
+        # Create target directory
         target_dir.mkdir(parents=True, exist_ok=True)
         if logger:
             await logger.info(f'Target directory: {target_dir}')
 
-        # Write transformed files
+        # Write plan files
+        if plan_files:
+            plans_dir.mkdir(parents=True, exist_ok=True)
+            for old_slug, content in plan_files.items():
+                new_slug = slug_mapping[old_slug]
+                plan_path = plans_dir / f'{new_slug}.md'
+                plan_path.write_text(content, encoding='utf-8')
+            if logger:
+                await logger.info(f'Wrote {len(slug_mapping)} plan files with new slugs')
+                for old_slug, new_slug in slug_mapping.items():
+                    await logger.info(f'  {old_slug} -> {new_slug}')
+
+        # Write tool results
+        if tool_results:
+            tool_results_count = write_tool_results(tool_results, target_dir, new_session_id)
+            if logger:
+                await logger.info(f'Wrote {tool_results_count} tool result files')
+
+        # Write todos with updated filenames
+        if todos:
+            todos_mapping = write_todos(todos, session_info.session_id, new_session_id)
+            if logger:
+                await logger.info(f'Wrote {len(todos_mapping)} todo files')
+
+        # Create session-env directory
+        create_session_env_dir(new_session_id)
+
+        # Write transformed session files
         main_file_path = None
         agent_files = []
         total_records = 0
@@ -151,7 +269,8 @@ class SessionCloneService:
                 new_filename = f'{new_session_id}.jsonl'
                 main_file_path = str(target_dir / new_filename)
             elif filename.startswith('agent-'):
-                new_filename = filename
+                # Transform agent filename with new ID for fork safety
+                new_filename = transform_agent_filename(filename, agent_id_mapping)
                 agent_files.append(str(target_dir / new_filename))
             else:
                 new_filename = filename
@@ -174,9 +293,9 @@ class SessionCloneService:
 
                 updated_records.append(updated_record)
 
-            # Write JSONL file (with slug mapping applied to JSON strings)
+            # Write JSONL file (with slug and agent ID mappings applied)
             output_path = target_dir / new_filename
-            await self._write_jsonl(output_path, updated_records, slug_mapping)
+            await self._write_jsonl(output_path, updated_records, slug_mapping, agent_id_mapping, logger)
             total_records += len(updated_records)
 
             if logger:
@@ -185,7 +304,7 @@ class SessionCloneService:
         return RestoreResult(
             new_session_id=new_session_id,
             original_session_id=session_info.session_id,
-            restored_at=datetime.now(timezone.utc),
+            restored_at=datetime.now(UTC),
             project_path=str(self.target_project_path),
             files_restored=len(files_data),
             records_restored=total_records,
@@ -242,7 +361,6 @@ class SessionCloneService:
             ['rg', '--files', '--glob', f'{prefix}*.jsonl', str(self.claude_sessions_dir)],
             capture_output=True,
             text=True,
-            timeout=5,
         )
 
         if not result.stdout.strip():
@@ -284,18 +402,18 @@ class SessionCloneService:
         session_files = [main_file]
 
         # Find agent files belonging to this session
+        # Note: JSON may have optional space after colon, so we use regex pattern
         result = subprocess.run(
             [
                 'rg',
                 '--files-with-matches',
-                f'"sessionId":"{session_info.session_id}"',
+                f'"sessionId":\\s*"{session_info.session_id}"',
                 '--glob',
                 'agent-*.jsonl',
                 str(session_dir),
             ],
             capture_output=True,
             text=True,
-            timeout=5,
         )
 
         if result.stdout.strip():
@@ -309,16 +427,24 @@ class SessionCloneService:
         path: Path,
         records: Sequence[SessionRecord],
         slug_mapping: Mapping[str, str],
+        agent_id_mapping: Mapping[str, str],
+        logger: LoggerProtocol | None,
     ) -> None:
-        """Write records to JSONL file, applying slug mapping to JSON strings."""
+        """Write records to JSONL file, applying slug and agent ID mappings."""
         with open(path, 'w', encoding='utf-8') as f:
             for record in records:
+                # Use exclude_unset for round-trip fidelity
                 json_data = record.model_dump(exclude_unset=True, mode='json')
-                json_str = json.dumps(json_data)
+                # Use compact separators for consistent, smaller output
+                json_str = json.dumps(json_data, separators=(',', ':'))
 
-                # Apply slug mapping to catch all slug references in the JSON
+                # Apply slug mapping first (longer strings, less collision risk)
                 if slug_mapping:
                     json_str = apply_slug_mapping(json_str, slug_mapping)
+
+                # Apply agent ID mapping second
+                if agent_id_mapping:
+                    json_str = apply_agent_id_mapping(json_str, agent_id_mapping)
 
                 f.write(json_str + '\n')
 

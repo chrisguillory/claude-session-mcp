@@ -106,7 +106,6 @@ class GistStorage:
                     'public': self.visibility == 'public',
                     'files': {filename: {'content': content}},
                 },
-                timeout=30.0,
             )
             response.raise_for_status()
 
@@ -125,7 +124,6 @@ class GistStorage:
                     'X-GitHub-Api-Version': '2022-11-28',
                 },
                 json={'files': {filename: {'content': content}}},
-                timeout=30.0,
             )
             response.raise_for_status()
 
@@ -153,7 +151,6 @@ class GistStorage:
                         'Accept': 'application/vnd.github.v3+json',
                         'X-GitHub-Api-Version': '2022-11-28',
                     },
-                    timeout=10.0,
                 )
 
                 if response.status_code == 404:
@@ -189,7 +186,6 @@ class GistStorage:
                     'Accept': 'application/vnd.github.v3+json',
                     'X-GitHub-Api-Version': '2022-11-28',
                 },
-                timeout=30.0,
             )
             response.raise_for_status()
 
@@ -205,7 +201,7 @@ class GistStorage:
                 content = file_data['content']
             else:
                 # Large files have raw_url instead of inline content
-                raw_response = await client.get(file_data['raw_url'], timeout=60.0)
+                raw_response = await client.get(file_data['raw_url'])
                 raw_response.raise_for_status()
                 content = raw_response.text
 

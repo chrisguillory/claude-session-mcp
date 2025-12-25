@@ -10,18 +10,18 @@ Handles:
 
 from __future__ import annotations
 
-from typing import Mapping, Sequence, AbstractSet
+from collections.abc import Mapping, Sequence
 from pathlib import Path
+from typing import AbstractSet
 
 from src.models import (
+    ApiErrorSystemRecord,
+    AssistantRecord,
+    CompactBoundarySystemRecord,
+    LocalCommandSystemRecord,
     SessionRecord,
     UserRecord,
-    AssistantRecord,
-    LocalCommandSystemRecord,
-    CompactBoundarySystemRecord,
-    ApiErrorSystemRecord,
 )
-
 
 # Record types that have the slug field
 SLUG_RECORD_TYPES = (

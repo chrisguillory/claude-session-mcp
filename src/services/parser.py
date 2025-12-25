@@ -6,12 +6,12 @@ Framework-agnostic service for loading and validating Claude Code session files.
 
 from __future__ import annotations
 
+import json
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Protocol
-import json
 
 from src.models import SessionRecord, SessionRecordAdapter
-
 
 # ==============================================================================
 # Logger Protocol
@@ -39,13 +39,13 @@ class SessionParserService:
     """
 
     async def load_session_files(
-        self, session_files: list[Path], logger: LoggerProtocol
+        self, session_files: Sequence[Path], logger: LoggerProtocol
     ) -> dict[str, list[SessionRecord]]:
         """
         Load and parse session JSONL files.
 
         Args:
-            session_files: List of JSONL file paths
+            session_files: Sequence of JSONL file paths
             logger: Logger instance
 
         Returns:
@@ -76,7 +76,7 @@ class SessionParserService:
         """
         records = []
 
-        with open(file_path, 'r', encoding='utf-8') as f:
+        with open(file_path, encoding='utf-8') as f:
             for line_num, line in enumerate(f, 1):
                 line = line.strip()
                 if not line:

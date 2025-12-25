@@ -50,7 +50,6 @@ class SessionDiscoveryService:
             ['rg', '--files', '--glob', f'{session_id}.jsonl', str(self.claude_sessions_dir)],
             capture_output=True,
             text=True,
-            timeout=5,
         )
 
         if not result.stdout.strip():

@@ -1,6 +1,6 @@
 # claude-session-mcp
 
-Archive and restore Claude Code sessions across machines with full conversation history.
+Archive and restore Claude Code sessions across machines with full conversation history preserved.
 
 ## ⚠️ Critical: Prevent Automatic Session Deletion
 
@@ -73,31 +73,44 @@ claude-session restore archive.json --launch
 
 # Restore from Gist
 claude-session restore gist://<gist-id> --launch
+
+# Delete a cloned session (auto-backup created)
+claude-session delete <session-id>
+
+# Undo a delete
+claude-session restore --in-place ~/.claude-session-mcp/deleted/<backup>.json
 ```
 
 ## Features
 
+- **Lossless forking**: Clone sessions while preserving parent immutability
+- **Complete artifact capture**: Session files, agent files, plan files, tool results, and todos
 - **Local storage**: Save sessions as JSON or compressed (zstd)
 - **GitHub Gist**: Private/public Gist storage (100MB limit)
 - **Path translation**: Automatically translates file paths when restoring to different directories
-- **Agent sessions**: Captures main session + all agent sub-sessions
-- **UUIDv7 session IDs**: Restored sessions use time-ordered UUIDv7 (vs Claude's random UUIDv4)
+- **Delete with safety**: Auto-backup before deletion, native sessions require `--force`
+- **Fail-fast checks**: Prevents partial writes if any output file already exists
+- **UUIDv7 session IDs**: Cloned/restored sessions use time-ordered UUIDv7 (vs Claude's random UUIDv4)
 
 ## Clone vs Native Fork
 
 Claude Code 2.0.73+ supports `--fork-session`. Here's how it compares to our `clone` command:
 
-| | Claude Native Fork | MCP Clone |
-|---|---|---|
-| **Command** | `claude --resume <id> --fork-session` | `claude-session clone <id>` |
-| **Mechanism** | Compact (summary) | Full copy |
-| **Session size** | ~34 KB | ~1.1 MB |
-| **Context** | Summary blob | Complete history |
-| **Fidelity** | Lossy | Lossless |
-| **Agent history** | Not preserved | Preserved |
-| **Cross-machine** | No | Yes |
-| **Gist support** | No | Yes |
-| **Path translation** | No | Yes |
+|                         | Claude Native Fork                    | MCP Clone                   |
+|-------------------------|---------------------------------------|-----------------------------|
+| **Command**             | `claude --resume <id> --fork-session` | `claude-session clone <id>` |
+| **Mechanism**           | Compact (summary)                     | Full copy                   |
+| **Session size**        | ~34 KB                                | ~1.1 MB                     |
+| **Context**             | Summary blob                          | Complete history            |
+| **Fidelity**            | Lossy                                 | Lossless                    |
+| **Agent history**       | Not preserved                         | Preserved                   |
+| **Tool results**        | Not preserved                         | Preserved                   |
+| **Todos**               | Not preserved                         | Preserved                   |
+| **Plan files**          | Not preserved                         | Preserved                   |
+| **Cross-machine**       | No                                    | Yes                         |
+| **Gist support**        | No                                    | Yes                         |
+| **Path translation**    | No                                    | Yes                         |
+| **Parent immutability** | N/A (modifies original)               | Guaranteed                  |
 
 **Key difference**: Native fork is `/compact` under the hood - it copies a summary + recent messages, not actual conversation history. Our clone preserves everything: all tool calls, thinking blocks, agent sub-sessions, and intermediate steps.
 
@@ -150,28 +163,46 @@ claude-session restore <archive>
 # Options:
 #   --project, -p      Target project directory (default: current)
 #   --no-translate     Don't translate file paths
+#   --in-place         Restore with original session ID (verbatim restore)
 #   --launch, -l       Launch Claude Code after restore
 #   --gist-token       GitHub token for private gists
 #   --verbose, -v      Verbose output
 ```
 
+By default, restore generates a new UUIDv7 session ID and transforms all artifact IDs. Use `--in-place` for verbatim restoration with original IDs (useful for undoing a delete).
+
+### Delete
+
+```bash
+claude-session delete <session-id>
+
+# Arguments:
+#   session-id     Session ID to delete
+
+# Options:
+#   --force, -f        Required to delete native (UUIDv4) sessions
+#   --no-backup        Skip auto-backup before deletion
+#   --dry-run          Preview what would be deleted
+#   --project, -p      Project directory (default: current)
+#   --verbose, -v      Verbose output
+```
+
+**Safety features:**
+- By default, only cloned/restored sessions (UUIDv7) can be deleted
+- Native Claude sessions (UUIDv4) require `--force` to prevent accidental deletion
+- Auto-backup created at `~/.claude-session-mcp/deleted/` before deletion (unless `--no-backup`)
+- Use `restore --in-place <backup>` to undo a delete
+
 ## MCP Server
 
-The MCP server exposes archive/restore as Claude Code tools:
+Install the MCP server to use archive/restore directly from Claude Code:
 
-```json
-{
-  "mcpServers": {
-    "claude-session": {
-      "command": "uv",
-      "args": [
-        "run",
-        "mcp-server.py"
-      ],
-      "cwd": "/path/to/claude-session-mcp"
-    }
-  }
-}
+```bash
+# From GitHub (recommended)
+claude mcp add --scope user claude-session -- uvx --refresh --from git+https://github.com/chrisguillory/claude-session-mcp mcp-server
+
+# From local clone
+claude mcp add --scope user claude-session -- uv run --project ~/claude-session-mcp mcp-server
 ```
 
 **Tools:**
@@ -179,6 +210,7 @@ The MCP server exposes archive/restore as Claude Code tools:
 - `clone_session` - Clone a session directly (no archive file needed)
 - `save_current_session` - Archive current session (local storage only)
 - `restore_session` - Restore archived session (local files only)
+- `delete_session` - Delete session artifacts with auto-backup
 
 ## Technical Details
 
@@ -196,12 +228,55 @@ Example: `/Users/chris/My Project.app` → `-Users-chris-My-Project-app`
 
 **Session IDs**: Claude Code uses UUIDv4 (random). This tool generates UUIDv7 (time-ordered) for cloned/restored sessions:
 
-| Type | Source | Pattern | Example |
-|------|--------|---------|---------|
+| Type   | Source             | Pattern                  | Example                  |
+|--------|--------------------|--------------------------|--------------------------|
 | UUIDv4 | Claude Code native | `xxxxxxxx-xxxx-4xxx-...` | `a1b2c3d4-e5f6-4a7b-...` |
-| UUIDv7 | Cloned/restored | `01xxxxxx-xxxx-7xxx-...` | `01934a2b-c3d4-7e5f-...` |
+| UUIDv7 | Cloned/restored    | `01xxxxxx-xxxx-7xxx-...` | `01934a2b-c3d4-7e5f-...` |
 
 The version digit (4 or 7) is at position 15 (first digit of third group).
+
+### Archive Format Versions
+
+| Version | Added Fields            | Description               |
+|---------|-------------------------|---------------------------|
+| 1.0     | `files`                 | Session JSONL files only  |
+| 1.1     | `plan_files`            | Added plan file content   |
+| 1.2     | `tool_results`, `todos` | Complete artifact capture |
+
+Archives are backwards compatible - older archives can be restored by newer versions.
+
+### Session Artifacts
+
+Complete inventory of session-specific data in `~/.claude/`:
+
+| Artifact      | Location                                         | Transferred | Notes                                          |
+|---------------|--------------------------------------------------|-------------|------------------------------------------------|
+| Session JSONL | `projects/<enc-path>/<session-id>.jsonl`         | ✅           | Main conversation history                      |
+| Agent JSONL   | `projects/<enc-path>/agent-<agent-id>.jsonl`     | ✅           | Sidechain conversations (via sessionId search) |
+| Plan files    | `plans/<slug>.md`                                | ✅           | Plan mode documents (via slug extraction)      |
+| Tool results  | `projects/<enc-path>/<session-id>/tool-results/` | ✅           | Large tool outputs                             |
+| Todos         | `todos/<session-id>-agent-<agent-id>.json`       | ✅           | TodoWrite state                                |
+| Session-env   | `session-env/<session-id>/`                      | ✅           | Currently empty; validated and recreated       |
+| Debug logs    | `debug/<session-id>.txt`                         | ❌           | Ephemeral local debugging logs                 |
+| File history  | `file-history/<session-id>/`                     | ❌           | Ephemeral local file version snapshots         |
+
+**Why some artifacts aren't transferred**: Debug logs and file history are intentionally excluded - they're ephemeral local state for debugging and file rollback that aren't really needed for session continuity and can't be meaningfully used on a different machine.
+
+**Delete behavior**: Currently removes transferred artifacts only. Debug logs and file history cleanup is a planned enhancement.
+
+**Global data** (not session-specific, never modified): `history.jsonl`, `settings.json`, `statsig/`, `shell-snapshots/`
+
+### Cloned Artifact Identification
+
+When cloning, artifacts get new IDs to preserve parent immutability:
+
+| Artifact   | Native                           | Cloned                                 |
+|------------|----------------------------------|----------------------------------------|
+| Session ID | `a1b2c3d4-...-4xxx-...` (UUIDv4) | `019xxxxx-...-7xxx-...` (UUIDv7)       |
+| Plan slug  | `linked-twirling-tower`          | `linked-twirling-tower-clone-019b5232` |
+| Agent ID   | `5271c147`                       | `5271c147-clone-019b51bd`              |
+
+**Agent ID uses flat cloning**: When cloning a clone, the base hex is extracted and a new suffix applied (no accumulation of `-clone-` segments). For example, cloning `5271c147-clone-019b51bd` produces `5271c147-clone-019c1234`, not `5271c147-clone-019b51bd-clone-019c1234`.
 
 ### Pydantic Models
 

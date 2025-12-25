@@ -8,27 +8,33 @@ archive creation, compression, and format detection.
 from __future__ import annotations
 
 import subprocess
-from datetime import datetime, timezone
+from collections.abc import Mapping, Sequence
+from datetime import UTC, datetime
 from pathlib import Path
 from types import MappingProxyType
-from typing import Literal, Mapping, Protocol
+from typing import Literal, Protocol
 
 from src.base_model import StrictModel
+from src.config.mcp import settings
 from src.models import (
+    ApiErrorSystemRecord,
+    AssistantRecord,
+    CompactBoundarySystemRecord,
+    InformationalSystemRecord,
+    LocalCommandSystemRecord,
     SessionRecord,
     UserRecord,
-    AssistantRecord,
-    LocalCommandSystemRecord,
-    CompactBoundarySystemRecord,
-    ApiErrorSystemRecord,
-    InformationalSystemRecord,
 )
-from src.storage.protocol import StorageBackend
-from src.config.mcp import settings
+from src.services.artifacts import (
+    collect_plan_files,
+    collect_todos,
+    collect_tool_results,
+    extract_slugs_from_records,
+    validate_session_env_empty,
+)
 from src.services.parser import SessionParserService
-from src.services.plan_files import extract_slugs_from_records, collect_plan_files
+from src.storage.protocol import StorageBackend
 from src.types import JsonDatetime
-
 
 # ==============================================================================
 # Logger Protocol (allows service to be framework-agnostic)
@@ -77,17 +83,27 @@ class ArchiveMetadata(StrictModel):
 # ==============================================================================
 
 # Archive format version - single source of truth for what this code creates
-ARCHIVE_FORMAT_VERSION = '1.1'
-
-# Immutable empty mapping for default value (not a mutable {})
-_EMPTY_PLAN_FILES: Mapping[str, str] = MappingProxyType({})
+ARCHIVE_FORMAT_VERSION = '1.2'
 
 
 class SessionArchive(StrictModel):
     """
     Complete session archive structure (written to JSON).
 
-    This is the JSON file structure that gets saved to disk.
+    Version history:
+    - 1.0: Initial format (session JSONL files only)
+    - 1.1: Added plan_files field
+    - 1.2: Added tool_results and todos fields
+
+    Cloned artifact identification patterns:
+    - Session IDs: UUIDv7 (vs Claude's UUIDv4)
+    - Plan slugs: {old-slug}-clone-{session-prefix}
+    - Agent IDs: {old-agent-id}-clone-{session-prefix}
+
+    Design decisions:
+    - Agent files get new IDs on clone/restore for same-project fork safety
+    - tool_results uses original tool_use_ids (nested under session_id dir)
+    - todos filenames have primary session ID portion updated
     """
 
     version: str  # Required - use ARCHIVE_FORMAT_VERSION when creating
@@ -95,8 +111,10 @@ class SessionArchive(StrictModel):
     archived_at: JsonDatetime
     original_project_path: str
     claude_code_version: str  # Claude Code version at archive time
-    files: dict[str, list[SessionRecord]]  # filename -> records
-    plan_files: Mapping[str, str] = _EMPTY_PLAN_FILES  # slug -> plan file content (v1.1+)
+    files: Mapping[str, Sequence[SessionRecord]]  # filename -> records
+    plan_files: Mapping[str, str] = MappingProxyType({})  # slug -> content (v1.1+)
+    tool_results: Mapping[str, str] = MappingProxyType({})  # tool_use_id -> content (v1.2+)
+    todos: Mapping[str, str] = MappingProxyType({})  # original_filename -> JSON content (v1.2+)
 
 
 # ==============================================================================
@@ -229,6 +247,37 @@ class SessionArchiveService:
         # Claude stores sessions here
         self.claude_sessions_dir = Path.home() / '.claude' / 'projects'
 
+        # Computed lazily - the project folder in ~/.claude/projects/
+        self._project_folder: Path | None = None
+
+    def _get_project_folder(self) -> Path:
+        """
+        Get the project folder in ~/.claude/projects/.
+
+        Computes and caches the encoded project path. This is the directory
+        containing session JSONL files for this project.
+
+        Returns:
+            Path to project folder
+
+        Raises:
+            FileNotFoundError: If project folder not found
+        """
+        if self._project_folder is not None:
+            return self._project_folder
+
+        encoded_project = self._encode_path(self.project_path)
+        project_folders = list(self.claude_sessions_dir.glob('*'))
+
+        for folder in project_folders:
+            if folder.name.startswith(encoded_project):
+                self._project_folder = folder
+                return folder
+
+        raise FileNotFoundError(
+            f'Could not find session folder for project {self.project_path} in {self.claude_sessions_dir}'
+        )
+
     async def create_archive(
         self,
         storage: StorageBackend,
@@ -271,7 +320,7 @@ class SessionArchiveService:
             await logger.info(f'Output path: {output_file}')
         else:
             # Use temp directory (default)
-            timestamp = datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')
+            timestamp = datetime.now(UTC).strftime('%Y%m%d_%H%M%S')
             filename = f'session-{self.session_id[:8]}-{timestamp}.json'
             output_file = self.temp_dir / filename
             await logger.info(f'Using temp file: {output_file}')
@@ -280,8 +329,12 @@ class SessionArchiveService:
         archive_format = FormatDetector.detect_format(output_file, format_param)
         await logger.info(f'Archive format: {archive_format}')
 
+        # Get project folder (computed once, cached)
+        project_folder = self._get_project_folder()
+        await logger.info(f'Project folder: {project_folder.name}')
+
         # Discover session files
-        session_files = await self._discover_session_files(logger)
+        session_files = await self._discover_session_files(project_folder, logger)
         await logger.info(f'Found {len(session_files)} session files')
 
         # Load and parse all records
@@ -298,15 +351,28 @@ class SessionArchiveService:
         plan_files = collect_plan_files(slugs)
         await logger.info(f'Collected {len(plan_files)} plan files (of {len(slugs)} slugs)')
 
+        # Collect tool results (v1.2+)
+        tool_results = collect_tool_results(project_folder, self.session_id)
+        await logger.info(f'Collected {len(tool_results)} tool result files')
+
+        # Collect todos (v1.2+)
+        todos = collect_todos(self.session_id)
+        await logger.info(f'Collected {len(todos)} todo files')
+
+        # Validate session-env is empty (future-proofing)
+        validate_session_env_empty(self.session_id)
+
         # Create archive structure
         archive = SessionArchive(
             version=ARCHIVE_FORMAT_VERSION,
             session_id=self.session_id,
-            archived_at=datetime.now(timezone.utc),
+            archived_at=datetime.now(UTC),
             original_project_path=str(self.project_path),
             claude_code_version=claude_code_version,
             files=files_data,
             plan_files=plan_files,
+            tool_results=tool_results,
+            todos=todos,
         )
 
         # Serialize and compress
@@ -334,13 +400,13 @@ class SessionArchiveService:
             session_id=self.session_id,
             format=archive_format,
             size_mb=size_mb,
-            archived_at=datetime.now(timezone.utc),
+            archived_at=datetime.now(UTC),
             record_count=total_records,
             file_count=len(session_files),
             files=file_metadata,
         )
 
-    async def _discover_session_files(self, logger: LoggerProtocol) -> list[Path]:
+    async def _discover_session_files(self, project_folder: Path, logger: LoggerProtocol) -> Sequence[Path]:
         """
         Discover all JSONL files for current session.
 
@@ -348,35 +414,17 @@ class SessionArchiveService:
         - Main session file: {session_id}.jsonl
         - Agent session files: agent-*.jsonl (if any)
 
+        Args:
+            project_folder: Path to project folder in ~/.claude/projects/
+            logger: Logger for progress messages
+
         Returns:
-            List of paths to JSONL files
+            Sequence of JSONL file paths
 
         Raises:
             FileNotFoundError: If main session file not found
         """
         await logger.info('Discovering session files')
-
-        # Find project directory in ~/.claude/projects/
-        # Pattern: ~/.claude/projects/-path-to-project-{session_id}.jsonl
-        project_folders = list(self.claude_sessions_dir.glob('*'))
-
-        # Find folder that matches our project path
-        project_folder = None
-        encoded_project = self._encode_path(self.project_path)
-
-        await logger.info(f'Looking for encoded project path: {encoded_project}')
-
-        for folder in project_folders:
-            if folder.name.startswith(encoded_project):
-                project_folder = folder
-                break
-
-        if not project_folder:
-            raise FileNotFoundError(
-                f'Could not find session folder for project {self.project_path} in {self.claude_sessions_dir}'
-            )
-
-        await logger.info(f'Found project folder: {project_folder.name}')
 
         # Find main session file
         main_file = project_folder / f'{self.session_id}.jsonl'
@@ -386,11 +434,11 @@ class SessionArchiveService:
         session_files = [main_file]
 
         # Find agent files that belong to this session using rg
+        # Note: JSON may have optional space after colon, so we use regex pattern
         result = subprocess.run(
-            ['rg', '--files-with-matches', f'"sessionId":"{self.session_id}"', '--glob', 'agent-*.jsonl', str(project_folder)],
+            ['rg', '--files-with-matches', f'"sessionId":\\s*"{self.session_id}"', '--glob', 'agent-*.jsonl', str(project_folder)],
             capture_output=True,
             text=True,
-            timeout=5,
         )
 
         agent_files = []
@@ -404,13 +452,13 @@ class SessionArchiveService:
         return session_files
 
     async def _load_session_files(
-        self, session_files: list[Path], logger: LoggerProtocol
+        self, session_files: Sequence[Path], logger: LoggerProtocol
     ) -> tuple[dict[str, list[SessionRecord]], int]:
         """
         Load and parse all session files using parser service.
 
         Args:
-            session_files: List of JSONL file paths
+            session_files: Sequence of JSONL file paths
             logger: Logger instance
 
         Returns:
@@ -455,7 +503,7 @@ class SessionArchiveService:
 
         # Fallback: get from subprocess (data is corrupted if we reach here)
         await logger.warning('No records with version field found - using subprocess fallback')
-        result = subprocess.run(['claude', '--version'], capture_output=True, text=True, timeout=5)
+        result = subprocess.run(['claude', '--version'], capture_output=True, text=True)
         version = result.stdout.strip()
         await logger.info(f'Extracted Claude version from subprocess: {version}')
         return version

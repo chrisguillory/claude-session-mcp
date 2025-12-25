@@ -75,7 +75,7 @@ Round-trip serialization:
 from __future__ import annotations
 
 import functools
-from typing import Any, Literal, Annotated, Union, Sequence, get_args
+from typing import Any, Literal, Annotated, Mapping, Union, Sequence, TypeVar, get_args
 from pydantic import BaseModel, Field, ConfigDict, TypeAdapter, field_validator, ValidationInfo, BeforeValidator
 
 from src.markers import PathField, PathListField
@@ -104,8 +104,35 @@ class StrictModel(BaseModel):
     model_config = ConfigDict(
         extra='forbid',  # Raise error on unexpected fields
         strict=True,  # Strict type validation
-        frozen=False,  # Allow modification for path translation
+        frozen=True,  # Immutable - use validated_copy() for changes
     )
+
+
+# Type variable for validated_copy function
+T = TypeVar('T', bound=BaseModel)
+
+
+def validated_copy(model: T, update: Mapping[str, Any]) -> T:
+    """
+    Create a validated copy of a model with updates.
+
+    This is the type-safe way to modify frozen Pydantic models.
+    The returned instance is validated through the model's __init__.
+
+    Args:
+        model: The source model instance
+        update: Fields to update (keys must be valid field names)
+
+    Returns:
+        A new validated instance of the same type with updates applied
+
+    Example:
+        updated_record = validated_copy(record, {'sessionId': new_session_id})
+    """
+    model_class = type(model)
+    new_data = model.model_dump()
+    new_data.update(update)
+    return model_class(**new_data)
 
 
 # ==============================================================================
@@ -439,7 +466,7 @@ class ApiError(StrictModel):
     """Complete API error information."""
 
     status: int
-    headers: dict[str, str]
+    headers: Mapping[str, str]
     requestID: str | None = None  # Can be null for some errors
     error: ApiErrorResponse | None = None  # Can be missing for some errors (e.g., 503)
 
@@ -924,7 +951,7 @@ class FileHistorySnapshot(StrictModel):
     """Snapshot data for file history tracking."""
 
     messageId: str
-    trackedFileBackups: dict[str, FileBackupInfo]  # Map of file paths to backup data
+    trackedFileBackups: Mapping[str, FileBackupInfo]  # Map of file paths to backup data
     timestamp: str
 
 

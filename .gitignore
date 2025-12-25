@@ -8,3 +8,4 @@
 .vscode/
 /scratch/
 __pycache__/
+snapshots/

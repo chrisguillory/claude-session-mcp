@@ -23,6 +23,7 @@ from src.cli_logger import CLILogger
 from src.launcher import launch_claude_with_session
 from src.services.archive import SessionArchiveService
 from src.services.clone import AmbiguousSessionError, SessionCloneService
+from src.services.delete import SessionDeleteService
 from src.services.discovery import SessionDiscoveryService
 from src.services.parser import SessionParserService
 from src.services.restore import SessionRestoreService
@@ -58,17 +59,21 @@ def restore(
     archive: str = typer.Argument(..., help='Archive path or Gist URL (gist://<gist-id> or file path)'),
     project: Path | None = typer.Option(None, '--project', '-p', help='Target project directory (default: current)'),
     no_translate: bool = typer.Option(False, '--no-translate', help="Don't translate file paths"),
+    in_place: bool = typer.Option(False, '--in-place', help='Restore with original session ID (verbatim restore)'),
     launch: bool = typer.Option(False, '--launch', '-l', help='Launch Claude Code after restore'),
     gist_token: str | None = typer.Option(None, '--gist-token', help='GitHub token for private gists'),
     verbose: bool = typer.Option(False, '--verbose', '-v', help='Verbose output'),
 ) -> None:
     """Restore a Claude Code session from local file or GitHub Gist.
 
+    By default, restore creates a new session ID (UUIDv7) for the restored session.
+    Use --in-place to restore with the original session ID for verbatim restoration.
+
     Extra arguments after -- are passed to claude CLI:
 
         claude-session restore ARCHIVE --launch -- --chrome
     """
-    asyncio.run(_restore_async(archive, project, not no_translate, launch, gist_token, verbose, ctx.args))
+    asyncio.run(_restore_async(archive, project, not no_translate, in_place, launch, gist_token, verbose, ctx.args))
 
 
 async def _archive_async(
@@ -200,6 +205,7 @@ async def _restore_async(
     archive: str,
     project: Path | None,
     translate_paths: bool,
+    in_place: bool,
     launch: bool,
     gist_token: str | None,
     verbose: bool,
@@ -231,7 +237,7 @@ async def _restore_async(
                 if token:
                     headers['Authorization'] = f'Bearer {token}'
 
-                response = await client.get(f'https://api.github.com/gists/{gist_id}', headers=headers, timeout=10.0)
+                response = await client.get(f'https://api.github.com/gists/{gist_id}', headers=headers)
 
                 if response.status_code == 404:
                     typer.secho(f'Error: Gist not found: {gist_id}', fg=typer.colors.RED, err=True)
@@ -289,8 +295,13 @@ async def _restore_async(
 
         # Restore the archive
         await logger.info(f'Loading archive: {archive_path}')
+        if in_place:
+            await logger.info('In-place mode: restoring with original session ID')
         result = await restore_service.restore_archive(
-            archive_path=str(archive_path), translate_paths=translate_paths, logger=logger
+            archive_path=str(archive_path),
+            translate_paths=translate_paths,
+            in_place=in_place,
+            logger=logger,
         )
 
         # Clean up temp file if we downloaded from Gist
@@ -403,6 +414,100 @@ async def _clone_async(
         raise typer.Exit(1)
     except Exception as e:
         await logger.error(f'Failed to clone session: {e}')
+        if verbose:
+            traceback.print_exc()
+        raise typer.Exit(1)
+
+
+@app.command()
+def delete(
+    session_id: str = typer.Argument(..., help='Session ID to delete'),
+    force: bool = typer.Option(False, '--force', '-f', help='Required to delete native (UUIDv4) sessions'),
+    no_backup: bool = typer.Option(False, '--no-backup', help='Skip auto-backup before deletion'),
+    dry_run: bool = typer.Option(False, '--dry-run', help='Preview what would be deleted'),
+    project: Path | None = typer.Option(None, '--project', '-p', help='Project directory (default: current)'),
+    verbose: bool = typer.Option(False, '--verbose', '-v', help='Verbose output'),
+) -> None:
+    """Delete session artifacts with auto-backup.
+
+    By default, only cloned/restored sessions (UUIDv7) can be deleted.
+    Native Claude sessions (UUIDv4) require --force.
+
+    Before deletion, a backup archive is created at ~/.claude-session-mcp/deleted/
+    unless --no-backup is specified. Use 'restore --in-place' on the backup to undo.
+    """
+    asyncio.run(_delete_async(session_id, force, no_backup, dry_run, project, verbose))
+
+
+async def _delete_async(
+    session_id: str,
+    force: bool,
+    no_backup: bool,
+    dry_run: bool,
+    project: Path | None,
+    verbose: bool,
+) -> None:
+    """Async implementation of delete command."""
+    logger = CLILogger(verbose=verbose)
+
+    try:
+        # Determine project path
+        if project:
+            project_path = project.resolve()
+            if not project_path.exists():
+                typer.secho(f'Error: Project directory does not exist: {project_path}', fg=typer.colors.RED, err=True)
+                raise typer.Exit(1)
+        else:
+            project_path = Path.cwd()
+
+        # Initialize delete service
+        delete_service = SessionDeleteService(project_path)
+
+        # Delete the session
+        result = await delete_service.delete_session(
+            session_id=session_id,
+            force=force,
+            no_backup=no_backup,
+            dry_run=dry_run,
+            logger=logger,
+        )
+
+        if not result.success:
+            typer.secho(f'Error: {result.error_message}', fg=typer.colors.RED, err=True)
+            raise typer.Exit(1)
+
+        if dry_run:
+            typer.secho(f'Dry run - would delete:', fg=typer.colors.YELLOW)
+            typer.echo(f'  Session ID: {result.session_id}')
+            typer.echo(f'  Files: {result.files_deleted}')
+            typer.echo(f'  Size: {result.size_freed_bytes:,} bytes')
+            if verbose:
+                typer.echo('\n  Files to delete:')
+                for path in result.deleted_files:
+                    typer.echo(f'    - {path}')
+        else:
+            typer.secho(f'✓ Session deleted successfully!', fg=typer.colors.GREEN)
+            typer.echo(f'  Session ID: {result.session_id}')
+            typer.echo(f'  Files deleted: {result.files_deleted}')
+            typer.echo(f'  Size freed: {result.size_freed_bytes:,} bytes')
+            typer.echo(f'  Duration: {result.duration_ms:.0f}ms')
+            if result.backup_path:
+                typer.echo(f'  Backup: {result.backup_path}')
+                typer.echo()
+                typer.echo('To undo, run:')
+                typer.secho(f'  claude-session restore --in-place {result.backup_path}', fg=typer.colors.CYAN)
+
+            if result.failed_deletions:
+                typer.echo()
+                typer.secho('Warning: Some files failed to delete:', fg=typer.colors.YELLOW)
+                for failure in result.failed_deletions:
+                    typer.echo(f'  - {failure}')
+
+    except FileNotFoundError as e:
+        typer.secho(f'Error: {e}', fg=typer.colors.RED, err=True)
+        raise typer.Exit(1)
+    except Exception as e:
+        await logger.error(f'Failed to delete session: {e}')
         if verbose:
             traceback.print_exc()
         raise typer.Exit(1)
