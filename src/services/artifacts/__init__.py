@@ -18,6 +18,7 @@ from .plan_files import (
     SLUG_RECORD_TYPES,
     apply_slug_mapping,
     collect_plan_files,
+    extract_base_slug,
     extract_slugs_from_records,
     generate_clone_slug,
     write_plan_files,
@@ -50,6 +51,7 @@ __all__ = [
     'apply_agent_id_mapping',
     # plan_files
     'SLUG_RECORD_TYPES',
+    'extract_base_slug',
     'extract_slugs_from_records',
     'collect_plan_files',
     'generate_clone_slug',

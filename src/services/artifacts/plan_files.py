@@ -4,8 +4,16 @@ Plan file handling for clone/restore operations.
 Handles:
 - Slug extraction from session records
 - Plan file collection
-- Clone slug generation
+- Clone slug generation (flat, not accumulating)
 - Slug mapping application
+
+Clone slug naming follows the same pattern as agent IDs:
+- Native: adjective-verbing-noun (e.g., linked-twirling-tower)
+- Cloned: adjective-verbing-noun-clone-XXXXXXXX (8-char session prefix)
+
+When cloning a clone, we extract the base slug first to avoid accumulation:
+- linked-twirling-tower-clone-019b5227 → linked-twirling-tower-clone-019b53d9
+  (NOT linked-twirling-tower-clone-019b5227-clone-019b53d9)
 """
 
 from __future__ import annotations
@@ -31,6 +39,31 @@ SLUG_RECORD_TYPES = (
     CompactBoundarySystemRecord,
     ApiErrorSystemRecord,
 )
+
+
+def extract_base_slug(slug: str) -> str:
+    """
+    Extract the base slug, removing any -clone-XXXXXXXX suffix.
+
+    For native slugs, returns the slug unchanged.
+    For cloned slugs, returns the portion before '-clone-'.
+
+    Examples:
+        'linked-twirling-tower' -> 'linked-twirling-tower'
+        'linked-twirling-tower-clone-019b5227' -> 'linked-twirling-tower'
+
+    This enables flat cloning: cloning a clone produces the same
+    format as cloning a native session, just with a different suffix.
+
+    Args:
+        slug: Slug string (native or cloned format)
+
+    Returns:
+        Base slug without any clone suffix
+    """
+    if '-clone-' in slug:
+        return slug.split('-clone-')[0]
+    return slug
 
 
 def extract_slugs_from_records(
@@ -82,18 +115,22 @@ def generate_clone_slug(old_slug: str, new_session_id: str) -> str:
     """
     Generate new slug with provenance.
 
-    Format: {old_slug}-clone-{session_prefix}
+    Format: {base_slug}-clone-{session_prefix}
     Example: curried-bubbling-wombat-clone-019b51bd
 
+    When cloning a clone, we extract the base slug first to keep
+    the naming flat rather than accumulating -clone- segments.
+
     Args:
-        old_slug: Original slug string
+        old_slug: Original slug string (may already be cloned)
         new_session_id: New session ID for the clone
 
     Returns:
         New slug string showing provenance
     """
+    base_slug = extract_base_slug(old_slug)
     prefix = new_session_id[:8]
-    return f'{old_slug}-clone-{prefix}'
+    return f'{base_slug}-clone-{prefix}'
 
 
 def write_plan_files(

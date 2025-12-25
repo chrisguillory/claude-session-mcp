@@ -15,7 +15,7 @@ from pathlib import Path
 
 import uuid6
 
-from src.models import SessionRecord, SessionRecordAdapter
+from src.models import AssistantRecord, SessionRecord, SessionRecordAdapter, UserRecord
 from src.services.archive import LoggerProtocol
 from src.services.artifacts import (
     TODOS_DIR,
@@ -52,6 +52,29 @@ class AmbiguousSessionError(Exception):
         super().__init__(
             f"Session ID prefix '{prefix}' is ambiguous. Matches {len(matches)} sessions:\n  {matches_str}"
         )
+
+
+def extract_source_project_path(
+    files_data: Mapping[str, Sequence[SessionRecord]],
+) -> Path | None:
+    """
+    Extract the source project path from session records.
+
+    The path encoding used by Claude Code is lossy (multiple chars → '-'),
+    so we can't reliably decode it. Instead, we extract the actual path
+    from the 'cwd' field of session records, which contains the true path.
+
+    Args:
+        files_data: Mapping of filename -> sequence of SessionRecord
+
+    Returns:
+        Source project path, or None if no cwd found in records
+    """
+    for records in files_data.values():
+        for record in records:
+            if isinstance(record, (UserRecord, AssistantRecord)) and record.cwd:
+                return Path(record.cwd)
+    return None
 
 
 class SessionCloneService:
@@ -166,11 +189,15 @@ class SessionCloneService:
                 await logger.info(f'  {old_id} -> {new_id}')
 
         # Create path translator if needed
+        # Note: We use the actual cwd from records, not the decoded path from discovery,
+        # because the path encoding is lossy (multiple chars → '-') and decoding is unreliable.
         translator = None
-        if translate_paths and session_info.project_path != self.target_project_path:
-            translator = PathTranslator(str(session_info.project_path), str(self.target_project_path))
-            if logger:
-                await logger.info(f'Path translation: {session_info.project_path} -> {self.target_project_path}')
+        if translate_paths:
+            source_path = extract_source_project_path(files_data)
+            if source_path and source_path != self.target_project_path:
+                translator = PathTranslator(str(source_path), str(self.target_project_path))
+                if logger:
+                    await logger.info(f'Path translation: {source_path} -> {self.target_project_path}')
 
         # Get target directory and plans directory
         target_dir = self._get_session_directory()
