@@ -224,13 +224,21 @@ class SessionRestoreService:
         else:
             archive = await self._load_json_archive(archive_file, logger)
 
+        # Path translation is independent of in_place mode - paths should be
+        # translated if they differ, regardless of whether IDs are preserved
+        translator = None
+        if translate_paths and archive.original_project_path != str(self.project_path):
+            translator = PathTranslator(archive.original_project_path, str(self.project_path))
+            if logger:
+                await logger.info(f'Path translation: {archive.original_project_path} -> {self.project_path}')
+
         # Determine session ID and mappings based on mode
         if in_place:
-            # In-place mode: use original everything (undo delete)
+            # In-place mode: preserve original IDs (for undo delete)
+            # Note: paths are still translated if they differ (handled above)
             new_session_id = archive.session_id
             slug_mapping: Mapping[str, str] = {}
             agent_id_mapping: Mapping[str, str] = {}
-            translator = None
             if logger:
                 await logger.info(f'Using original session ID: {new_session_id}')
         else:
@@ -256,13 +264,6 @@ class SessionRestoreService:
                     old_slug: generate_clone_slug(old_slug, new_session_id)
                     for old_slug in archive.plan_files
                 }
-
-            # Create path translator if needed
-            translator = None
-            if translate_paths and archive.original_project_path != str(self.project_path):
-                translator = PathTranslator(archive.original_project_path, str(self.project_path))
-                if logger:
-                    await logger.info(f'Path translation: {archive.original_project_path} -> {self.project_path}')
 
         # Get target directory and plans directory
         target_dir = self._get_session_directory()
