@@ -292,28 +292,28 @@ Understanding what gets captured in session files.
 
 **Built-in Agents**:
 
-| Agent | Model | Purpose | Creates Sidechain |
-|-------|-------|---------|-------------------|
-| Plan | Opus/Sonnet | Software architect (read-only) | Yes |
-| Explore | Haiku | File search specialist | Yes |
-| General-purpose | Sonnet | Complex multi-step tasks | Yes |
+| Agent           | Model       | Purpose                        | Creates Sidechain |
+|-----------------|-------------|--------------------------------|-------------------|
+| Plan            | Opus/Sonnet | Software architect (read-only) | Yes               |
+| Explore         | Haiku       | File search specialist         | Yes               |
+| General-purpose | Sonnet      | Complex multi-step tasks       | Yes               |
 
 Agent invocations create separate `agent-{agentId}.jsonl` files, referenced via `isSidechain: true` in the main session. Our clone/archive captures all sidechains; native fork does not.
 
 **Pre-flight Requests** (not stored in session files):
 
-| Request | Model | Purpose |
-|---------|-------|---------|
-| Topic detection | Haiku | Extract 2-3 word session title |
-| Agent warmup | Opus/Haiku | Pre-populate prompt cache |
-| Token counting | N/A | ~100 `/count_tokens` calls (one per tool) |
+| Request         | Model      | Purpose                                   |
+|-----------------|------------|-------------------------------------------|
+| Topic detection | Haiku      | Extract 2-3 word session title            |
+| Agent warmup    | Opus/Haiku | Pre-populate prompt cache                 |
+| Token counting  | N/A        | ~100 `/count_tokens` calls (one per tool) |
 
 **Extended Thinking**:
 
-| Trigger | Budget | Notes |
-|---------|--------|-------|
-| `ultrathink` | Maximum (31,999 tokens) | Full reasoning budget |
-| Shift+Tab | Configurable | Toggle thinking on/off |
+| Trigger      | Budget                  | Notes                  |
+|--------------|-------------------------|------------------------|
+| `ultrathink` | Maximum (31,999 tokens) | Full reasoning budget  |
+| Shift+Tab    | Configurable            | Toggle thinking on/off |
 
 - Stored in `thinking` content blocks with `signature` field
 - NOT counted in context window (output tokens only)
@@ -322,20 +322,20 @@ Agent invocations create separate `agent-{agentId}.jsonl` files, referenced via 
 
 **Prompt Cache** (explains `cache_read_input_tokens` field):
 
-| Type | TTL | Write Premium | Read Savings |
-|------|-----|---------------|--------------|
-| Ephemeral (default) | 5 min | 25% | 90% |
-| Extended | 1 hour | 100% | 90% |
+| Type                | TTL    | Write Premium | Read Savings |
+|---------------------|--------|---------------|--------------|
+| Ephemeral (default) | 5 min  | 25%           | 90%          |
+| Extended            | 1 hour | 100%          | 90%          |
 
 Cache invalidates when: user edits/rewinds message, TTL expires, or content prefix changes. Minimum cacheable: ~1,024 tokens.
 
 **Token Economics** (December 2025):
 
-| Model | Base Input | Cache Write (5m) | Cache Read | Output |
-|-------|------------|------------------|------------|--------|
-| Opus 4.5 | $5/M | $6.25/M | $0.50/M | $15/M |
-| Sonnet 4.5 | $3/M | $3.75/M | $0.30/M | $15/M |
-| Haiku 4.5 | $1/M | $1.25/M | $0.10/M | $5/M |
+| Model      | Base Input | Cache Write (5m) | Cache Read | Output |
+|------------|------------|------------------|------------|--------|
+| Opus 4.5   | $5/M       | $6.25/M          | $0.50/M    | $15/M  |
+| Sonnet 4.5 | $3/M       | $3.75/M          | $0.30/M    | $15/M  |
+| Haiku 4.5  | $1/M       | $1.25/M          | $0.10/M    | $5/M   |
 
 **API-only Features** (not in Claude Code):
 
@@ -357,22 +357,22 @@ Observed: ~5 minutes first response with 108 tools loaded. Reduce MCPs for faste
 
 Authoritative sources for checking Claude Code versions:
 
-| Source | URL | Type | Update Speed | Best For |
-|--------|-----|------|--------------|----------|
-| **NPM Package** | https://www.npmjs.com/package/@anthropic-ai/claude-code | Distribution | Immediate | Definitive latest version |
-| **NPM Versions Tab** | https://www.npmjs.com/package/@anthropic-ai/claude-code?activeTab=versions | History | Immediate | Full version history + downloads |
-| **NPM JSON API** | https://registry.npmjs.org/@anthropic-ai/claude-code | API | Immediate | Programmatic version checks |
-| **GitHub Releases** | https://github.com/anthropics/claude-code/releases | Releases | Same day | Release notes, binaries |
-| **GitHub Releases API** | https://api.github.com/repos/anthropics/claude-code/releases/latest | API | Same day | Programmatic release info |
-| **CHANGELOG.md** | https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md | Docs | Same day | Detailed change history |
-| **GitHub Repo** | https://github.com/anthropics/claude-code | Source | Continuous | Issues, source code |
-| **Official Docs** | https://code.claude.com/docs/en/home | Docs | Release-aligned | Feature documentation |
-| **Platform Release Notes** | https://platform.claude.com/docs/en/release-notes/overview | Docs | Major releases | API + Claude Code combined |
-| **Support Release Notes** | https://support.claude.com/en/articles/12138966-release-notes | Support | Major releases | User-facing release notes |
-| **ClaudeLog Changelog** | https://www.claudelog.com/claude-code-changelog/ | Community | ~Daily | Human-readable summaries |
-| **ClaudeLog News** | https://www.claudelog.com/claude-news/ | Community | ~Daily | Announcement timeline |
-| **Anthropic Newsroom** | https://www.anthropic.com/news | Announcements | Major only | Strategic announcements |
-| **CLI** | `claude --version` | Local | N/A | Installed version |
+| Source                     | URL                                                                        | Type          | Update Speed    | Best For                         |
+|----------------------------|----------------------------------------------------------------------------|---------------|-----------------|----------------------------------|
+| **NPM Package**            | https://www.npmjs.com/package/@anthropic-ai/claude-code                    | Distribution  | Immediate       | Definitive latest version        |
+| **NPM Versions Tab**       | https://www.npmjs.com/package/@anthropic-ai/claude-code?activeTab=versions | History       | Immediate       | Full version history + downloads |
+| **NPM JSON API**           | https://registry.npmjs.org/@anthropic-ai/claude-code                       | API           | Immediate       | Programmatic version checks      |
+| **GitHub Releases**        | https://github.com/anthropics/claude-code/releases                         | Releases      | Same day        | Release notes, binaries          |
+| **GitHub Releases API**    | https://api.github.com/repos/anthropics/claude-code/releases/latest        | API           | Same day        | Programmatic release info        |
+| **CHANGELOG.md**           | https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md           | Docs          | Same day        | Detailed change history          |
+| **GitHub Repo**            | https://github.com/anthropics/claude-code                                  | Source        | Continuous      | Issues, source code              |
+| **Official Docs**          | https://code.claude.com/docs/en/home                                       | Docs          | Release-aligned | Feature documentation            |
+| **Platform Release Notes** | https://platform.claude.com/docs/en/release-notes/overview                 | Docs          | Major releases  | API + Claude Code combined       |
+| **Support Release Notes**  | https://support.claude.com/en/articles/12138966-release-notes              | Support       | Major releases  | User-facing release notes        |
+| **ClaudeLog Changelog**    | https://www.claudelog.com/claude-code-changelog/                           | Community     | ~Daily          | Human-readable summaries         |
+| **ClaudeLog News**         | https://www.claudelog.com/claude-news/                                     | Community     | ~Daily          | Announcement timeline            |
+| **Anthropic Newsroom**     | https://www.anthropic.com/news                                             | Announcements | Major only      | Strategic announcements          |
+| **CLI**                    | `claude --version`                                                         | Local         | N/A             | Installed version                |
 
 > **Note**: The deprecated `claude-ai` NPM package has been superseded by `@anthropic-ai/claude-code`.
 
