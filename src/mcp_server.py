@@ -34,6 +34,7 @@ from .mcp_utils import DualLogger
 from .services.archive import ArchiveMetadata, SessionArchiveService
 from .services.clone import AmbiguousSessionError, SessionCloneService
 from .services.delete import DeleteResult, SessionDeleteService
+from .services.lineage import LineageResult, LineageService
 from .services.parser import SessionParserService
 from .services.restore import RestoreResult, SessionRestoreService
 from .storage.local import LocalFileSystemStorage
@@ -173,30 +174,41 @@ def _discover_session_id(session_marker: str) -> str:
     Raises:
         RuntimeError: If debug directory doesn't exist or session ID cannot be found
     """
+    import time
+
     # Emit marker (will appear in Claude's debug logs)
     print(session_marker, file=sys.stderr, flush=True)
 
-    # Search debug logs for the marker
+    # Search debug logs for the marker (with retry for timing)
     debug_dir = pathlib.Path.home() / '.claude' / 'debug'
     if not debug_dir.exists():
         raise RuntimeError(f'Claude debug log directory not found: {debug_dir}')
 
-    result = subprocess.run(
-        [
-            'rg',
-            '-l',
-            '--fixed-strings',
-            '--glob',
-            '!latest',
-            session_marker,
-            debug_dir.as_posix(),
-        ],
-        capture_output=True,
-        text=True,
-    )
+    # Retry loop - Claude Code may not have flushed the marker to disk yet
+    max_retries = 10
+    retry_delay = 0.1  # 100ms between retries
 
-    if not result.stdout.strip():
-        raise RuntimeError(f'Could not find session marker in any debug log files in {debug_dir}')
+    for attempt in range(max_retries):
+        result = subprocess.run(
+            [
+                'rg',
+                '-l',
+                '--fixed-strings',
+                '--glob',
+                '!latest',
+                session_marker,
+                debug_dir.as_posix(),
+            ],
+            capture_output=True,
+            text=True,
+        )
+
+        if result.stdout.strip():
+            break  # Found it
+
+        time.sleep(retry_delay)
+    else:
+        raise RuntimeError(f'Could not find session marker in any debug log files in {debug_dir} after {max_retries} attempts')
 
     # rg found the marker - extract session ID from first matching file
     # Format: ~/.claude/debug/{session_id}.log
@@ -391,7 +403,7 @@ def register_tools(state: ServerState) -> None:
 
     @server.tool()
     async def clone_session(
-        source_session_id: str,
+        source_session_id: str | None = None,
         translate_paths: bool = True,
         ctx: Context = None,
     ) -> RestoreResult:
@@ -403,13 +415,17 @@ def register_tools(state: ServerState) -> None:
         copying all conversation history from the source session.
 
         Args:
-            source_session_id: Session ID to clone (full UUID or prefix)
+            source_session_id: Session ID to clone (full UUID or prefix).
+                              If None, clones the current session.
             translate_paths: Translate paths to current project (default: True)
 
         Returns:
             RestoreResult with new session ID and clone details
 
         Examples:
+            # Clone the current session (fork yourself)
+            result = await clone_session()
+
             # Clone by full session ID
             result = await clone_session('dbae570a-8b88-43e0-a6da-71d649ec07b0')
 
@@ -428,13 +444,16 @@ def register_tools(state: ServerState) -> None:
         """
         logger = DualLogger(ctx)
 
+        # Default to current session if not specified
+        target_id = source_session_id or state.session_id
+
         # Create clone service for current project
         clone_service = SessionCloneService(state.project_path)
 
         try:
             # Clone the session
             result = await clone_service.clone(
-                source_session_id=source_session_id,
+                source_session_id=target_id,
                 translate_paths=translate_paths,
                 logger=logger,
             )
@@ -519,6 +538,65 @@ def register_tools(state: ServerState) -> None:
                     await logger.info(f'To undo: claude-session restore --in-place {result.backup_path}')
         else:
             await logger.error(f'Delete failed: {result.error_message}')
+
+        return result
+
+    @server.tool()
+    async def session_lineage(
+        session_id: str | None = None,
+        ctx: Context = None,
+    ) -> LineageResult | None:
+        """
+        Get lineage information for a session.
+
+        Shows parent-child relationships, cross-machine detection, and session
+        provenance. Useful for understanding where a session came from.
+
+        Args:
+            session_id: Session ID to look up. Accepts full UUID or prefix.
+                       If None, uses the current session.
+
+        Returns:
+            LineageResult with session provenance, or None if session has no
+            lineage (native session, never cloned/restored).
+
+        Examples:
+            # Get lineage for current session
+            result = await session_lineage()
+
+            # Get lineage for specific session
+            result = await session_lineage('019b5232')
+        """
+        logger = DualLogger(ctx)
+
+        target_id = session_id or state.session_id
+        await logger.info(f'Looking up lineage for session: {target_id[:12]}...')
+
+        # Query storage via service
+        lineage_service = LineageService()
+        entry = lineage_service.get_entry(target_id)
+
+        if entry is None:
+            await logger.info('No lineage found (native session)')
+            return None
+
+        # Compute cross-machine status
+        is_cross = lineage_service.is_cross_machine(target_id)
+
+        # MCP handler creates API response model
+        result = LineageResult(
+            **entry.model_dump(),
+            is_cross_machine=is_cross,
+        )
+
+        if result.is_cross_machine:
+            await logger.info(
+                f'Cross-machine restore: {result.parent_machine_id} -> {result.target_machine_id}'
+            )
+        elif result.is_cross_machine is False:
+            await logger.info('Same-machine operation')
+        else:
+            await logger.info(f'Method: {result.method} (no machine tracking)')
 
         return result
 

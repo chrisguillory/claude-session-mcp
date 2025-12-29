@@ -23,6 +23,7 @@ from ..types import JsonDatetime
 __all__ = [
     'LineageEntry',
     'LineageFile',
+    'LineageResult',
     'LineageService',
     'get_machine_id',
 ]
@@ -72,6 +73,42 @@ class LineageEntry(StrictModel):
     # Operational flags
     paths_translated: bool  # Whether project paths were translated
     archive_path: str | None  # Archive path (restore operations only)
+
+
+class LineageResult(StrictModel):
+    """API response for session lineage query.
+
+    Separate from LineageEntry (storage model) to allow independent evolution
+    of the API contract and storage format. Contains computed fields that are
+    not persisted to storage.
+
+    Field ordering matches LineageEntry plus computed fields at the end.
+    """
+
+    # Identity
+    child_session_id: str
+    parent_session_id: str
+
+    # Temporal
+    cloned_at: JsonDatetime
+
+    # Operation
+    method: Literal['clone', 'restore']
+
+    # Parent context (source)
+    parent_project_path: str
+    parent_machine_id: str | None
+
+    # Target context (destination)
+    target_project_path: str
+    target_machine_id: str
+
+    # Operational flags
+    paths_translated: bool
+    archive_path: str | None
+
+    # Computed (not in storage)
+    is_cross_machine: bool | None  # True=cross-machine, False=same-machine, None=unknown (clones)
 
 
 class LineageFile(StrictModel):

@@ -254,10 +254,17 @@ claude mcp add --scope user claude-session -- uv run --project ~/claude-session-
 
 **Tools:**
 
-- `clone_session` - Clone a session directly (no archive file needed)
-- `save_current_session` - Archive current session (local storage only)
-- `restore_session` - Restore archived session (local files only)
-- `delete_session` - Delete session artifacts with auto-backup
+MCP tools are session-aware - they automatically know the current session ID and project path.
+
+| Tool                   | Description                                                           |
+|------------------------|-----------------------------------------------------------------------|
+| `save_current_session` | Archive current session (local JSON or zst)                           |
+| `restore_session`      | Restore from archive with new UUIDv7 ID                               |
+| `clone_session`        | Clone session directly. Defaults to current session ("fork yourself") |
+| `delete_session`       | Delete session with auto-backup. Native sessions require `force=True` |
+| `session_lineage`      | Get lineage info. Defaults to current session                         |
+
+**Note**: Unlike CLI, MCP tools can't auto-launch Claude after operations.
 
 ## Technical Details
 
