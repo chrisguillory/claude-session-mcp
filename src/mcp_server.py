@@ -23,8 +23,9 @@ import subprocess
 import sys
 import tempfile
 import uuid
+from collections.abc import AsyncIterator
 from pathlib import Path
-from typing import AsyncIterator, Literal
+from typing import Literal
 
 import attrs
 from mcp.server.fastmcp import Context, FastMCP
@@ -36,7 +37,6 @@ from .services.delete import DeleteResult, SessionDeleteService
 from .services.parser import SessionParserService
 from .services.restore import RestoreResult, SessionRestoreService
 from .storage.local import LocalFileSystemStorage
-
 
 # ==============================================================================
 # Server State (immutable)
@@ -234,7 +234,10 @@ async def lifespan(mcp_server: FastMCP) -> AsyncIterator[None]:
         # Initialize services
         parser_service = SessionParserService()
         archive_service = SessionArchiveService(
-            session_id=session_id, project_path=project_path, temp_dir=temp_path, parser_service=parser_service
+            session_id=session_id,
+            temp_dir=temp_path,
+            parser_service=parser_service,
+            project_path=project_path,  # Real project path from lsof
         )
 
         # Create immutable state

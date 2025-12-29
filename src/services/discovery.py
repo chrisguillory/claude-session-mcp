@@ -1,8 +1,7 @@
 """
 Session discovery service - finds sessions across all Claude Code projects.
 
-Provides utilities to discover sessions by ID, list all sessions, and decode
-Claude's filesystem path encoding scheme.
+Provides utilities to discover sessions by ID and list all available sessions.
 """
 
 from __future__ import annotations
@@ -14,10 +13,16 @@ from src.base_model import StrictModel
 
 
 class SessionInfo(StrictModel):
-    """Information about a discovered Claude Code session."""
+    """
+    Information about a discovered Claude Code session.
+
+    Note: The project path cannot be reliably determined from the folder name
+    due to lossy encoding (/, ., ' ', ~ all become -). Use extract_source_project_path()
+    on loaded session records to get the actual project path.
+    """
 
     session_id: str
-    project_path: Path
+    session_folder: Path  # The ~/.claude/projects/{encoded}/ folder, NOT decoded path
 
 
 class SessionDiscoveryService:
@@ -40,7 +45,7 @@ class SessionDiscoveryService:
             session_id: Session ID to find
 
         Returns:
-            SessionInfo with session_id and project_path, None if not found
+            SessionInfo with session_id and session_folder, None if not found
         """
         if not self.claude_sessions_dir.exists():
             return None
@@ -57,33 +62,9 @@ class SessionDiscoveryService:
 
         # Get first match (should only be one)
         session_file = Path(result.stdout.strip().split('\n')[0])
-        project_dir = session_file.parent
-
-        # Decode project path from directory name
-        project_path = self._decode_path(project_dir.name)
+        session_folder = session_file.parent
 
         return SessionInfo(
             session_id=session_id,
-            project_path=project_path,
+            session_folder=session_folder,
         )
-
-    def _decode_path(self, encoded: str) -> Path:
-        """
-        Decode Claude's filesystem path encoding.
-
-        Claude encodes paths by replacing '/' with '-':
-        /Users/chris/project -> -Users-chris-project
-
-        Args:
-            encoded: Encoded path string
-
-        Returns:
-            Decoded Path object
-        """
-        # Remove leading hyphen and replace remaining hyphens with slashes
-        if encoded.startswith('-'):
-            decoded = encoded[1:].replace('-', '/')
-            return Path(f'/{decoded}')
-        else:
-            # Shouldn't happen, but handle gracefully
-            return Path(encoded.replace('-', '/'))

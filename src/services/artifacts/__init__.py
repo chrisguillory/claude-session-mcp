@@ -39,6 +39,10 @@ from .tool_results import (
     get_tool_results_dir,
     write_tool_results,
 )
+from .paths import (
+    MissingCwdError,
+    extract_source_project_path,
+)
 
 __all__ = [
     # agent_ids
@@ -70,4 +74,7 @@ __all__ = [
     'get_tool_results_dir',
     'collect_tool_results',
     'write_tool_results',
+    # paths
+    'MissingCwdError',
+    'extract_source_project_path',
 ]

@@ -25,11 +25,13 @@ from src.models import (
     SessionRecord,
     UserRecord,
 )
+from src.paths import encode_path
 from src.services.artifacts import (
     collect_plan_files,
     collect_todos,
     collect_tool_results,
     extract_slugs_from_records,
+    extract_source_project_path,
     validate_session_env_empty,
 )
 from src.services.lineage import get_machine_id
@@ -231,17 +233,31 @@ class SessionArchiveService:
     """
 
     def __init__(
-        self, session_id: str, project_path: Path, temp_dir: Path, parser_service: SessionParserService
+        self,
+        session_id: str,
+        temp_dir: Path,
+        parser_service: SessionParserService,
+        *,
+        project_path: Path | None = None,
+        session_folder: Path | None = None,
     ) -> None:
         """
         Initialize archive service.
 
         Args:
             session_id: Current Claude Code session ID
-            project_path: Current project directory
             temp_dir: Temporary directory for default output
             parser_service: Session parser service for loading JSONL files
+            project_path: Current project directory (used to find session folder via encoding)
+            session_folder: Session folder directly (bypasses encoding, use when discovered)
+
+        Note: Provide either project_path OR session_folder.
+        - MCP handlers have the real project_path from lsof - use that
+        - CLI archive command has session_folder from discovery - use that
         """
+        if not project_path and not session_folder:
+            raise ValueError('Either project_path or session_folder must be provided')
+
         self.session_id = session_id
         self.project_path = project_path
         self.temp_dir = temp_dir
@@ -250,8 +266,9 @@ class SessionArchiveService:
         # Claude stores sessions here
         self.claude_sessions_dir = Path.home() / '.claude' / 'projects'
 
-        # Computed lazily - the project folder in ~/.claude/projects/
-        self._project_folder: Path | None = None
+        # If session_folder provided, use it directly (no encoding needed)
+        # Otherwise, computed lazily from project_path
+        self._project_folder: Path | None = session_folder
 
     def _get_project_folder(self) -> Path:
         """
@@ -269,7 +286,7 @@ class SessionArchiveService:
         if self._project_folder is not None:
             return self._project_folder
 
-        encoded_project = self._encode_path(self.project_path)
+        encoded_project = encode_path(self.project_path)
         project_folders = list(self.claude_sessions_dir.glob('*'))
 
         for folder in project_folders:
@@ -365,12 +382,19 @@ class SessionArchiveService:
         # Validate session-env is empty (future-proofing)
         validate_session_env_empty(self.session_id)
 
+        # Extract source project path from session records (source of truth)
+        # We use cwd from records, not self.project_path, because:
+        # 1. MCP handlers pass Claude's cwd which is correct
+        # 2. CLI archive command may pass a lossy-decoded path from SessionDiscoveryService
+        # The record cwd field is always the authoritative source
+        source_project_path = extract_source_project_path(files_data)
+
         # Create archive structure
         archive = SessionArchive(
             version=ARCHIVE_FORMAT_VERSION,
             session_id=self.session_id,
             archived_at=datetime.now(UTC),
-            original_project_path=str(self.project_path),
+            original_project_path=str(source_project_path),
             claude_code_version=claude_code_version,
             files=files_data,
             plan_files=plan_files,
@@ -439,8 +463,9 @@ class SessionArchiveService:
 
         # Find agent files that belong to this session using rg
         # Note: JSON may have optional space after colon, so we use regex pattern
+        pattern = f'"sessionId":\\s*"{self.session_id}"'
         result = subprocess.run(
-            ['rg', '--files-with-matches', f'"sessionId":\\s*"{self.session_id}"', '--glob', 'agent-*.jsonl', str(project_folder)],
+            ['rg', '--files-with-matches', pattern, '--glob', 'agent-*.jsonl', str(project_folder)],
             capture_output=True,
             text=True,
         )
@@ -539,23 +564,3 @@ class SessionArchiveService:
         await logger.info(f'Compressed {len(json_bytes):,} → {len(compressed):,} bytes ({compression_ratio:.1f}x)')
 
         return compressed
-
-    def _encode_path(self, path: Path) -> str:
-        """
-        Encode filesystem path for folder name.
-
-        Claude Code encodes paths by replacing special characters with hyphens:
-        - Forward slashes (/) → hyphens (-)
-        - Periods (.) → hyphens (-)
-        - Spaces ( ) → hyphens (-)
-        - Tildes (~) → hyphens (-)
-
-        Example: /Users/user/Library/Mobile Documents/com~apple~CloudDocs/project
-              → -Users-user-Library-Mobile-Documents-com-apple-CloudDocs-project
-        """
-        result = str(path)
-        result = result.replace('/', '-')
-        result = result.replace('.', '-')
-        result = result.replace(' ', '-')
-        result = result.replace('~', '-')
-        return result

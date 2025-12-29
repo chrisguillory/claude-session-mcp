@@ -19,8 +19,8 @@ import zstandard
 from src.base_model import StrictModel
 from src.introspection import get_path_fields
 from src.models import SessionRecord, SessionRecordAdapter
+from src.paths import encode_path
 from src.services.archive import LoggerProtocol, SessionArchive
-from src.services.lineage import LineageService
 from src.services.artifacts import (
     TODOS_DIR,
     apply_agent_id_mapping,
@@ -34,6 +34,7 @@ from src.services.artifacts import (
     write_todos,
     write_tool_results,
 )
+from src.services.lineage import LineageService
 
 # ==============================================================================
 # Path Translation Service
@@ -506,26 +507,5 @@ class SessionRestoreService:
 
     def _get_session_directory(self) -> Path:
         """Get the session directory for the current project."""
-        # Encode project path for Claude's directory structure
-        encoded = self._encode_path(self.project_path)
+        encoded = encode_path(self.project_path)
         return self.claude_sessions_dir / encoded
-
-    def _encode_path(self, path: Path) -> str:
-        """
-        Encode path for Claude's directory naming.
-
-        Claude Code encodes paths by replacing special characters with hyphens:
-        - Forward slashes (/) → hyphens (-)
-        - Periods (.) → hyphens (-)
-        - Spaces ( ) → hyphens (-)
-        - Tildes (~) → hyphens (-)
-
-        Example: /Users/user/Library/Mobile Documents/com~apple~CloudDocs/project
-              → -Users-user-Library-Mobile-Documents-com-apple-CloudDocs-project
-        """
-        result = str(path)
-        result = result.replace('/', '-')
-        result = result.replace('.', '-')
-        result = result.replace(' ', '-')
-        result = result.replace('~', '-')
-        return result

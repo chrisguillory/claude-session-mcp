@@ -15,9 +15,9 @@ from pathlib import Path
 
 import uuid6
 
-from src.models import AssistantRecord, SessionRecord, SessionRecordAdapter, UserRecord
+from src.models import SessionRecord, SessionRecordAdapter
+from src.paths import encode_path
 from src.services.archive import LoggerProtocol
-from src.services.lineage import LineageService
 from src.services.artifacts import (
     TODOS_DIR,
     apply_agent_id_mapping,
@@ -28,6 +28,7 @@ from src.services.artifacts import (
     create_session_env_dir,
     extract_agent_ids_from_files,
     extract_slugs_from_records,
+    extract_source_project_path,
     generate_agent_id_mapping,
     generate_clone_slug,
     transform_agent_filename,
@@ -37,6 +38,7 @@ from src.services.artifacts import (
     write_tool_results,
 )
 from src.services.discovery import SessionDiscoveryService, SessionInfo
+from src.services.lineage import LineageService
 from src.services.parser import SessionParserService
 from src.services.restore import PathTranslator, RestoreResult
 
@@ -53,29 +55,6 @@ class AmbiguousSessionError(Exception):
         super().__init__(
             f"Session ID prefix '{prefix}' is ambiguous. Matches {len(matches)} sessions:\n  {matches_str}"
         )
-
-
-def extract_source_project_path(
-    files_data: Mapping[str, Sequence[SessionRecord]],
-) -> Path | None:
-    """
-    Extract the source project path from session records.
-
-    The path encoding used by Claude Code is lossy (multiple chars → '-'),
-    so we can't reliably decode it. Instead, we extract the actual path
-    from the 'cwd' field of session records, which contains the true path.
-
-    Args:
-        files_data: Mapping of filename -> sequence of SessionRecord
-
-    Returns:
-        Source project path, or None if no cwd found in records
-    """
-    for records in files_data.values():
-        for record in records:
-            if isinstance(record, (UserRecord, AssistantRecord)) and record.cwd:
-                return Path(record.cwd)
-    return None
 
 
 class SessionCloneService:
@@ -133,11 +112,10 @@ class SessionCloneService:
 
         if logger:
             await logger.info(f'Cloning session: {session_info.session_id}')
-            await logger.info(f'Source project: {session_info.project_path}')
+            await logger.info(f'Source session folder: {session_info.session_folder}')
 
-        # Compute source session directory (needed for tool_results collection)
-        encoded_source_path = self._encode_path(session_info.project_path)
-        source_session_dir = self.claude_sessions_dir / encoded_source_path
+        # Source session directory (we have it directly from discovery, no encoding needed)
+        source_session_dir = session_info.session_folder
 
         # Discover all session files (main + agents)
         session_files = await self._discover_session_files(session_info, logger)
@@ -192,13 +170,12 @@ class SessionCloneService:
         # Create path translator if needed
         # Note: We use the actual cwd from records, not the decoded path from discovery,
         # because the path encoding is lossy (multiple chars → '-') and decoding is unreliable.
+        source_path = extract_source_project_path(files_data)
         translator = None
-        if translate_paths:
-            source_path = extract_source_project_path(files_data)
-            if source_path and source_path != self.target_project_path:
-                translator = PathTranslator(str(source_path), str(self.target_project_path))
-                if logger:
-                    await logger.info(f'Path translation: {source_path} -> {self.target_project_path}')
+        if translate_paths and source_path != self.target_project_path:
+            translator = PathTranslator(str(source_path), str(self.target_project_path))
+            if logger:
+                await logger.info(f'Path translation: {source_path} -> {self.target_project_path}')
 
         # Get target directory and plans directory
         target_dir = self._get_session_directory()
@@ -329,23 +306,21 @@ class SessionCloneService:
             if logger:
                 await logger.info(f'Cloned {new_filename}: {len(updated_records)} records')
 
-        # Record lineage
-        source_path = extract_source_project_path(files_data)
-        if source_path:
-            lineage_service = LineageService()
-            lineage_service.record_clone(
-                child_session_id=new_session_id,
-                parent_session_id=session_info.session_id,
-                cloned_at=datetime.now(UTC),
-                parent_project_path=source_path,
-                target_project_path=self.target_project_path,
-                method='clone',
-                parent_machine_id=None,  # Clone is always same machine
-                paths_translated=translator is not None,
-                archive_path=None,
-            )
-            if logger:
-                await logger.info(f'Recorded lineage: {session_info.session_id} -> {new_session_id}')
+        # Record lineage (source_path already extracted above)
+        lineage_service = LineageService()
+        lineage_service.record_clone(
+            child_session_id=new_session_id,
+            parent_session_id=session_info.session_id,
+            cloned_at=datetime.now(UTC),
+            parent_project_path=source_path,
+            target_project_path=self.target_project_path,
+            method='clone',
+            parent_machine_id=None,  # Clone is always same machine
+            paths_translated=translator is not None,
+            archive_path=None,
+        )
+        if logger:
+            await logger.info(f'Recorded lineage: {session_info.session_id} -> {new_session_id}')
 
         return RestoreResult(
             new_session_id=new_session_id,
@@ -420,10 +395,9 @@ class SessionCloneService:
                 continue
 
             session_id = session_file.stem
-            project_dir = session_file.parent
-            project_path = self.discovery_service._decode_path(project_dir.name)
+            session_folder = session_file.parent
 
-            matches.append(SessionInfo(session_id=session_id, project_path=project_path))
+            matches.append(SessionInfo(session_id=session_id, session_folder=session_folder))
 
         return matches
 
@@ -433,9 +407,8 @@ class SessionCloneService:
         logger: LoggerProtocol | None,
     ) -> list[Path]:
         """Discover all JSONL files for a session (main + agents)."""
-        # Get the session directory
-        encoded_path = self._encode_path(session_info.project_path)
-        session_dir = self.claude_sessions_dir / encoded_path
+        # Use session folder directly from discovery (no encoding needed)
+        session_dir = session_info.session_folder
 
         if not session_dir.exists():
             raise FileNotFoundError(f'Session directory not found: {session_dir}')
@@ -496,25 +469,5 @@ class SessionCloneService:
 
     def _get_session_directory(self) -> Path:
         """Get the session directory for the target project."""
-        encoded = self._encode_path(self.target_project_path)
+        encoded = encode_path(self.target_project_path)
         return self.claude_sessions_dir / encoded
-
-    def _encode_path(self, path: Path) -> str:
-        """
-        Encode path for Claude's directory naming.
-
-        Claude Code encodes paths by replacing special characters with hyphens:
-        - Forward slashes (/) → hyphens (-)
-        - Periods (.) → hyphens (-)
-        - Spaces ( ) → hyphens (-)
-        - Tildes (~) → hyphens (-)
-
-        Example: /Users/user/Library/Mobile Documents/com~apple~CloudDocs/project
-              → -Users-user-Library-Mobile-Documents-com-apple-CloudDocs-project
-        """
-        result = str(path)
-        result = result.replace('/', '-')
-        result = result.replace('.', '-')
-        result = result.replace(' ', '-')
-        result = result.replace('~', '-')
-        return result

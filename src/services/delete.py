@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Literal
 
 from src.base_model import StrictModel
+from src.paths import encode_path
 from src.services.archive import LoggerProtocol, SessionArchiveService
 from src.services.artifacts import (
     SESSION_ENV_DIR,
@@ -198,7 +199,7 @@ class SessionDeleteService:
             await logger.info(f'Discovering artifacts for session: {session_id}')
 
         # Get session directory
-        encoded_path = self._encode_path(self.project_path)
+        encoded_path = encode_path(self.project_path)
         session_dir = self.claude_sessions_dir / encoded_path
 
         # Find main session file
@@ -505,9 +506,9 @@ class SessionDeleteService:
         # Create archive service
         archive_service = SessionArchiveService(
             session_id=session_id,
-            project_path=self.project_path,
             temp_dir=DELETED_SESSIONS_DIR,
             parser_service=self.parser_service,
+            project_path=self.project_path,  # Real project path from CLI/MCP
         )
 
         # Create storage backend and archive
@@ -528,7 +529,7 @@ class SessionDeleteService:
     ) -> None:
         """Clean up empty directories after deletion."""
         # Tool results parent directory
-        encoded_path = self._encode_path(self.project_path)
+        encoded_path = encode_path(self.project_path)
         session_dir = self.claude_sessions_dir / encoded_path
         tool_results_parent = session_dir / session_id
 
@@ -549,16 +550,3 @@ class SessionDeleteService:
                     await logger.info(f'Removed empty directory: {session_env_dir}')
             except OSError:
                 pass
-
-    def _encode_path(self, path: Path) -> str:
-        """
-        Encode path for Claude's directory naming.
-
-        Claude Code encodes paths by replacing special characters with hyphens.
-        """
-        result = str(path)
-        result = result.replace('/', '-')
-        result = result.replace('.', '-')
-        result = result.replace(' ', '-')
-        result = result.replace('~', '-')
-        return result

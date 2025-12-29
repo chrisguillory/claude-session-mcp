@@ -9,12 +9,12 @@ from __future__ import annotations
 
 import asyncio
 import os
-import sys
 import tempfile
 import traceback
-from datetime import datetime, timezone
+from collections.abc import Sequence
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Literal, Sequence
+from typing import Literal
 
 import httpx
 import typer
@@ -24,8 +24,8 @@ from src.launcher import launch_claude_with_session
 from src.services.archive import SessionArchiveService
 from src.services.clone import AmbiguousSessionError, SessionCloneService
 from src.services.delete import SessionDeleteService
-from src.services.lineage import LineageService
 from src.services.discovery import SessionDiscoveryService
+from src.services.lineage import LineageService
 from src.services.parser import SessionParserService
 from src.services.restore import SessionRestoreService
 from src.storage.gist import GistStorage
@@ -99,7 +99,7 @@ async def _archive_async(
             typer.echo(f'Searched in: {discovery.claude_sessions_dir}', err=True)
             raise typer.Exit(1)
 
-        await logger.info(f'Found session in project: {session_info.project_path}')
+        await logger.info(f'Found session in folder: {session_info.session_folder}')
 
         # Parse output parameter - check if it's a Gist URL
         use_gist = output.startswith('gist://')
@@ -137,15 +137,15 @@ async def _archive_async(
             parser_service = SessionParserService()
             archive_service = SessionArchiveService(
                 session_id=session_id,
-                project_path=session_info.project_path,
                 temp_dir=Path(temp_dir),
                 parser_service=parser_service,
+                session_folder=session_info.session_folder,  # Use folder directly from discovery
             )
 
             # Create storage backend
             if use_gist:
                 # Generate filename for Gist
-                timestamp = datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')
+                timestamp = datetime.now(UTC).strftime('%Y%m%d_%H%M%S')
                 filename = f'session-{session_id[:8]}-{timestamp}.json'
 
                 storage = GistStorage(
@@ -171,17 +171,17 @@ async def _archive_async(
 
             # Print success
             if use_gist:
-                typer.secho(f'✓ Archive uploaded to GitHub Gist!', fg=typer.colors.GREEN)
+                typer.secho('✓ Archive uploaded to GitHub Gist!', fg=typer.colors.GREEN)
                 typer.echo(f'  URL: {metadata.file_path}')
                 typer.echo(f'  Gist ID: {storage.gist_id}')
                 typer.echo(f'  Format: {metadata.format}')
                 typer.echo(f'  Size: {metadata.size_mb} MB')
                 typer.echo(f'  Records: {metadata.record_count:,}')
                 typer.echo()
-                typer.echo(f'To restore, use:')
+                typer.echo('To restore, use:')
                 typer.secho(f'  claude-session restore gist://{storage.gist_id}', fg=typer.colors.CYAN)
             else:
-                typer.secho(f'✓ Archive created successfully!', fg=typer.colors.GREEN)
+                typer.secho('✓ Archive created successfully!', fg=typer.colors.GREEN)
                 typer.echo(f'  Path: {metadata.file_path}')
                 typer.echo(f'  Format: {metadata.format}')
                 typer.echo(f'  Size: {metadata.size_mb} MB')
@@ -310,7 +310,7 @@ async def _restore_async(
             archive_path.unlink()
 
         # Print success
-        typer.secho(f'✓ Session restored successfully!', fg=typer.colors.GREEN)
+        typer.secho('✓ Session restored successfully!', fg=typer.colors.GREEN)
         typer.echo(f'  New session ID: {result.new_session_id}')
         typer.echo(f'  Original session ID: {result.original_session_id}')
         typer.echo(f'  Project: {result.project_path}')
@@ -325,7 +325,7 @@ async def _restore_async(
             # Note: launch_claude_with_session uses execvp, so we never reach here
         else:
             typer.echo()
-            typer.echo(f'To continue this session, run:')
+            typer.echo('To continue this session, run:')
             typer.secho(f'  claude --resume {result.new_session_id}', fg=typer.colors.CYAN)
 
     except Exception as e:
@@ -387,7 +387,7 @@ async def _clone_async(
         )
 
         # Print success
-        typer.secho(f'✓ Session cloned successfully!', fg=typer.colors.GREEN)
+        typer.secho('✓ Session cloned successfully!', fg=typer.colors.GREEN)
         typer.echo(f'  New session ID: {result.new_session_id}')
         typer.echo(f'  Original session ID: {result.original_session_id}')
         typer.echo(f'  Project: {result.project_path}')
@@ -402,7 +402,7 @@ async def _clone_async(
             # Note: launch_claude_with_session uses execvp, so we never reach here
         else:
             typer.echo()
-            typer.echo(f'To continue this session, run:')
+            typer.echo('To continue this session, run:')
             typer.secho(f'  claude --resume {result.new_session_id}', fg=typer.colors.CYAN)
 
     except FileNotFoundError as e:
@@ -478,7 +478,7 @@ async def _delete_async(
             raise typer.Exit(1)
 
         if dry_run:
-            typer.secho(f'Dry run - would delete:', fg=typer.colors.YELLOW)
+            typer.secho('Dry run - would delete:', fg=typer.colors.YELLOW)
             typer.echo(f'  Session ID: {result.session_id}')
             typer.echo(f'  Files: {result.files_deleted}')
             typer.echo(f'  Size: {result.size_freed_bytes:,} bytes')
@@ -487,7 +487,7 @@ async def _delete_async(
                 for path in result.deleted_files:
                     typer.echo(f'    - {path}')
         else:
-            typer.secho(f'✓ Session deleted successfully!', fg=typer.colors.GREEN)
+            typer.secho('✓ Session deleted successfully!', fg=typer.colors.GREEN)
             typer.echo(f'  Session ID: {result.session_id}')
             typer.echo(f'  Files deleted: {result.files_deleted}')
             typer.echo(f'  Size freed: {result.size_freed_bytes:,} bytes')

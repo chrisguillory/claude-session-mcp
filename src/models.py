@@ -17,6 +17,7 @@ CLAUDE CODE VERSION COMPATIBILITY:
 - Schema v0.1.6: Added TaskOutput tool input model for Claude Code 2.0.65+
 - Schema v0.1.7: Added model_context_window_exceeded stop_reason for context overflow handling
 - Schema v0.1.8: Added sourceToolUseID, EmptyError, BeforeValidator for ultrathink case normalization (2.0.76+)
+- Schema v0.1.9: Added CustomTitleRecord for user-defined session names
 - If validation fails, Claude Code schema may have changed - update models accordingly
 
 NEW FIELDS IN CLAUDE CODE 2.0.51+ (Schema v0.1.3):
@@ -86,11 +87,11 @@ from src.types import ModelId
 # Schema Version
 # ==============================================================================
 
-SCHEMA_VERSION = '0.1.8'
+SCHEMA_VERSION = '0.1.9'
 CLAUDE_CODE_MIN_VERSION = '2.0.35'
 CLAUDE_CODE_MAX_VERSION = '2.0.76'
-LAST_VALIDATED = '2025-12-23'
-VALIDATION_RECORD_COUNT = 14_615
+LAST_VALIDATED = '2025-12-29'
+VALIDATION_RECORD_COUNT = 98_971
 
 
 # ==============================================================================
@@ -983,6 +984,19 @@ class QueueOperationRecord(StrictModel):
 
 
 # ==============================================================================
+# Custom Title Record (does NOT inherit from BaseRecord - minimal schema)
+# ==============================================================================
+
+
+class CustomTitleRecord(StrictModel):
+    """Custom title record for user-defined session names (minimal schema, no uuid)."""
+
+    type: Literal['custom-title']
+    customTitle: str  # User-defined session title
+    sessionId: str
+
+
+# ==============================================================================
 # Session Record (Discriminated Union)
 # ==============================================================================
 
@@ -1001,6 +1015,7 @@ SessionRecord = Annotated[
         SystemRecord,
         FileHistorySnapshotRecord,
         QueueOperationRecord,
+        CustomTitleRecord,
     ],
     Field(union_mode='left_to_right'),
 ]
