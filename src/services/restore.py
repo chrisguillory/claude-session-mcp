@@ -20,6 +20,7 @@ from src.base_model import StrictModel
 from src.introspection import get_path_fields
 from src.models import SessionRecord, SessionRecordAdapter
 from src.services.archive import LoggerProtocol, SessionArchive
+from src.services.lineage import LineageService
 from src.services.artifacts import (
     TODOS_DIR,
     apply_agent_id_mapping,
@@ -420,6 +421,25 @@ class SessionRestoreService:
 
             if logger:
                 await logger.info(f'Restored {new_filename}: {len(updated_records)} records')
+
+        # Record lineage (only for non-in-place restores)
+        if not in_place:
+            lineage_service = LineageService()
+            lineage_service.record_clone(
+                child_session_id=new_session_id,
+                parent_session_id=archive.session_id,
+                cloned_at=datetime.now(UTC),
+                parent_project_path=Path(archive.original_project_path),
+                target_project_path=self.project_path,
+                method='restore',
+                parent_machine_id=archive.machine_id,  # From archive (None for old archives)
+                paths_translated=translator is not None,
+                archive_path=archive_path,
+            )
+            if logger:
+                await logger.info(f'Recorded lineage: {archive.session_id} -> {new_session_id}')
+                if archive.machine_id:
+                    await logger.info(f'Source machine: {archive.machine_id}')
 
         return RestoreResult(
             new_session_id=new_session_id,

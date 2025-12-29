@@ -232,6 +232,27 @@ Claude's tokenizer differs from tiktoken, but rough estimates:
 | User/assistant text | ~100% | Full content |
 | Tool use inputs | ~100% | Full content |
 
+## Dependency Management
+
+**NEVER manually edit pyproject.toml to add/remove dependencies.** Use uv CLI commands which properly update both pyproject.toml and uv.lock:
+
+```bash
+# Add a dependency
+uv add filelock
+
+# Add without version constraint (unless one is explicitly needed)
+uv add "filelock"
+
+# Add dev dependency
+uv add --dev pytest
+
+# Remove a dependency
+uv remove filelock
+
+# Sync dependencies (install from lockfile)
+uv sync
+```
+
 ## Operational Patterns
 
 ### Finding Session Files

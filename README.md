@@ -85,9 +85,11 @@ claude-session restore --in-place ~/.claude-session-mcp/deleted/<backup>.json
 
 - **Lossless forking**: Clone sessions while preserving parent immutability
 - **Complete artifact capture**: Session files, agent files, plan files, tool results, and todos
+- **Lineage tracking**: Records parent-child relationships when sessions are cloned or restored
 - **Local storage**: Save sessions as JSON or compressed (zstd)
 - **GitHub Gist**: Private/public Gist storage (100MB limit)
 - **Path translation**: Automatically translates file paths when restoring to different directories
+- **Cross-machine tracking**: Archives include machine ID for detecting cross-machine restores
 - **Delete with safety**: Auto-backup before deletion, native sessions require `--force`
 - **Fail-fast checks**: Prevents partial writes if any output file already exists
 - **UUIDv7 session IDs**: Cloned/restored sessions use time-ordered UUIDv7 (vs Claude's random UUIDv4)
@@ -193,6 +195,51 @@ claude-session delete <session-id>
 - Auto-backup created at `~/.claude-session-mcp/deleted/` before deletion (unless `--no-backup`)
 - Use `restore --in-place <backup>` to undo a delete
 
+### Lineage
+
+View parent-child relationships for cloned/restored sessions:
+
+```bash
+claude-session lineage <session-id>
+
+# Arguments:
+#   session-id     Session ID (full UUID or prefix)
+
+# Options:
+#   --format, -f       Output format: text, tree, or json (default: text)
+```
+
+**Examples:**
+
+```bash
+# View lineage for a session
+claude-session lineage 019b53ff
+# Output:
+# Session: 019b53ff-4ef1-750a-9234-500b42ac818e
+# Parent:  c3bac5a6-f519-4ef8-8dbc-7f7f030ebe5b
+# Cloned:  2025-12-29 10:30:00+00:00
+# Method:  clone
+# Source:  /Users/alice/project
+# Target:  /Users/bob/project
+# Machine: bob@macbook.local
+
+# View ancestry tree (multi-generational)
+claude-session lineage 019b6b8f --format tree
+# Output:
+# c3bac5a6-f519-4ef8-8dbc-7f7f030ebe5b
+#   └─ 019b53ff-4ef1-750a-9234-500b42ac818e
+#     └─ 019b6b8f
+
+# Export as JSON
+claude-session lineage 019b53ff --format json
+```
+
+**Lineage tracking:**
+- Lineage is stored in `~/.claude-session-mcp/lineage.json`
+- Tracks: parent/child session IDs, timestamps, project paths, machine IDs
+- Cross-machine restores are detected and highlighted
+- Native (UUIDv4) sessions have no lineage entry
+
 ## MCP Server
 
 Install the MCP server to use archive/restore directly from Claude Code:
@@ -237,11 +284,12 @@ The version digit (4 or 7) is at position 15 (first digit of third group).
 
 ### Archive Format Versions
 
-| Version | Added Fields            | Description               |
-|---------|-------------------------|---------------------------|
-| 1.0     | `files`                 | Session JSONL files only  |
-| 1.1     | `plan_files`            | Added plan file content   |
-| 1.2     | `tool_results`, `todos` | Complete artifact capture |
+| Version | Added Fields            | Description                        |
+|---------|-------------------------|------------------------------------|
+| 1.0     | `files`                 | Session JSONL files only           |
+| 1.1     | `plan_files`            | Added plan file content            |
+| 1.2     | `tool_results`, `todos` | Complete artifact capture          |
+| 1.3     | `machine_id`            | Cross-machine lineage tracking     |
 
 Archives are backwards compatible - older archives can be restored by newer versions.
 

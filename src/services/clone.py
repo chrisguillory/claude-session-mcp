@@ -17,6 +17,7 @@ import uuid6
 
 from src.models import AssistantRecord, SessionRecord, SessionRecordAdapter, UserRecord
 from src.services.archive import LoggerProtocol
+from src.services.lineage import LineageService
 from src.services.artifacts import (
     TODOS_DIR,
     apply_agent_id_mapping,
@@ -327,6 +328,24 @@ class SessionCloneService:
 
             if logger:
                 await logger.info(f'Cloned {new_filename}: {len(updated_records)} records')
+
+        # Record lineage
+        source_path = extract_source_project_path(files_data)
+        if source_path:
+            lineage_service = LineageService()
+            lineage_service.record_clone(
+                child_session_id=new_session_id,
+                parent_session_id=session_info.session_id,
+                cloned_at=datetime.now(UTC),
+                parent_project_path=source_path,
+                target_project_path=self.target_project_path,
+                method='clone',
+                parent_machine_id=None,  # Clone is always same machine
+                paths_translated=translator is not None,
+                archive_path=None,
+            )
+            if logger:
+                await logger.info(f'Recorded lineage: {session_info.session_id} -> {new_session_id}')
 
         return RestoreResult(
             new_session_id=new_session_id,

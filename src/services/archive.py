@@ -32,6 +32,7 @@ from src.services.artifacts import (
     extract_slugs_from_records,
     validate_session_env_empty,
 )
+from src.services.lineage import get_machine_id
 from src.services.parser import SessionParserService
 from src.storage.protocol import StorageBackend
 from src.types import JsonDatetime
@@ -83,7 +84,7 @@ class ArchiveMetadata(StrictModel):
 # ==============================================================================
 
 # Archive format version - single source of truth for what this code creates
-ARCHIVE_FORMAT_VERSION = '1.2'
+ARCHIVE_FORMAT_VERSION = '1.3'
 
 
 class SessionArchive(StrictModel):
@@ -94,6 +95,7 @@ class SessionArchive(StrictModel):
     - 1.0: Initial format (session JSONL files only)
     - 1.1: Added plan_files field
     - 1.2: Added tool_results and todos fields
+    - 1.3: Added machine_id field for cross-machine lineage tracking
 
     Cloned artifact identification patterns:
     - Session IDs: UUIDv7 (vs Claude's UUIDv4)
@@ -115,6 +117,7 @@ class SessionArchive(StrictModel):
     plan_files: Mapping[str, str] = MappingProxyType({})  # slug -> content (v1.1+)
     tool_results: Mapping[str, str] = MappingProxyType({})  # tool_use_id -> content (v1.2+)
     todos: Mapping[str, str] = MappingProxyType({})  # original_filename -> JSON content (v1.2+)
+    machine_id: str | None = None  # Machine where archive was created (v1.3+)
 
 
 # ==============================================================================
@@ -373,6 +376,7 @@ class SessionArchiveService:
             plan_files=plan_files,
             tool_results=tool_results,
             todos=todos,
+            machine_id=get_machine_id(),
         )
 
         # Serialize and compress

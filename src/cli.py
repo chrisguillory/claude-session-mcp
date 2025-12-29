@@ -24,6 +24,7 @@ from src.launcher import launch_claude_with_session
 from src.services.archive import SessionArchiveService
 from src.services.clone import AmbiguousSessionError, SessionCloneService
 from src.services.delete import SessionDeleteService
+from src.services.lineage import LineageService
 from src.services.discovery import SessionDiscoveryService
 from src.services.parser import SessionParserService
 from src.services.restore import SessionRestoreService
@@ -511,6 +512,66 @@ async def _delete_async(
         if verbose:
             traceback.print_exc()
         raise typer.Exit(1)
+
+
+@app.command()
+def lineage(
+    session_id: str = typer.Argument(..., help='Session ID (full or prefix)'),
+    format: Literal['text', 'tree', 'json'] = typer.Option(
+        'text', '--format', '-f', help='Output format: text, tree, or json'
+    ),
+) -> None:
+    """Show the lineage (parent-child relationships) for a session.
+
+    Examples:
+        claude-session lineage 019b53ff
+        claude-session lineage c3bac5a6 --format tree
+        claude-session lineage 019b53ff --format json
+    """
+    lineage_service = LineageService()
+    entry = lineage_service.get_entry(session_id)
+
+    if format == 'text':
+        if entry:
+            typer.echo(f'Session: {entry.child_session_id}')
+            typer.echo(f'Parent:  {entry.parent_session_id}')
+            typer.echo(f'Cloned:  {entry.cloned_at}')
+            typer.echo(f'Method:  {entry.method}')
+            typer.echo(f'Source:  {entry.parent_project_path}')
+            typer.echo(f'Target:  {entry.target_project_path}')
+            typer.echo(f'Machine: {entry.target_machine_id}')
+            if entry.parent_machine_id:
+                if entry.parent_machine_id != entry.target_machine_id:
+                    typer.secho(f'Source Machine: {entry.parent_machine_id} (cross-machine)', fg=typer.colors.YELLOW)
+                else:
+                    typer.echo(f'Source Machine: {entry.parent_machine_id} (same machine)')
+            if entry.archive_path:
+                typer.echo(f'Archive: {entry.archive_path}')
+            if entry.paths_translated:
+                typer.secho('Paths translated: yes', fg=typer.colors.CYAN)
+        else:
+            typer.secho(f'No lineage entry found for {session_id}', fg=typer.colors.YELLOW)
+            typer.echo('(This is either a native session or lineage tracking was not enabled)')
+
+    elif format == 'tree':
+        ancestry = lineage_service.get_ancestry(session_id)
+        if not ancestry:
+            typer.secho(f'No lineage found for {session_id}', fg=typer.colors.YELLOW)
+        else:
+            for i, ancestor_id in enumerate(ancestry):
+                indent = '  ' * i
+                prefix = '└─ ' if i > 0 else ''
+                # Highlight the requested session
+                if ancestor_id == session_id or ancestor_id.startswith(session_id):
+                    typer.secho(f'{indent}{prefix}{ancestor_id}', fg=typer.colors.GREEN)
+                else:
+                    typer.echo(f'{indent}{prefix}{ancestor_id}')
+
+    elif format == 'json':
+        if entry:
+            typer.echo(entry.model_dump_json(indent=2))
+        else:
+            typer.echo('null')
 
 
 def main() -> None:
