@@ -195,14 +195,20 @@ class GistStorage:
             if filename not in files:
                 raise ValueError(f"File '{filename}' not found in gist {self.gist_id}")
 
-            # Get file content (may need to fetch from raw_url for large files)
+            # Get file content (must fetch from raw_url for truncated files)
             file_data = files[filename]
-            if 'content' in file_data:
-                content = file_data['content']
-            else:
-                # Large files have raw_url instead of inline content
-                raw_response = await client.get(file_data['raw_url'])
+            if file_data.get('truncated', False) or 'content' not in file_data:
+                # Truncated or missing content - fetch full content from raw_url
+                raw_url = file_data.get('raw_url')
+                if not raw_url:
+                    raise ValueError(
+                        f"File '{filename}' is truncated but no raw_url available. "
+                        f"File size: {file_data.get('size', 'unknown')} bytes"
+                    )
+                raw_response = await client.get(raw_url)
                 raw_response.raise_for_status()
                 content = raw_response.text
+            else:
+                content = file_data['content']
 
             return content.encode('utf-8')
