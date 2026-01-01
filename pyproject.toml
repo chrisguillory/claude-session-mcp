@@ -34,17 +34,47 @@ target-version = "py313"
 
 [tool.ruff.lint]
 select = [
-    "E",   # pycodestyle errors
-    "W",   # pycodestyle warnings
-    "F",   # pyflakes
-    "I",   # isort
-    "UP",  # pyupgrade
+    "C4",   # flake8-comprehensions
+    "DTZ",  # flake8-datetimez (timezone safety)
+    "E",    # pycodestyle errors
+    "F",    # pyflakes
+    "FLY",  # flynt (f-string conversion)
+    "I",    # isort
+    "PERF", # perflint (performance)
+    "SIM",  # flake8-simplify
+    "UP",   # pyupgrade
+    "W",    # pycodestyle warnings
 ]
+ignore = [
+    "DTZ011",  # date.today() without timezone is fine for date-only ops
+    "E501",    # line length handled by formatter
+    "SIM102",  # allow nested if statements
+    "SIM108",  # allow if-else over ternary
+]
+
+[tool.ruff.lint.isort]
+required-imports = ["from __future__ import annotations"]
 
 [tool.ruff.format]
 quote-style = "single"
 
+[tool.mypy]
+python_version = "3.13"
+plugins = ["pydantic.mypy"]
+strict = true
+exclude = [
+    ".venv",
+    "scripts",  # utility scripts can be less strict
+]
+
+[tool.pydantic-mypy]
+init_forbid_extra = true
+init_typed = true
+
 [dependency-groups]
 dev = [
-    "uuid6>=2025.0.1",
+    "mypy>=1.19.1",
+    "pre-commit>=4.5.1",
+    "ruff>=0.14.10",
 ]
+
