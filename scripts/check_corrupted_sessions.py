@@ -10,6 +10,8 @@ This script validates that all session files contain valid JSON records.
 Useful for detecting file corruption before running the MCP server.
 """
 
+from __future__ import annotations
+
 import json
 import sys
 from pathlib import Path
@@ -25,7 +27,7 @@ def check_file(jsonl_file: Path) -> tuple[bool, int, str | None]:
     total_lines = 0
 
     try:
-        with open(jsonl_file, 'r') as f:
+        with open(jsonl_file) as f:
             for line_num, line in enumerate(f, 1):
                 if not line.strip():
                     continue

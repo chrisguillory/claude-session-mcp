@@ -14,15 +14,14 @@ This script analyzes the models.py file to identify:
 5. Any type: Any usage
 """
 
+from __future__ import annotations
+
 import json
 import sys
+from collections import Counter, defaultdict
 from pathlib import Path
-from collections import defaultdict, Counter
-from typing import get_origin, get_args
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-
-from src.models import SessionRecordAdapter
 
 
 def analyze_actual_values(session_files):
@@ -60,7 +59,7 @@ def analyze_actual_values(session_files):
     optional_fields = defaultdict(lambda: {'present': 0, 'null': 0, 'missing': 0})
 
     for session_file in session_files[:50]:  # Sample first 50 files
-        with open(session_file, 'r') as f:
+        with open(session_file) as f:
             for line in f:
                 if not line.strip():
                     continue

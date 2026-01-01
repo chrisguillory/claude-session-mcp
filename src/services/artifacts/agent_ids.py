@@ -26,17 +26,14 @@ is the hex portion extracted from these filenames.
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping, Sequence
-from typing import AbstractSet
+from collections.abc import Mapping, Sequence, Set
 
 from src.models import SessionRecord
 
 # Pattern for agent filenames - matches both native and cloned formats:
 # - agent-5271c147.jsonl (native)
 # - agent-5271c147-clone-019b51bd.jsonl (cloned)
-AGENT_FILENAME_PATTERN = re.compile(
-    r'^agent-([a-f0-9]+(?:-clone-[a-f0-9]+)?)\.jsonl$'
-)
+AGENT_FILENAME_PATTERN = re.compile(r'^agent-([a-f0-9]+(?:-clone-[a-f0-9]+)?)\.jsonl$')
 
 
 def extract_base_agent_id(agent_id: str) -> str:
@@ -66,7 +63,7 @@ def extract_base_agent_id(agent_id: str) -> str:
 
 def extract_agent_ids_from_files(
     files_data: Mapping[str, Sequence[SessionRecord]],
-) -> AbstractSet[str]:
+) -> Set[str]:
     """
     Extract agent IDs from loaded session files.
 
@@ -120,7 +117,7 @@ def generate_clone_agent_id(old_agent_id: str, new_session_id: str) -> str:
 
 
 def generate_agent_id_mapping(
-    agent_ids: AbstractSet[str],
+    agent_ids: Set[str],
     new_session_id: str,
 ) -> Mapping[str, str]:
     """
@@ -135,10 +132,7 @@ def generate_agent_id_mapping(
     Returns:
         Mapping of old_agent_id -> new_agent_id
     """
-    return {
-        old_id: generate_clone_agent_id(old_id, new_session_id)
-        for old_id in agent_ids
-    }
+    return {old_id: generate_clone_agent_id(old_id, new_session_id) for old_id in agent_ids}
 
 
 def transform_agent_filename(
@@ -166,9 +160,7 @@ def transform_agent_filename(
     """
     match = AGENT_FILENAME_PATTERN.match(old_filename)
     if not match:
-        raise ValueError(
-            f"Filename doesn't match agent-*.jsonl pattern: {old_filename}"
-        )
+        raise ValueError(f"Filename doesn't match agent-*.jsonl pattern: {old_filename}")
 
     old_agent_id = match.group(1)
 

@@ -6,8 +6,9 @@ Provides async storage backend that saves/loads archives to/from GitHub Gists.
 
 from __future__ import annotations
 
-import httpx
 from typing import Literal
+
+import httpx
 
 
 class GistStorage:
@@ -203,7 +204,7 @@ class GistStorage:
                 if not raw_url:
                     raise ValueError(
                         f"File '{filename}' is truncated but no raw_url available. "
-                        f"File size: {file_data.get('size', 'unknown')} bytes"
+                        f'File size: {file_data.get("size", "unknown")} bytes'
                     )
                 raw_response = await client.get(raw_url)
                 raw_response.raise_for_status()

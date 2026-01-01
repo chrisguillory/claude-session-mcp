@@ -154,10 +154,7 @@ class SessionCloneService:
         # Pre-compute slug mapping (but don't write yet - fail-fast check first!)
         slug_mapping: Mapping[str, str] = {}
         if plan_files:
-            slug_mapping = {
-                old_slug: generate_clone_slug(old_slug, new_session_id)
-                for old_slug in plan_files
-            }
+            slug_mapping = {old_slug: generate_clone_slug(old_slug, new_session_id) for old_slug in plan_files}
 
         # Generate agent ID mapping (CRITICAL for same-project forking)
         agent_ids = extract_agent_ids_from_files(files_data)
@@ -200,8 +197,7 @@ class SessionCloneService:
         # 2. Tool results
         if tool_results:
             tool_results_dir = target_dir / new_session_id / 'tool-results'
-            for tool_use_id in tool_results:
-                all_output_paths.append(tool_results_dir / f'{tool_use_id}.txt')
+            all_output_paths.extend(tool_results_dir / f'{tool_use_id}.txt' for tool_use_id in tool_results)
 
         # 3. Todos
         if todos:
@@ -211,8 +207,7 @@ class SessionCloneService:
 
         # 4. Plan files
         if plan_files:
-            for new_slug in slug_mapping.values():
-                all_output_paths.append(plans_dir / f'{new_slug}.md')
+            all_output_paths.extend(plans_dir / f'{new_slug}.md' for new_slug in slug_mapping.values())
 
         # Check ALL paths before writing ANYTHING
         existing_files = [p for p in all_output_paths if p.exists()]

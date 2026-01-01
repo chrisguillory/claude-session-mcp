@@ -1,5 +1,7 @@
 """Service layer for session operations."""
 
+from __future__ import annotations
+
 from src.services.archive import SessionArchiveService
 from src.services.clone import AmbiguousSessionError, SessionCloneService
 from src.services.discovery import SessionDiscoveryService, SessionInfo

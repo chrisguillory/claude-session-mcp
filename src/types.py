@@ -4,6 +4,8 @@ Shared type definitions for the claude-session-mcp package.
 Centralizes common type annotations used across multiple modules.
 """
 
+from __future__ import annotations
+
 from datetime import datetime
 from typing import Annotated, Literal
 

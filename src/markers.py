@@ -5,6 +5,8 @@ PathMarker enables runtime discovery of filesystem path fields for cross-machine
 session transfer. Uses Annotated pattern (Pydantic v2 recommended approach).
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from typing import Annotated
 

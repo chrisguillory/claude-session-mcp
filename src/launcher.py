@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import os
 import shutil
-from typing import Sequence
+from collections.abc import Sequence
 
 
 def launch_claude_with_session(session_id: str, extra_args: Sequence[str]) -> None:
@@ -27,10 +27,7 @@ def launch_claude_with_session(session_id: str, extra_args: Sequence[str]) -> No
     """
     claude_path = shutil.which('claude')
     if not claude_path:
-        raise RuntimeError(
-            'Claude Code CLI not found in PATH.\n'
-            'Install from: https://claude.ai/code'
-        )
+        raise RuntimeError('Claude Code CLI not found in PATH.\nInstall from: https://claude.ai/code')
 
     # Build command with optional extra args
     cmd = ['claude', '--resume', session_id]

@@ -18,9 +18,8 @@ When cloning a clone, we extract the base slug first to avoid accumulation:
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping, Sequence, Set
 from pathlib import Path
-from typing import AbstractSet
 
 from src.models import (
     ApiErrorSystemRecord,
@@ -68,7 +67,7 @@ def extract_base_slug(slug: str) -> str:
 
 def extract_slugs_from_records(
     files_data: Mapping[str, Sequence[SessionRecord]],
-) -> AbstractSet[str]:
+) -> Set[str]:
     """
     Extract all unique slugs from session records.
 
@@ -88,7 +87,7 @@ def extract_slugs_from_records(
     return slugs
 
 
-def collect_plan_files(slugs: AbstractSet[str]) -> Mapping[str, str]:
+def collect_plan_files(slugs: Set[str]) -> Mapping[str, str]:
     """
     Load plan file contents for slugs that have corresponding files.
 
@@ -160,8 +159,7 @@ def write_plan_files(
 
         if new_path.exists():
             raise FileExistsError(
-                f'Plan file already exists: {new_path}\n'
-                'This indicates a slug collision. Please investigate.'
+                f'Plan file already exists: {new_path}\nThis indicates a slug collision. Please investigate.'
             )
 
         new_path.write_text(content, encoding='utf-8')

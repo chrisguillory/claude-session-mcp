@@ -523,7 +523,7 @@ class SessionArchiveService:
             Claude Code version string (e.g., '2.0.37')
         """
         # Try to find first record with a version field
-        for filename, records in files_data.items():
+        for records in files_data.values():
             for record in records:
                 # Single isinstance check for all types with version
                 if isinstance(record, VERSION_RECORD_TYPES) and record.version:

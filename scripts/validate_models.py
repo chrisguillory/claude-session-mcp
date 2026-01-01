@@ -10,16 +10,19 @@ This script finds all .jsonl session files in ~/.claude/projects/*/ and validate
 them against the Pydantic models to ensure complete schema coverage.
 """
 
+from __future__ import annotations
+
 import json
 import sys
+from collections import Counter, defaultdict
 from pathlib import Path
-from collections import defaultdict, Counter
 
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.models import SessionRecordAdapter
 from pydantic import ValidationError
+
+from src.models import SessionRecordAdapter
 
 
 def find_all_session_files():
@@ -51,7 +54,7 @@ def validate_session_file(session_file: Path):
         'missing_fields': defaultdict(list),
     }
 
-    with open(session_file, 'r') as f:
+    with open(session_file) as f:
         for line_num, line in enumerate(f, 1):
             if not line.strip():
                 continue
@@ -215,7 +218,7 @@ def main():
             print(f'  Record types: {dict(result["record_types"])}')
 
             if result['errors']:
-                print(f'  First 3 errors:')
+                print('  First 3 errors:')
                 for error in result['errors'][:3]:
                     print(f'    - {error}')
 

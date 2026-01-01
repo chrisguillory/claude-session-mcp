@@ -7,6 +7,8 @@
 Check that all path fields are marked with # PATH TO TRANSLATE comments.
 """
 
+from __future__ import annotations
+
 import re
 from pathlib import Path
 
@@ -72,7 +74,7 @@ def check_path_markers():
         print('⚠ MISSING PATH MARKERS:')
         for field, line_num, line in issues:
             print(f'  Line {line_num}: {line}')
-            print(f'    → Should have: # PATH TO TRANSLATE comment')
+            print('    → Should have: # PATH TO TRANSLATE comment')
         print()
         return False
     else:

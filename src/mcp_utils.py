@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 # Standard Library
-from datetime import datetime
+from datetime import UTC, datetime
 
 # Third-Party Libraries
 from mcp.server.fastmcp import Context
@@ -16,7 +16,7 @@ class DualLogger:
         self.ctx = ctx
 
     def _timestamp(self) -> str:
-        return datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        return datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S')
 
     async def info(self, msg: str):
         print(f'[{self._timestamp()}] [INFO] {msg}')

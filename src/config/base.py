@@ -10,10 +10,9 @@ import os
 import pathlib
 from typing import TypeVar
 
+import lazy_object_proxy
 import pydantic
 import pydantic_settings
-import lazy_object_proxy
-
 
 T = TypeVar('T', bound='BaseSessionSettings')
 
@@ -44,7 +43,7 @@ class BaseSessionSettings(pydantic_settings.BaseSettings):
         return v
 
 
-def get_settings(settings_class: type[T], env_file: str | None = None) -> T:
+def get_settings[T: 'BaseSessionSettings'](settings_class: type[T], env_file: str | None = None) -> T:
     """
     Factory for creating settings with dynamic .env file loading.
 
@@ -73,7 +72,7 @@ def get_settings(settings_class: type[T], env_file: str | None = None) -> T:
     return settings_class(_env_file=resolved_path)
 
 
-def lazy_settings(settings_class: type[T]) -> T:
+def lazy_settings[T: 'BaseSessionSettings'](settings_class: type[T]) -> T:
     """
     Lazy settings - defers instantiation until first access.
 

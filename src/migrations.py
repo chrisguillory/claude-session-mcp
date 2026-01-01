@@ -5,11 +5,13 @@ These tools enable graceful handling of session files when Claude Code's
 schema evolves between versions.
 """
 
-from typing import Any, Callable
+from __future__ import annotations
+
 import json
 import sys
+from collections.abc import Callable
 from pathlib import Path
-
+from typing import Any
 
 # ==============================================================================
 # Migration Registry
@@ -202,7 +204,7 @@ def migrate_session_file(input_path: Path, output_path: Path, target_version: st
         'errors': 0,
     }
 
-    with open(input_path, 'r') as infile, open(output_path, 'w') as outfile:
+    with open(input_path) as infile, open(output_path, 'w') as outfile:
         for line_num, line in enumerate(infile, 1):
             if not line.strip():
                 continue

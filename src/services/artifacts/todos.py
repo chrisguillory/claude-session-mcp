@@ -88,10 +88,7 @@ def transform_todo_filename(
         ValueError: If old_session_id not found at start of filename
     """
     if not old_filename.startswith(old_session_id):
-        raise ValueError(
-            f'Expected filename to start with session ID {old_session_id}, '
-            f'got: {old_filename}'
-        )
+        raise ValueError(f'Expected filename to start with session ID {old_session_id}, got: {old_filename}')
 
     # Replace only the first occurrence (the primary session ID)
     return old_filename.replace(old_session_id, new_session_id, 1)
@@ -133,10 +130,7 @@ def write_todos(
         new_path = TODOS_DIR / new_filename
 
         if new_path.exists():
-            raise FileExistsError(
-                f'Todo file already exists: {new_path}\n'
-                'This indicates a session ID collision.'
-            )
+            raise FileExistsError(f'Todo file already exists: {new_path}\nThis indicates a session ID collision.')
 
         new_path.write_text(content, encoding='utf-8')
         filename_mapping[old_filename] = new_filename

@@ -12,6 +12,8 @@ This generates a JSON Schema document that other tools can consume:
 - Cross-language validation
 """
 
+from __future__ import annotations
+
 import json
 import sys
 from pathlib import Path
@@ -20,12 +22,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.models import (
-    SessionRecordAdapter,
-    SCHEMA_VERSION,
-    CLAUDE_CODE_MIN_VERSION,
     CLAUDE_CODE_MAX_VERSION,
+    CLAUDE_CODE_MIN_VERSION,
     LAST_VALIDATED,
+    SCHEMA_VERSION,
     VALIDATION_RECORD_COUNT,
+    SessionRecordAdapter,
 )
 
 
@@ -68,7 +70,7 @@ def export_schema(output_path: str = 'session-schema.json'):
 
     # Show some stats
     definitions = schema.get('$defs', {})
-    print(f'Schema contains:')
+    print('Schema contains:')
     print(f'  {len(definitions)} model definitions')
 
     # Count discriminated unions

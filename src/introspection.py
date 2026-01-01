@@ -5,14 +5,17 @@ Enables automated metadata extraction for path translation, reserved fields,
 and schema evolution tracking.
 """
 
-from typing import Type, Any, Union
+from __future__ import annotations
+
+from typing import Any, Union
+
 from pydantic import BaseModel
 from pydantic.fields import FieldInfo
 
 from src.markers import PathMarker
 
 
-def get_path_fields(model: Type[BaseModel]) -> list[str]:
+def get_path_fields(model: type[BaseModel]) -> list[str]:
     """
     Find all fields marked with PathMarker.
 
@@ -29,8 +32,7 @@ def get_path_fields(model: Type[BaseModel]) -> list[str]:
         >>> get_path_fields(UserRecord)
         ['cwd', 'projectPaths']
     """
-    from typing import get_origin, get_args
-    import types
+    from typing import get_args, get_origin
 
     def check_for_path_marker(annotation: Any) -> bool:
         """Check if annotation contains PathMarker, handling type aliases and unions."""
@@ -68,7 +70,7 @@ def get_path_fields(model: Type[BaseModel]) -> list[str]:
     return path_fields
 
 
-def get_reserved_fields(model: Type[BaseModel]) -> dict[str, dict[str, Any]]:
+def get_reserved_fields(model: type[BaseModel]) -> dict[str, dict[str, Any]]:
     """
     Find all reserved (always-null) fields.
 
@@ -99,7 +101,7 @@ def get_reserved_fields(model: Type[BaseModel]) -> dict[str, dict[str, Any]]:
     return reserved
 
 
-def get_field_version_info(model: Type[BaseModel]) -> dict[str, str]:
+def get_field_version_info(model: type[BaseModel]) -> dict[str, str]:
     """
     Get version information for fields that track when they were added.
 
@@ -148,7 +150,7 @@ def get_literal_values(field_info: FieldInfo) -> list[Any] | None:
     return None
 
 
-def model_summary(model: Type[BaseModel]) -> dict[str, Any]:
+def model_summary(model: type[BaseModel]) -> dict[str, Any]:
     """
     Generate a comprehensive summary of a model's metadata.
 
@@ -192,7 +194,7 @@ def model_summary(model: Type[BaseModel]) -> dict[str, Any]:
     }
 
 
-def print_model_summary(model: Type[BaseModel]) -> None:
+def print_model_summary(model: type[BaseModel]) -> None:
     """
     Print a human-readable summary of a model.
 
@@ -213,14 +215,14 @@ def print_model_summary(model: Type[BaseModel]) -> None:
         print(f'  Reserved fields: {", ".join(summary["reserved_fields"])}')
 
     if summary['versioned_fields']:
-        print(f'  Versioned fields:')
+        print('  Versioned fields:')
         for field, version in summary['versioned_fields'].items():
             print(f'    {field}: added in {version}')
 
 
 if __name__ == '__main__':
     # Demo
-    from src.models import UserRecord, AssistantRecord, Message
+    from src.models import AssistantRecord, Message, UserRecord
 
     print('=' * 80)
     print('Model Introspection Demo')

@@ -5,9 +5,11 @@ repos:
       - id: ruff
         args: [--fix, .]
         pass_filenames: false
+        always_run: true
       - id: ruff-format
         args: [.]
         pass_filenames: false
+        always_run: true
 
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: v1.19.1
@@ -26,3 +28,4 @@ repos:
           - lazy-object-proxy
         args: [--config-file=pyproject.toml, .]
         pass_filenames: false
+        always_run: true

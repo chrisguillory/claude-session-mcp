@@ -263,8 +263,7 @@ class SessionRestoreService:
             if archive.plan_files:
                 # Generate new slug names without writing
                 slug_mapping = {
-                    old_slug: generate_clone_slug(old_slug, new_session_id)
-                    for old_slug in archive.plan_files
+                    old_slug: generate_clone_slug(old_slug, new_session_id) for old_slug in archive.plan_files
                 }
 
         # Get target directory and plans directory
@@ -293,8 +292,7 @@ class SessionRestoreService:
         # 2. Tool results
         if archive.tool_results:
             tool_results_dir = target_dir / new_session_id / 'tool-results'
-            for tool_use_id in archive.tool_results:
-                all_output_paths.append(tool_results_dir / f'{tool_use_id}.txt')
+            all_output_paths.extend(tool_results_dir / f'{tool_use_id}.txt' for tool_use_id in archive.tool_results)
 
         # 3. Todos
         if archive.todos:
@@ -309,12 +307,10 @@ class SessionRestoreService:
         if archive.plan_files:
             if in_place:
                 # In-place: use original slugs
-                for old_slug in archive.plan_files:
-                    all_output_paths.append(plans_dir / f'{old_slug}.md')
+                all_output_paths.extend(plans_dir / f'{old_slug}.md' for old_slug in archive.plan_files)
             else:
                 # Normal: use new slugs
-                for new_slug in slug_mapping.values():
-                    all_output_paths.append(plans_dir / f'{new_slug}.md')
+                all_output_paths.extend(plans_dir / f'{new_slug}.md' for new_slug in slug_mapping.values())
 
         # Check ALL paths before writing ANYTHING
         existing_files = [p for p in all_output_paths if p.exists()]

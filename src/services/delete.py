@@ -217,15 +217,18 @@ class SessionDeleteService:
 
         # 1. Main session file
         main_size = main_file.stat().st_size
-        artifacts.append(ArtifactFile(
-            path=str(main_file),
-            size_bytes=main_size,
-            artifact_type='session_main',
-        ))
+        artifacts.append(
+            ArtifactFile(
+                path=str(main_file),
+                size_bytes=main_size,
+                artifact_type='session_main',
+            )
+        )
 
         # 2. Find agent files by loading main session and discovering
         #    (reuse the same discovery pattern as clone/archive)
         import subprocess
+
         result = subprocess.run(
             [
                 'rg',
@@ -244,11 +247,13 @@ class SessionDeleteService:
                 agent_path = Path(line)
                 if agent_path.exists():
                     size = agent_path.stat().st_size
-                    artifacts.append(ArtifactFile(
-                        path=str(agent_path),
-                        size_bytes=size,
-                        artifact_type='session_agent',
-                    ))
+                    artifacts.append(
+                        ArtifactFile(
+                            path=str(agent_path),
+                            size_bytes=size,
+                            artifact_type='session_agent',
+                        )
+                    )
                     agent_file_paths.append(str(agent_path))
 
         # 3. Extract slugs from session records to find plan files
@@ -261,11 +266,13 @@ class SessionDeleteService:
             plan_path = plans_dir / f'{slug}.md'
             if plan_path.exists():
                 size = plan_path.stat().st_size
-                artifacts.append(ArtifactFile(
-                    path=str(plan_path),
-                    size_bytes=size,
-                    artifact_type='plan_file',
-                ))
+                artifacts.append(
+                    ArtifactFile(
+                        path=str(plan_path),
+                        size_bytes=size,
+                        artifact_type='plan_file',
+                    )
+                )
                 plan_file_paths.append(str(plan_path))
 
         if logger:
@@ -276,11 +283,13 @@ class SessionDeleteService:
         if tool_results_dir.exists():
             for path in tool_results_dir.glob('*.txt'):
                 size = path.stat().st_size
-                artifacts.append(ArtifactFile(
-                    path=str(path),
-                    size_bytes=size,
-                    artifact_type='tool_result',
-                ))
+                artifacts.append(
+                    ArtifactFile(
+                        path=str(path),
+                        size_bytes=size,
+                        artifact_type='tool_result',
+                    )
+                )
                 tool_result_paths.append(str(path))
 
         if logger and tool_result_paths:
@@ -290,11 +299,13 @@ class SessionDeleteService:
         if TODOS_DIR.exists():
             for path in TODOS_DIR.glob(f'{session_id}-agent-*.json'):
                 size = path.stat().st_size
-                artifacts.append(ArtifactFile(
-                    path=str(path),
-                    size_bytes=size,
-                    artifact_type='todo_file',
-                ))
+                artifacts.append(
+                    ArtifactFile(
+                        path=str(path),
+                        size_bytes=size,
+                        artifact_type='todo_file',
+                    )
+                )
                 todo_file_paths.append(str(path))
 
         if logger and todo_file_paths:
@@ -307,11 +318,13 @@ class SessionDeleteService:
             # Count size of all files in the directory
             env_size = sum(f.stat().st_size for f in session_env_dir.rglob('*') if f.is_file())
             if env_size > 0 or session_env_dir.exists():
-                artifacts.append(ArtifactFile(
-                    path=session_env_path,
-                    size_bytes=env_size,
-                    artifact_type='session_env',
-                ))
+                artifacts.append(
+                    ArtifactFile(
+                        path=session_env_path,
+                        size_bytes=env_size,
+                        artifact_type='session_env',
+                    )
+                )
 
         # Calculate totals
         total_size = sum(a.size_bytes for a in artifacts)
@@ -374,8 +387,7 @@ class SessionDeleteService:
                 was_dry_run=dry_run,
                 success=False,
                 error_message=(
-                    f'Session {session_id} is a native Claude session (UUIDv4). '
-                    'Use --force to delete native sessions.'
+                    f'Session {session_id} is a native Claude session (UUIDv4). Use --force to delete native sessions.'
                 ),
                 backup_path=None,
                 files_deleted=0,

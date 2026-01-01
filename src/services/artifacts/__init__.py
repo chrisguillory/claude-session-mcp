@@ -5,6 +5,8 @@ This package contains modules for collecting, transforming, and writing
 session-specific artifacts like tool results, todos, plan files, etc.
 """
 
+from __future__ import annotations
+
 from .agent_ids import (
     AGENT_FILENAME_PATTERN,
     apply_agent_id_mapping,
@@ -13,6 +15,10 @@ from .agent_ids import (
     generate_agent_id_mapping,
     generate_clone_agent_id,
     transform_agent_filename,
+)
+from .paths import (
+    MissingCwdError,
+    extract_source_project_path,
 )
 from .plan_files import (
     SLUG_RECORD_TYPES,
@@ -38,10 +44,6 @@ from .tool_results import (
     collect_tool_results,
     get_tool_results_dir,
     write_tool_results,
-)
-from .paths import (
-    MissingCwdError,
-    extract_source_project_path,
 )
 
 __all__ = [

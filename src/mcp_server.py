@@ -208,7 +208,9 @@ def _discover_session_id(session_marker: str) -> str:
 
         time.sleep(retry_delay)
     else:
-        raise RuntimeError(f'Could not find session marker in any debug log files in {debug_dir} after {max_retries} attempts')
+        raise RuntimeError(
+            f'Could not find session marker in any debug log files in {debug_dir} after {max_retries} attempts'
+        )
 
     # rg found the marker - extract session ID from first matching file
     # Format: ~/.claude/debug/{session_id}.log
@@ -530,7 +532,9 @@ def register_tools(state: ServerState) -> None:
 
         if result.success:
             if dry_run:
-                await logger.info(f'Dry run: would delete {result.files_deleted} files ({result.size_freed_bytes:,} bytes)')
+                await logger.info(
+                    f'Dry run: would delete {result.files_deleted} files ({result.size_freed_bytes:,} bytes)'
+                )
             else:
                 await logger.info(f'Deleted {result.files_deleted} files ({result.size_freed_bytes:,} bytes)')
                 if result.backup_path:
@@ -590,9 +594,7 @@ def register_tools(state: ServerState) -> None:
         )
 
         if result.is_cross_machine:
-            await logger.info(
-                f'Cross-machine restore: {result.parent_machine_id} -> {result.target_machine_id}'
-            )
+            await logger.info(f'Cross-machine restore: {result.parent_machine_id} -> {result.target_machine_id}')
         elif result.is_cross_machine is False:
             await logger.info('Same-machine operation')
         else:

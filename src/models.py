@@ -75,13 +75,13 @@ Round-trip serialization:
 
 from __future__ import annotations
 
-import functools
-from typing import Any, Literal, Annotated, Mapping, Union, Sequence, TypeVar, get_args
-from pydantic import BaseModel, Field, ConfigDict, TypeAdapter, field_validator, ValidationInfo, BeforeValidator
+from collections.abc import Mapping, Sequence
+from typing import Annotated, Any, Literal, TypeVar
+
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, TypeAdapter, ValidationInfo, field_validator
 
 from src.markers import PathField, PathListField
 from src.types import ModelId
-
 
 # ==============================================================================
 # Schema Version
@@ -113,7 +113,7 @@ class StrictModel(BaseModel):
 T = TypeVar('T', bound=BaseModel)
 
 
-def validated_copy(model: T, update: Mapping[str, Any]) -> T:
+def validated_copy[T: BaseModel](model: T, update: Mapping[str, Any]) -> T:
     """
     Create a validated copy of a model with updates.
 
@@ -215,16 +215,14 @@ class TaskOutputToolInput(StrictModel):
 # NOTE: Order matters! More specific (more required fields) should come first.
 # EnterPlanModeToolInput is empty (no fields), so it must come last before dict fallback.
 ToolInput = Annotated[
-    Union[
-        ReadToolInput,       # file_path required
-        WriteToolInput,      # file_path, content required
-        EditToolInput,       # file_path, old_string, new_string required
-        AgentOutputToolInput,  # agentId required
-        TaskOutputToolInput,   # task_id required
-        SkillToolInput,      # command required
-        EnterPlanModeToolInput,  # No required fields - must be last before dict!
-        dict[str, Any]       # Fallback for MCP tools
-    ],
+    ReadToolInput  # file_path required
+    | WriteToolInput  # file_path, content required
+    | EditToolInput  # file_path, old_string, new_string required
+    | AgentOutputToolInput  # agentId required
+    | TaskOutputToolInput  # task_id required
+    | SkillToolInput  # command required
+    | EnterPlanModeToolInput  # No required fields - must be last before dict!
+    | dict[str, Any],  # Fallback for MCP tools
     Field(union_mode='left_to_right'),
 ]
 
@@ -302,7 +300,7 @@ class ToolUseContent(StrictModel):
 
 
 # ToolResultContentBlock - for content inside tool_result
-ToolResultContentBlock = Annotated[Union[TextContent, ImageContent], Field(discriminator='type')]
+ToolResultContentBlock = Annotated[TextContent | ImageContent, Field(discriminator='type')]
 
 
 class ToolResultContent(StrictModel):
@@ -310,13 +308,15 @@ class ToolResultContent(StrictModel):
 
     type: Literal['tool_result']
     tool_use_id: str
-    content: str | Sequence[ToolResultContentBlock] | None = None  # Can be string, sequence of content blocks, or missing
+    content: str | Sequence[ToolResultContentBlock] | None = (
+        None  # Can be string, sequence of content blocks, or missing
+    )
     is_error: bool | None = None
 
 
 # Discriminated union of all message content types
 MessageContent = Annotated[
-    Union[ThinkingContent, TextContent, ToolUseContent, ToolResultContent, ImageContent, DocumentContent],
+    ThinkingContent | TextContent | ToolUseContent | ToolResultContent | ImageContent | DocumentContent,
     Field(discriminator='type'),
 ]
 
@@ -348,8 +348,8 @@ class Message(StrictModel):
     )
     model: ModelId | None = Field(None, description='Claude model identifier (e.g., claude-sonnet-4-5-20250929)')
     id: str | None = Field(None, description='Message ID from Claude API')
-    stop_reason: Literal['tool_use', 'stop_sequence', 'end_turn', 'refusal', 'model_context_window_exceeded'] | None = Field(
-        None, description='Reason why the model stopped generating'
+    stop_reason: Literal['tool_use', 'stop_sequence', 'end_turn', 'refusal', 'model_context_window_exceeded'] | None = (
+        Field(None, description='Reason why the model stopped generating')
     )
     stop_sequence: str | None = Field(None, description='The actual stop sequence string that triggered stopping')
     usage: TokenUsage | None = Field(None, description='Token usage information (present in nested API responses)')
@@ -782,7 +782,10 @@ class UserRecord(BaseRecord):
     todos: Sequence[TodoItem] | None = Field(None, description='Todo list state (Claude Code 2.0.47+)')
     slug: str | None = Field(None, description='Human-readable session slug (Claude Code 2.0.51+)')
     imagePasteIds: Sequence[int] | None = Field(None, description='IDs of pasted images in this message')
-    sourceToolUseID: str | None = Field(None, description='Tool use ID that generated this message (e.g., toolu_015eZkLKZz5JVkGC1zZrnnKm) (Claude Code 2.0.76+)')
+    sourceToolUseID: str | None = Field(
+        None,
+        description='Tool use ID that generated this message (e.g., toolu_015eZkLKZz5JVkGC1zZrnnKm) (Claude Code 2.0.76+)',
+    )
 
 
 # ==============================================================================
@@ -906,7 +909,9 @@ class ApiErrorSystemRecord(BaseRecord):
     gitBranch: str | None = None  # Optional for api_error
     slug: str | None = Field(None, description='Human-readable session slug (Claude Code 2.0.51+)')
     cause: ConnectionError | None = None  # Connection error details (for network failures)
-    error: ApiError | NetworkError | EmptyError  # API error, network error, or empty error (EmptyError must be last - no required fields)
+    error: (
+        ApiError | NetworkError | EmptyError
+    )  # API error, network error, or empty error (EmptyError must be last - no required fields)
     retryInMs: float
     retryAttempt: int
     maxRetries: int
@@ -930,7 +935,7 @@ class InformationalSystemRecord(BaseRecord):
 
 # Union of system subtype records
 SystemSubtypeRecord = Annotated[
-    Union[LocalCommandSystemRecord, CompactBoundarySystemRecord, ApiErrorSystemRecord, InformationalSystemRecord],
+    LocalCommandSystemRecord | CompactBoundarySystemRecord | ApiErrorSystemRecord | InformationalSystemRecord,
     Field(discriminator='subtype'),
 ]
 
@@ -1004,19 +1009,17 @@ class CustomTitleRecord(StrictModel):
 # NOTE: Cannot use discriminator='type' because multiple records have type='system'
 # System subtype records must come before SystemRecord so they match first
 SessionRecord = Annotated[
-    Union[
-        UserRecord,
-        AssistantRecord,
-        SummaryRecord,
-        LocalCommandSystemRecord,  # Must be before SystemRecord!
-        CompactBoundarySystemRecord,  # Must be before SystemRecord!
-        ApiErrorSystemRecord,  # Must be before SystemRecord!
-        InformationalSystemRecord,  # Must be before SystemRecord!
-        SystemRecord,
-        FileHistorySnapshotRecord,
-        QueueOperationRecord,
-        CustomTitleRecord,
-    ],
+    UserRecord
+    | AssistantRecord
+    | SummaryRecord
+    | LocalCommandSystemRecord  # Must be before SystemRecord!
+    | CompactBoundarySystemRecord  # Must be before SystemRecord!
+    | ApiErrorSystemRecord  # Must be before SystemRecord!
+    | InformationalSystemRecord  # Must be before SystemRecord!
+    | SystemRecord
+    | FileHistorySnapshotRecord
+    | QueueOperationRecord
+    | CustomTitleRecord,
     Field(union_mode='left_to_right'),
 ]
 
