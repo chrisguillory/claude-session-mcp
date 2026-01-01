@@ -3,8 +3,11 @@ repos:
     rev: v0.14.10
     hooks:
       - id: ruff
-        args: [--fix]
+        args: [--fix, .]
+        pass_filenames: false
       - id: ruff-format
+        args: [.]
+        pass_filenames: false
 
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: v1.19.1
@@ -12,4 +15,14 @@ repos:
       - id: mypy
         additional_dependencies:
           - pydantic>=2.12
-        args: [--config-file=pyproject.toml]
+          - pydantic-settings>=2.12
+          - httpx
+          - typer
+          - fastmcp
+          - zstandard
+          - uuid6
+          - filelock
+          - attrs
+          - lazy-object-proxy
+        args: [--config-file=pyproject.toml, .]
+        pass_filenames: false
