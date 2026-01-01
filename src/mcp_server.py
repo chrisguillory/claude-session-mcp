@@ -25,7 +25,7 @@ import tempfile
 import uuid
 from collections.abc import AsyncIterator
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 import attrs
 from mcp.server.fastmcp import Context, FastMCP
@@ -303,7 +303,7 @@ def register_tools(state: ServerState) -> None:
         output_path: str | None = None,
         format: Literal['json', 'zst'] | None = None,
         storage_backend: Literal['local'] = 'local',
-        ctx: Context = None,
+        ctx: Context[Any, Any, Any] | None = None,
     ) -> ArchiveMetadata:
         """
         Save current Claude Code session to archive.
@@ -331,6 +331,8 @@ def register_tools(state: ServerState) -> None:
                 format='zst'
             )
         """
+        if ctx is None:
+            raise RuntimeError('Context is required - must be called via FastMCP')
         logger = DualLogger(ctx)
 
         # Create storage backend
@@ -355,7 +357,7 @@ def register_tools(state: ServerState) -> None:
     async def restore_session(
         archive_path: str,
         translate_paths: bool = True,
-        ctx: Context = None,
+        ctx: Context[Any, Any, Any] | None = None,
     ) -> RestoreResult:
         """
         Restore a saved session archive with a new session ID.
@@ -386,6 +388,8 @@ def register_tools(state: ServerState) -> None:
             After restoration, use `claude --resume {new_session_id}` in CLI
             to continue the conversation with the restored history.
         """
+        if ctx is None:
+            raise RuntimeError('Context is required - must be called via FastMCP')
         logger = DualLogger(ctx)
 
         # Create restore service for current project
@@ -407,7 +411,7 @@ def register_tools(state: ServerState) -> None:
     async def clone_session(
         source_session_id: str | None = None,
         translate_paths: bool = True,
-        ctx: Context = None,
+        ctx: Context[Any, Any, Any] | None = None,
     ) -> RestoreResult:
         """
         Clone a session directly without creating an archive file.
@@ -444,6 +448,8 @@ def register_tools(state: ServerState) -> None:
             After cloning, use `claude --resume {new_session_id}` in CLI
             to continue the conversation with the cloned history.
         """
+        if ctx is None:
+            raise RuntimeError('Context is required - must be called via FastMCP')
         logger = DualLogger(ctx)
 
         # Default to current session if not specified
@@ -475,7 +481,7 @@ def register_tools(state: ServerState) -> None:
         force: bool = False,
         no_backup: bool = False,
         dry_run: bool = False,
-        ctx: Context = None,
+        ctx: Context[Any, Any, Any] | None = None,
     ) -> DeleteResult:
         """
         Delete session artifacts with auto-backup.
@@ -516,6 +522,8 @@ def register_tools(state: ServerState) -> None:
             To undo a delete, run:
             claude-session restore --in-place <backup_path>
         """
+        if ctx is None:
+            raise RuntimeError('Context is required - must be called via FastMCP')
         logger = DualLogger(ctx)
 
         # Create delete service for current project
@@ -548,7 +556,7 @@ def register_tools(state: ServerState) -> None:
     @server.tool()
     async def session_lineage(
         session_id: str | None = None,
-        ctx: Context = None,
+        ctx: Context[Any, Any, Any] | None = None,
     ) -> LineageResult | None:
         """
         Get lineage information for a session.
@@ -571,6 +579,8 @@ def register_tools(state: ServerState) -> None:
             # Get lineage for specific session
             result = await session_lineage('019b5232')
         """
+        if ctx is None:
+            raise RuntimeError('Context is required - must be called via FastMCP')
         logger = DualLogger(ctx)
 
         target_id = session_id or state.session_id

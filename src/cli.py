@@ -14,7 +14,7 @@ import traceback
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Literal
+from typing import Literal, TypeGuard
 
 import httpx
 import typer
@@ -37,12 +37,31 @@ app = typer.Typer(
     add_completion=False,
 )
 
+# Type aliases and validators
+ArchiveFormat = Literal['json', 'zst']
+
+
+def _is_archive_format(value: str) -> TypeGuard[ArchiveFormat]:
+    """Type guard for valid archive formats."""
+    return value in ('json', 'zst')
+
+
+def _validate_archive_format(value: str | None) -> ArchiveFormat | None:
+    """Validate and narrow archive format for typer callback."""
+    if value is None:
+        return None
+    if _is_archive_format(value):
+        return value
+    raise typer.BadParameter("Must be 'json' or 'zst'")
+
 
 @app.command()
 def archive(
     session_id: str = typer.Argument(..., help='Session ID to archive'),
     output: str = typer.Argument(..., help='Output path or Gist URL (gist://<gist-id> or gist:// or file path)'),
-    format: str | None = typer.Option(None, '--format', '-f', help='Archive format: json or zst'),
+    format: ArchiveFormat | None = typer.Option(
+        None, '--format', '-f', help='Archive format: json or zst', callback=_validate_archive_format
+    ),
     gist_token: str | None = typer.Option(None, '--gist-token', help='GitHub token (or use GITHUB_TOKEN env)'),
     gist_visibility: Literal['public', 'secret'] = typer.Option(
         'secret', '--gist-visibility', help='Gist visibility (public or secret)'
@@ -80,9 +99,9 @@ def restore(
 async def _archive_async(
     session_id: str,
     output: str,
-    format: str | None,
+    format: Literal['json', 'zst'] | None,
     gist_token: str | None,
-    gist_visibility: str,
+    gist_visibility: Literal['public', 'secret'],
     gist_description: str,
     verbose: bool,
 ) -> None:
@@ -143,11 +162,14 @@ async def _archive_async(
             )
 
             # Create storage backend
+            storage: GistStorage | LocalFileSystemStorage
             if use_gist:
                 # Generate filename for Gist
                 timestamp = datetime.now(UTC).strftime('%Y%m%d_%H%M%S')
                 filename = f'session-{session_id[:8]}-{timestamp}.json'
 
+                if token is None:
+                    raise typer.BadParameter('GitHub token required for Gist storage')
                 storage = GistStorage(
                     token=token,
                     gist_id=gist_id,
@@ -170,7 +192,7 @@ async def _archive_async(
             )
 
             # Print success
-            if use_gist:
+            if use_gist and isinstance(storage, GistStorage):
                 typer.secho('✓ Archive uploaded to GitHub Gist!', fg=typer.colors.GREEN)
                 typer.echo(f'  URL: {metadata.file_path}')
                 typer.echo(f'  Gist ID: {storage.gist_id}')

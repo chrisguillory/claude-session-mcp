@@ -22,7 +22,8 @@ from typing import Literal
 
 from src.base_model import StrictModel
 from src.paths import encode_path
-from src.services.archive import LoggerProtocol, SessionArchiveService
+from src.protocols import LoggerProtocol
+from src.services.archive import SessionArchiveService
 from src.services.artifacts import (
     SESSION_ENV_DIR,
     TODOS_DIR,
@@ -492,7 +493,7 @@ class SessionDeleteService:
     async def _create_backup(
         self,
         session_id: str,
-        logger: LoggerProtocol,
+        logger: LoggerProtocol | None,
     ) -> str:
         """
         Create a backup archive before deletion.

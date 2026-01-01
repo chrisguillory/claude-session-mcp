@@ -24,7 +24,7 @@ Migration = Callable[[dict[str, Any]], dict[str, Any]]
 MIGRATIONS: dict[tuple[str, str], Migration] = {}
 
 
-def register_migration(from_version: str, to_version: str):
+def register_migration(from_version: str, to_version: str) -> Callable[[Migration], Migration]:
     """
     Decorator to register a migration function.
 
@@ -75,7 +75,8 @@ def detect_record_version(record_data: dict[str, Any]) -> str | None:
     """
     # Check for explicit version field
     if 'version' in record_data:
-        return record_data['version']
+        version: str = record_data['version']
+        return version
 
     # Check for version-specific field patterns
     # (Add heuristics as we learn about version differences)

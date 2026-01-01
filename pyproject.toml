@@ -63,6 +63,7 @@ quote-style = "single"
 python_version = "3.13"
 plugins = ["pydantic.mypy"]
 strict = true
+mypy_path = "stubs"
 exclude = [
     ".venv",
     "scripts",  # utility scripts can be less strict (eventually fix!)

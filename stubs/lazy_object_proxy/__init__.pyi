@@ -1,0 +1,19 @@
+"""Type stubs for lazy-object-proxy.
+
+Coverage: Core Proxy class only. Unmapped operators/methods handled via __getattr__.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+from typing import Any
+
+class Proxy[T]:
+    """Lazy proxy - defers factory() call until first attribute access."""
+
+    def __init__(self, factory: Callable[[], T]) -> None: ...
+    def __getattr__(self, name: str) -> Any: ...
+    def __setattr__(self, name: str, value: Any) -> None: ...
+    def __delattr__(self, name: str) -> None: ...
+    def __repr__(self) -> str: ...
+    def __str__(self) -> str: ...

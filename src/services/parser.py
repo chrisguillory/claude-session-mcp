@@ -9,22 +9,9 @@ from __future__ import annotations
 import json
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Protocol
 
 from src.models import SessionRecord, SessionRecordAdapter
-
-# ==============================================================================
-# Logger Protocol
-# ==============================================================================
-
-
-class LoggerProtocol(Protocol):
-    """Protocol for logger - enables service to work with any logging implementation."""
-
-    async def info(self, message: str) -> None: ...
-    async def warning(self, message: str) -> None: ...
-    async def error(self, message: str) -> None: ...
-
+from src.protocols import LoggerProtocol, NullLogger
 
 # ==============================================================================
 # Session Parser Service
@@ -39,27 +26,28 @@ class SessionParserService:
     """
 
     async def load_session_files(
-        self, session_files: Sequence[Path], logger: LoggerProtocol
+        self, session_files: Sequence[Path], logger: LoggerProtocol | None = None
     ) -> dict[str, list[SessionRecord]]:
         """
         Load and parse session JSONL files.
 
         Args:
             session_files: Sequence of JSONL file paths
-            logger: Logger instance
+            logger: Logger instance (optional, uses NullLogger if None)
 
         Returns:
             Dict mapping filename to list of validated records
         """
+        log = logger or NullLogger()
         files_data: dict[str, list[SessionRecord]] = {}
 
         for file_path in session_files:
-            await logger.info(f'Loading {file_path.name}')
+            await log.info(f'Loading {file_path.name}')
 
-            records = await self._parse_jsonl_file(file_path, logger)
+            records = await self._parse_jsonl_file(file_path, log)
             files_data[file_path.name] = records
 
-            await logger.info(f'Loaded {len(records)} records from {file_path.name}')
+            await log.info(f'Loaded {len(records)} records from {file_path.name}')
 
         return files_data
 

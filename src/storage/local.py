@@ -57,3 +57,21 @@ class LocalFileSystemStorage:
         """
         file_path = self.base_path / filename
         return file_path.exists()
+
+    async def load(self, filename: str) -> bytes:
+        """
+        Load archive from local filesystem.
+
+        Args:
+            filename: Name of archive file
+
+        Returns:
+            Archive data as bytes
+
+        Raises:
+            ValueError: If file not found
+        """
+        file_path = self.base_path / filename
+        if not file_path.exists():
+            raise ValueError(f'Archive not found: {file_path}')
+        return file_path.read_bytes()

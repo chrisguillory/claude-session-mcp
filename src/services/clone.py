@@ -17,7 +17,7 @@ import uuid6
 
 from src.models import SessionRecord, SessionRecordAdapter
 from src.paths import encode_path
-from src.services.archive import LoggerProtocol
+from src.protocols import LoggerProtocol
 from src.services.artifacts import (
     TODOS_DIR,
     apply_agent_id_mapping,

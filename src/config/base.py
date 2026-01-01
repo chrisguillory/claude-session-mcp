@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import os
 import pathlib
-from typing import TypeVar
+from typing import TypeVar, cast
 
 import lazy_object_proxy
 import pydantic
@@ -82,4 +82,5 @@ def lazy_settings[T: 'BaseSessionSettings'](settings_class: type[T]) -> T:
     Returns:
         Proxy that instantiates settings on first access
     """
-    return lazy_object_proxy.Proxy(lambda: get_settings(settings_class))
+    # Proxy[T] acts as T at runtime - cast to satisfy mypy
+    return cast(T, lazy_object_proxy.Proxy(lambda: get_settings(settings_class)))

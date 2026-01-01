@@ -20,7 +20,8 @@ from src.base_model import StrictModel
 from src.introspection import get_path_fields
 from src.models import SessionRecord, SessionRecordAdapter
 from src.paths import encode_path
-from src.services.archive import LoggerProtocol, SessionArchive
+from src.protocols import LoggerProtocol
+from src.services.archive import SessionArchive
 from src.services.artifacts import (
     TODOS_DIR,
     apply_agent_id_mapping,

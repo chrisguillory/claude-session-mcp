@@ -395,7 +395,7 @@ class TokenUsage(StrictModel):
 # ==============================================================================
 
 
-def _normalize_ultrathink(v: Any) -> str:
+def _normalize_ultrathink(v: Any) -> Any:
     """Normalize any casing of 'ultrathink' to lowercase."""
     if isinstance(v, str) and v.lower() == 'ultrathink':
         return 'ultrathink'
@@ -1024,7 +1024,7 @@ SessionRecord = Annotated[
 ]
 
 # Type adapter for validating session records (required for union types)
-SessionRecordAdapter = TypeAdapter(SessionRecord)
+SessionRecordAdapter: TypeAdapter[SessionRecord] = TypeAdapter(SessionRecord)
 
 
 # ==============================================================================

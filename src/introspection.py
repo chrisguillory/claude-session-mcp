@@ -116,7 +116,7 @@ def get_field_version_info(model: type[BaseModel]) -> dict[str, str]:
         >>> get_field_version_info(UserRecord)
         {'thinkingMetadata': '2.0.35'}
     """
-    version_info = {}
+    version_info: dict[str, str] = {}
 
     for field_name, field_info in model.model_fields.items():
         if (
@@ -124,7 +124,9 @@ def get_field_version_info(model: type[BaseModel]) -> dict[str, str]:
             and isinstance(field_info.json_schema_extra, dict)
             and 'added_in_version' in field_info.json_schema_extra
         ):
-            version_info[field_name] = field_info.json_schema_extra['added_in_version']
+            version = field_info.json_schema_extra['added_in_version']
+            if isinstance(version, str):
+                version_info[field_name] = version
 
     return version_info
 
@@ -229,6 +231,7 @@ if __name__ == '__main__':
     print('=' * 80)
     print()
 
-    for model in [UserRecord, AssistantRecord, Message]:
+    models: list[type[BaseModel]] = [UserRecord, AssistantRecord, Message]
+    for model in models:
         print_model_summary(model)
         print()

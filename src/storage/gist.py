@@ -112,7 +112,8 @@ class GistStorage:
 
             gist_data = response.json()
             self.gist_id = gist_data['id']  # Store for future updates
-            return gist_data['html_url']  # Return web URL
+            html_url: str = gist_data['html_url']
+            return html_url  # Return web URL
 
     async def _update_gist(self, filename: str, content: str) -> str:
         """Update existing gist."""
@@ -129,7 +130,8 @@ class GistStorage:
             response.raise_for_status()
 
             gist_data = response.json()
-            return gist_data['html_url']
+            html_url: str = gist_data['html_url']
+            return html_url
 
     async def exists(self, filename: str) -> bool:
         """
