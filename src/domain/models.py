@@ -2,11 +2,12 @@
 Domain models for Claude Code session management.
 
 This module contains enriched models with computed fields, metadata, and application-level
-structures. These models are built on top of the raw data models from models.py.
+structures. These are mutable DomainModel instances built on top of the frozen schema
+models in src/schemas/session/.
 
 Separation of concerns:
-- models.py: Pure JSONL schema representations (parsing)
-- domain.py: Application logic, analysis, and enrichment (this file)
+- src/schemas/session/: Pure JSONL schema representations (frozen, for parsing)
+- src/domain/: Application logic, analysis, and enrichment (mutable, this module)
 
 Architecture (top-down):
 1. CompleteSessionArchive - Complete session with all agent sessions
@@ -14,7 +15,10 @@ Architecture (top-down):
 3. AgentSession - Individual agent session file
 4. SessionAnalysis - Analysis with costs and insights
 5. SessionMetadata - Computed statistics
-6. SessionList - Discovery results
+6. TokenCosts - Token cost breakdown by model
+
+Note: schemas/session/ also has minimal SessionMetadata/SessionAnalysis. The domain
+versions here are richer, with additional fields for full analysis workflows.
 """
 
 from __future__ import annotations
@@ -179,39 +183,3 @@ class TokenCosts(DomainModel):
     cache_creation_cost_usd: float
     cache_read_cost_usd: float
     total_cost_usd: float
-
-
-# ==============================================================================
-# Discovery Level: Session Lists and Info
-# ==============================================================================
-
-
-class SessionList(DomainModel):
-    """
-    List of discovered sessions.
-
-    Used by list_sessions tool to return discovery results.
-    """
-
-    sessions: list[SessionInfo] = Field(default_factory=list)
-    total_count: int
-    project_paths: list[str] = Field(default_factory=list)  # Unique project paths found
-
-
-class SessionInfo(DomainModel):
-    """
-    Basic information about a discovered session.
-
-    Lightweight summary for listing sessions without loading all records.
-    """
-
-    session_id: str
-    project_path: str
-    file_path: str  # Full path to {session_id}.jsonl
-    record_count: int
-    first_timestamp: str | None = None
-    last_timestamp: str | None = None
-    has_summary: bool = False
-    summary_text: str | None = None
-    has_agents: bool = False
-    agent_ids: list[str] = Field(default_factory=list)

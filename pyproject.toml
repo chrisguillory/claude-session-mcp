@@ -18,8 +18,8 @@ dependencies = [
 ]
 
 [project.scripts]
-claude-session = "src.cli:main"
-mcp-server = "src.mcp_server:main"
+claude-session = "src.cli.main:main"
+mcp-server = "src.mcp.server:main"
 
 [build-system]
 requires = ["hatchling"]

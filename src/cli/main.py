@@ -19,7 +19,7 @@ from typing import Literal, TypeGuard
 import httpx
 import typer
 
-from src.cli_logger import CLILogger
+from src.cli.logger import CLILogger
 from src.launcher import launch_claude_with_session
 from src.services.archive import SessionArchiveService
 from src.services.clone import AmbiguousSessionError, SessionCloneService
