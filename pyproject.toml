@@ -31,7 +31,6 @@ packages = ["src"]
 [tool.ruff]
 line-length = 120
 target-version = "py313"
-exclude = ["scripts"]  # utility scripts can be less strict (eventually fix!)
 
 [tool.ruff.lint]
 select = [
@@ -66,7 +65,6 @@ strict = true
 mypy_path = "stubs"
 exclude = [
     ".venv",
-    "scripts",  # utility scripts can be less strict (eventually fix!)
 ]
 
 [tool.pydantic-mypy]

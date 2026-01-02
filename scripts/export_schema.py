@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -31,7 +32,7 @@ from src.schemas.session import (
 )
 
 
-def export_schema(output_path: str = 'session-schema.json'):
+def export_schema(output_path: str = 'session-schema.json') -> dict[str, Any]:
     """Export complete JSON Schema for SessionRecord."""
 
     print('=' * 80)

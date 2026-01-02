@@ -45,7 +45,7 @@ def check_file(jsonl_file: Path) -> tuple[bool, int, str | None]:
         return (False, 0, f'Failed to read file: {e}')
 
 
-def main():
+def main() -> None:
     print('=' * 80)
     print('Claude Code Session Corruption Check')
     print('=' * 80)
@@ -57,13 +57,12 @@ def main():
         print(f'Directory not found: {claude_dir}')
         sys.exit(1)
 
-    all_files = []
+    all_files: list[Path] = []
     for project_dir in claude_dir.iterdir():
         if not project_dir.is_dir():
             continue
 
-        for jsonl_file in project_dir.glob('*.jsonl'):
-            all_files.append(jsonl_file)
+        all_files.extend(project_dir.glob('*.jsonl'))
 
     all_files.sort()
 

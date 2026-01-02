@@ -18,16 +18,18 @@ from __future__ import annotations
 
 import json
 import sys
-from collections import Counter, defaultdict
+from collections import Counter
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 
-def analyze_actual_values(session_files):
+def analyze_actual_values(
+    session_files: list[Path],
+) -> tuple[dict[str, Counter[str]], dict[str, set[str]]]:
     """Analyze actual values from real session data."""
 
-    analysis = {
+    analysis: dict[str, Counter[str]] = {
         'stop_reasons': Counter(),
         'user_types': Counter(),
         'system_types': Counter(),
@@ -49,14 +51,12 @@ def analyze_actual_values(session_files):
         'system_levels': Counter(),
     }
 
-    path_fields = {
+    path_fields: dict[str, set[str]] = {
         'cwd': set(),
         'file_path': set(),
         'filePath': set(),
         'projectPaths': set(),
     }
-
-    optional_fields = defaultdict(lambda: {'present': 0, 'null': 0, 'missing': 0})
 
     for session_file in session_files[:50]:  # Sample first 50 files
         with open(session_file) as f:
@@ -190,31 +190,30 @@ def analyze_actual_values(session_files):
                         for p in record_data['projectPaths']:
                             path_fields['projectPaths'].add(p)
 
-                except:
+                except Exception:
                     pass
 
     return analysis, path_fields
 
 
-def print_section(title):
+def print_section(title: str) -> None:
     print()
     print('=' * 80)
     print(title)
     print('=' * 80)
 
 
-def main():
+def main() -> None:
     print('=' * 80)
     print('Model Quality Analysis')
     print('=' * 80)
 
     # Find session files
     claude_dir = Path.home() / '.claude' / 'projects'
-    session_files = []
+    session_files: list[Path] = []
     for project_dir in claude_dir.iterdir():
         if project_dir.is_dir():
-            for session_file in project_dir.glob('*.jsonl'):
-                session_files.append(session_file)
+            session_files.extend(project_dir.glob('*.jsonl'))
 
     print(f'Analyzing {len(session_files)} session files...')
 

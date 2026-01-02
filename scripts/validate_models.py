@@ -16,6 +16,7 @@ import json
 import sys
 from collections import Counter, defaultdict
 from pathlib import Path
+from typing import TypedDict
 
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -25,24 +26,49 @@ from pydantic import ValidationError
 from src.schemas.session import SessionRecordAdapter
 
 
-def find_all_session_files():
+class FileValidationResult(TypedDict):
+    """Result of validating a single session file."""
+
+    file: str
+    total_records: int
+    valid_records: int
+    invalid_records: int
+    record_types: Counter[str]
+    errors: list[str]
+    unknown_types: set[str]
+    unknown_content_types: set[str]
+    missing_fields: defaultdict[str, list[str]]
+
+
+class TotalStats(TypedDict):
+    """Aggregated statistics across all session files."""
+
+    files: int
+    total_records: int
+    valid_records: int
+    invalid_records: int
+    record_types: Counter[str]
+    unknown_types: set[str]
+    unknown_content_types: set[str]
+
+
+def find_all_session_files() -> list[Path]:
     """Find all .jsonl session files in ~/.claude/projects/*/"""
     claude_dir = Path.home() / '.claude' / 'projects'
     if not claude_dir.exists():
         return []
 
-    session_files = []
+    session_files: list[Path] = []
     for project_dir in claude_dir.iterdir():
         if project_dir.is_dir():
-            for session_file in project_dir.glob('*.jsonl'):
-                session_files.append(session_file)
+            session_files.extend(project_dir.glob('*.jsonl'))
 
     return sorted(session_files)
 
 
-def validate_session_file(session_file: Path):
+def validate_session_file(session_file: Path) -> FileValidationResult:
     """Validate a single session file and return statistics."""
-    results = {
+    results: FileValidationResult = {
         'file': str(session_file),
         'total_records': 0,
         'valid_records': 0,
@@ -68,7 +94,7 @@ def validate_session_file(session_file: Path):
                 results['record_types'][record_type] += 1
 
                 # Try to parse with Pydantic
-                record = SessionRecordAdapter.validate_python(record_data)
+                _record = SessionRecordAdapter.validate_python(record_data)
                 results['valid_records'] += 1
 
             except ValidationError as e:
@@ -130,13 +156,13 @@ def validate_session_file(session_file: Path):
                     # Track missing fields
                     if 'Validation error' in str(e) or 'Field required' in str(e):
                         results['missing_fields'][record_type].append(str(e)[:150])
-                except:
+                except Exception:
                     pass  # Ignore errors in error handling
 
     return results
 
 
-def main():
+def main() -> None:
     print('=' * 80)
     print('Claude Code Session Model Validation')
     print('=' * 80)
@@ -151,8 +177,8 @@ def main():
     print(f'Found {len(session_files)} session files')
     print()
 
-    all_results = []
-    total_stats = {
+    all_results: list[FileValidationResult] = []
+    total_stats: TotalStats = {
         'files': 0,
         'total_records': 0,
         'valid_records': 0,

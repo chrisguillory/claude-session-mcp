@@ -167,8 +167,8 @@ cd ~/.claude/projects && find . -name "<session-id>.jsonl" -exec sed -n "<line>p
 
 ```python
 from pathlib import Path
-from pydantic import TypeAdapter, BaseModel
-from src.models import SessionRecord, UserRecord, AssistantRecord, CompactBoundarySystemRecord
+from pydantic import TypeAdapter
+from src.schemas.session import SessionRecord, UserRecord, AssistantRecord, CompactBoundarySystemRecord
 import json
 
 adapter = TypeAdapter(SessionRecord)
@@ -402,5 +402,17 @@ This is why `/context` shows 43k tokens for a simple "Hello" message.
 When Claude Code updates break validation:
 1. Run `./scripts/validate_models.py` to find failures
 2. Inspect failing records using the command above
-3. Update `src/models.py` with new fields/types
+3. Update `src/schemas/session/models.py` with new fields/types
 4. Bump schema version in models.py header
+
+## Git Workflow
+
+**Always run pre-commit before committing** to avoid failed commits:
+
+```bash
+uv run pre-commit run --all-files
+git add -A
+git commit -m "message"
+```
+
+This catches formatting and type errors before the commit hook runs, saving tokens on failed attempts.
