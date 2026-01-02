@@ -80,8 +80,8 @@ from typing import Annotated, Any, Literal, TypeVar
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, TypeAdapter, ValidationInfo, field_validator
 
-from src.markers import PathField, PathListField
-from src.types import ModelId
+from src.schemas.session.markers import PathField, PathListField
+from src.schemas.types import ModelId
 
 # ==============================================================================
 # Schema Version

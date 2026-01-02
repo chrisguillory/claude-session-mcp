@@ -28,7 +28,7 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping, Sequence, Set
 
-from src.models import SessionRecord
+from src.schemas.session import SessionRecord
 
 # Pattern for agent filenames - matches both native and cloned formats:
 # - agent-5271c147.jsonl (native)

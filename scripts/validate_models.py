@@ -22,7 +22,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from pydantic import ValidationError
 
-from src.models import SessionRecordAdapter
+from src.schemas.session import SessionRecordAdapter
 
 
 def find_all_session_files():

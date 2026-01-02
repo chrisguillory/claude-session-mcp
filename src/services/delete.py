@@ -15,14 +15,12 @@ from __future__ import annotations
 
 import shutil
 import uuid
-from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Literal
 
-from src.base_model import StrictModel
 from src.paths import encode_path
 from src.protocols import LoggerProtocol
+from src.schemas.operations.delete import ArtifactFile, DeleteManifest, DeleteResult
 from src.services.archive import SessionArchiveService
 from src.services.artifacts import (
     SESSION_ENV_DIR,
@@ -35,62 +33,6 @@ from src.storage.local import LocalFileSystemStorage
 
 # Backup location - separate from ~/.claude/
 DELETED_SESSIONS_DIR = Path.home() / '.claude-session-mcp' / 'deleted'
-
-
-# ==============================================================================
-# Models
-# ==============================================================================
-
-
-class DeleteManifest(StrictModel):
-    """Discovery result for a session to delete."""
-
-    session_id: str
-    is_native: bool  # True if native session (UUIDv4), requires --force
-    created_at: datetime | None  # Extracted from UUIDv7 if applicable
-
-    files: Sequence[ArtifactFile]
-    total_size_bytes: int
-
-    session_main_file: str | None
-    agent_files: Sequence[str]
-    plan_files: Sequence[str]
-    tool_result_files: Sequence[str]
-    todo_files: Sequence[str]
-    session_env_dir: str | None
-
-
-class ArtifactFile(StrictModel):
-    """Single file in delete manifest."""
-
-    path: str
-    size_bytes: int
-    artifact_type: Literal[
-        'session_main',
-        'session_agent',
-        'plan_file',
-        'tool_result',
-        'todo_file',
-        'session_env',
-    ]
-
-
-class DeleteResult(StrictModel):
-    """Execution result."""
-
-    session_id: str
-    was_dry_run: bool
-    success: bool
-    error_message: str | None
-
-    backup_path: str | None  # Path to backup archive (if created)
-    files_deleted: int
-    size_freed_bytes: int
-    deleted_files: Sequence[str]
-    failed_deletions: Sequence[str]
-
-    duration_ms: float
-    deleted_at: datetime
 
 
 # ==============================================================================

@@ -9,20 +9,7 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-from src.base_model import StrictModel
-
-
-class SessionInfo(StrictModel):
-    """
-    Information about a discovered Claude Code session.
-
-    Note: The project path cannot be reliably determined from the folder name
-    due to lossy encoding (/, ., ' ', ~ all become -). Use extract_source_project_path()
-    on loaded session records to get the actual project path.
-    """
-
-    session_id: str
-    session_folder: Path  # The ~/.claude/projects/{encoded}/ folder, NOT decoded path
+from src.schemas.operations.discovery import SessionInfo
 
 
 class SessionDiscoveryService:

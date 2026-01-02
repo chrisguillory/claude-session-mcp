@@ -1,7 +1,7 @@
 """
 Shared Pydantic base model for strict validation.
 
-All Pydantic models in the application should inherit from StrictModel.
+All Pydantic schema models in the application should inherit from StrictModel.
 """
 
 from __future__ import annotations

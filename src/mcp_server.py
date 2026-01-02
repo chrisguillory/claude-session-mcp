@@ -31,12 +31,16 @@ import attrs
 from mcp.server.fastmcp import Context, FastMCP
 
 from .mcp_utils import DualLogger
-from .services.archive import ArchiveMetadata, SessionArchiveService
+from .schemas.operations.archive import ArchiveMetadata
+from .schemas.operations.delete import DeleteResult
+from .schemas.operations.lineage import LineageResult
+from .schemas.operations.restore import RestoreResult
+from .services.archive import SessionArchiveService
 from .services.clone import AmbiguousSessionError, SessionCloneService
-from .services.delete import DeleteResult, SessionDeleteService
-from .services.lineage import LineageResult, LineageService
+from .services.delete import SessionDeleteService
+from .services.lineage import LineageService
 from .services.parser import SessionParserService
-from .services.restore import RestoreResult, SessionRestoreService
+from .services.restore import SessionRestoreService
 from .storage.local import LocalFileSystemStorage
 
 # ==============================================================================

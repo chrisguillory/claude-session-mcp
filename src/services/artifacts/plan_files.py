@@ -21,7 +21,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence, Set
 from pathlib import Path
 
-from src.models import (
+from src.schemas.session import (
     ApiErrorSystemRecord,
     AssistantRecord,
     CompactBoundarySystemRecord,

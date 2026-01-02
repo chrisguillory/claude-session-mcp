@@ -15,9 +15,11 @@ from pathlib import Path
 
 import uuid6
 
-from src.models import SessionRecord, SessionRecordAdapter
 from src.paths import encode_path
 from src.protocols import LoggerProtocol
+from src.schemas.operations.discovery import SessionInfo
+from src.schemas.operations.restore import RestoreResult
+from src.schemas.session import SessionRecord, SessionRecordAdapter
 from src.services.artifacts import (
     TODOS_DIR,
     apply_agent_id_mapping,
@@ -37,10 +39,10 @@ from src.services.artifacts import (
     write_todos,
     write_tool_results,
 )
-from src.services.discovery import SessionDiscoveryService, SessionInfo
+from src.services.discovery import SessionDiscoveryService
 from src.services.lineage import LineageService
 from src.services.parser import SessionParserService
-from src.services.restore import PathTranslator, RestoreResult
+from src.services.restore import PathTranslator
 
 
 class AmbiguousSessionError(Exception):

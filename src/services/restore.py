@@ -16,12 +16,12 @@ from pathlib import Path
 import uuid6
 import zstandard
 
-from src.base_model import StrictModel
 from src.introspection import get_path_fields
-from src.models import SessionRecord, SessionRecordAdapter
 from src.paths import encode_path
 from src.protocols import LoggerProtocol
-from src.services.archive import SessionArchive
+from src.schemas.operations.archive import SessionArchive
+from src.schemas.operations.restore import RestoreResult
+from src.schemas.session import SessionRecord, SessionRecordAdapter
 from src.services.artifacts import (
     TODOS_DIR,
     apply_agent_id_mapping,
@@ -99,25 +99,6 @@ class PathTranslator:
         except (ValueError, OSError):
             pass  # Path doesn't need translation
         return path
-
-
-# ==============================================================================
-# Restore Result
-# ==============================================================================
-
-
-class RestoreResult(StrictModel):
-    """Result of a session restore operation."""
-
-    new_session_id: str
-    original_session_id: str
-    restored_at: datetime
-    project_path: str
-    files_restored: int
-    records_restored: int
-    paths_translated: bool
-    main_session_file: str
-    agent_files: list[str]
 
 
 # ==============================================================================

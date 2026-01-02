@@ -12,7 +12,7 @@ from typing import Any, Union
 from pydantic import BaseModel
 from pydantic.fields import FieldInfo
 
-from src.markers import PathMarker
+from src.schemas.session.markers import PathMarker
 
 
 def get_path_fields(model: type[BaseModel]) -> list[str]:
@@ -28,7 +28,7 @@ def get_path_fields(model: type[BaseModel]) -> list[str]:
         List of field names containing filesystem paths
 
     Example:
-        >>> from src.models import UserRecord
+        >>> from src.schemas.session import UserRecord
         >>> get_path_fields(UserRecord)
         ['cwd', 'projectPaths']
     """
@@ -84,7 +84,7 @@ def get_reserved_fields(model: type[BaseModel]) -> dict[str, dict[str, Any]]:
         Dict mapping field name to json_schema_extra metadata
 
     Example:
-        >>> from src.models import UserRecord
+        >>> from src.schemas.session import UserRecord
         >>> get_reserved_fields(UserRecord)
         {'skills': {'status': 'reserved'}, 'mcp': {'status': 'reserved'}}
     """
@@ -112,7 +112,7 @@ def get_field_version_info(model: type[BaseModel]) -> dict[str, str]:
         Dict mapping field name to version string
 
     Example:
-        >>> from src.models import UserRecord
+        >>> from src.schemas.session import UserRecord
         >>> get_field_version_info(UserRecord)
         {'thinkingMetadata': '2.0.35'}
     """
@@ -142,7 +142,7 @@ def get_literal_values(field_info: FieldInfo) -> list[Any] | None:
         List of literal values if field uses Literal type, None otherwise
 
     Example:
-        >>> from src.models import UserRecord
+        >>> from src.schemas.session import UserRecord
         >>> field_info = UserRecord.model_fields['userType']
         >>> get_literal_values(field_info)
         ['external']
@@ -163,7 +163,7 @@ def model_summary(model: type[BaseModel]) -> dict[str, Any]:
         Dict with model statistics and metadata
 
     Example:
-        >>> from src.models import UserRecord
+        >>> from src.schemas.session import UserRecord
         >>> summary = model_summary(UserRecord)
         >>> summary['total_fields']
         16
@@ -224,7 +224,7 @@ def print_model_summary(model: type[BaseModel]) -> None:
 
 if __name__ == '__main__':
     # Demo
-    from src.models import AssistantRecord, Message, UserRecord
+    from src.schemas.session import AssistantRecord, Message, UserRecord
 
     print('=' * 80)
     print('Model Introspection Demo')

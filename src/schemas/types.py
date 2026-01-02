@@ -1,7 +1,7 @@
 """
-Shared type definitions for the claude-session-mcp package.
+Shared type definitions for schemas.
 
-Centralizes common type annotations used across multiple modules.
+Centralizes common type annotations used across session and API schemas.
 """
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ from typing import Annotated, Literal
 
 import pydantic
 
-# Pydantic-enhanced datetime for JSON serialization (allows string→datetime conversion)
+# Pydantic-enhanced datetime for JSON serialization (allows string->datetime conversion)
 JsonDatetime = Annotated[datetime, pydantic.Field(strict=False)]
 
 

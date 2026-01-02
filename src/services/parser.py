@@ -10,8 +10,8 @@ import json
 from collections.abc import Sequence
 from pathlib import Path
 
-from src.models import SessionRecord, SessionRecordAdapter
 from src.protocols import LoggerProtocol, NullLogger
+from src.schemas.session import SessionRecord, SessionRecordAdapter
 
 # ==============================================================================
 # Session Parser Service
