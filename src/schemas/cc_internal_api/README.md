@@ -321,15 +321,16 @@ Captures save to `/tmp/req_*.json` and `/tmp/resp_*.json`.
 
 ```
 cc_internal_api/
-├── __init__.py       # Re-exports (155 exports)
-├── README.md         # This file
-├── base.py           # PermissiveModel, FromSession, FromSdk markers
-├── common.py         # Shared types (CacheControl, ApiUsage)
-├── request.py        # Request schemas (MessagesRequest, SystemBlock, ToolDefinition)
-├── response.py       # Response schemas (MessagesResponse)
-├── streaming.py      # SSE event schemas (8 event types, discriminated unions)
-├── rate_limits.py    # Rate limit header extraction (UnifiedRateLimit)
-└── telemetry.py      # Telemetry schemas (TelemetryBatchRequest, TelemetryEnv)
+├── __init__.py            # Re-exports (~80 types)
+├── README.md              # This file
+├── base.py                # PermissiveModel, FromSession, FromSdk markers
+├── common.py              # Shared types (CacheControl, ApiUsage)
+├── request.py             # Request schemas (MessagesRequest, SystemBlock, ToolDefinition)
+├── response.py            # Response schemas (MessagesResponse)
+├── streaming.py           # SSE event schemas (8 event types, discriminated unions)
+├── rate_limits.py         # Rate limit header extraction (UnifiedRateLimit)
+├── telemetry.py           # Telemetry schemas (TelemetryBatchRequest, TelemetryEnv)
+└── internal_endpoints.py  # Claude Code internal APIs (count_tokens, grove, eval, oauth)
 ```
 
 ## Observed Request Structure
@@ -416,6 +417,15 @@ From captured traffic (2026-01-02, session ee8c7363):
 - `TelemetryBatchRequest`, `TelemetryEvent` - Batch structure ✓
 - `TelemetryEventData`, `TelemetryEnv` - Event payload ✓
 - 45+ event names documented ✓
+
+**Internal Endpoints (internal_endpoints.py) - 17 validated:**
+- `CountTokensResponse` - Token counting ✓
+- `GroveResponse` - Feature gating ✓
+- `MetricsEnabledResponse` - Telemetry opt-in ✓
+- `EvalRequest`, `EvalResponse` - Feature flags with experiments ✓
+- `AccountSettingsResponse` - User preferences (~47 fields) ✓
+- `ClientDataResponse` - Client config ✓
+- `HelloResponse` - Health check (10 captures) ✓
 
 ### Inferred (Not Yet Observed)
 - `thinking_delta` in SSE (extended thinking streaming)

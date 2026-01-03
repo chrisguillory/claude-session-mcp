@@ -4,6 +4,26 @@ from __future__ import annotations
 
 from src.schemas.cc_internal_api.base import FromSdk, FromSession, PermissiveModel
 from src.schemas.cc_internal_api.common import ApiCacheCreation, ApiUsage, CacheControl
+from src.schemas.cc_internal_api.internal_endpoints import (
+    KNOWN_FEATURE_FLAGS,
+    AccountSettingsResponse,
+    ClientDataResponse,
+    CountTokensRequest,
+    CountTokensResponse,
+    DismissedBanner,
+    EvalAttributes,
+    EvalRequest,
+    EvalResponse,
+    ExperimentConfig,
+    ExperimentResult,
+    FeatureSource,
+    FeatureValue,
+    GroveResponse,
+    HelloResponse,
+    MetricsEnabledResponse,
+    ModelAccessResponse,
+    PaprikaMode,
+)
 from src.schemas.cc_internal_api.rate_limits import (
     FallbackStatus,
     OverageStatus,
@@ -151,4 +171,27 @@ __all__ = [
     'Entrypoint',
     'ClientType',
     'UserType',
+    # Internal endpoints - Count tokens
+    'CountTokensRequest',
+    'CountTokensResponse',
+    # Internal endpoints - Grove/Metrics
+    'GroveResponse',
+    'MetricsEnabledResponse',
+    # Internal endpoints - Feature flags
+    'EvalRequest',
+    'EvalResponse',
+    'EvalAttributes',
+    'FeatureValue',
+    'FeatureSource',
+    'ExperimentConfig',
+    'ExperimentResult',
+    'KNOWN_FEATURE_FLAGS',
+    # Internal endpoints - OAuth
+    'AccountSettingsResponse',
+    'ClientDataResponse',
+    'DismissedBanner',
+    'PaprikaMode',
+    # Internal endpoints - Health/Access
+    'HelloResponse',
+    'ModelAccessResponse',
 ]
