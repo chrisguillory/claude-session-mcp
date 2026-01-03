@@ -345,8 +345,38 @@ class ModelAccessResponse(PermissiveModel):
     """
     Response from /api/organization/{uuid}/claude_code_sonnet_1m_access.
 
-    VALIDATION STATUS: INFERRED
-    Not captured in current traffic, but expected based on endpoint name.
+    VALIDATION STATUS: VALIDATED
+    Checks if organization has access to Sonnet 1M context model.
     """
 
-    has_access: bool | None = None
+    has_access: bool
+    has_access_not_as_default: bool  # Has access but not set as default
+
+
+# ==============================================================================
+# Referral Eligibility (/api/oauth/organizations/{uuid}/referral/eligibility)
+# ==============================================================================
+
+
+class ReferralCodeDetails(PermissiveModel):
+    """
+    Referral code details.
+
+    VALIDATION STATUS: VALIDATED
+    """
+
+    code: str  # Referral code
+    campaign: str  # Campaign name (e.g., "claude_code_guest_pass")
+    referral_link: str  # Full referral URL
+
+
+class ReferralEligibilityResponse(PermissiveModel):
+    """
+    Response from /api/oauth/organizations/{uuid}/referral/eligibility.
+
+    VALIDATION STATUS: VALIDATED
+    Checks if user is eligible for referral program.
+    """
+
+    eligible: bool
+    referral_code_details: ReferralCodeDetails | None = None

@@ -23,6 +23,8 @@ from src.schemas.cc_internal_api.internal_endpoints import (
     MetricsEnabledResponse,
     ModelAccessResponse,
     PaprikaMode,
+    ReferralCodeDetails,
+    ReferralEligibilityResponse,
 )
 from src.schemas.cc_internal_api.rate_limits import (
     FallbackStatus,
@@ -54,6 +56,19 @@ from src.schemas.cc_internal_api.response import (
     StopReason,
     ThinkingContent,
     ToolUseContent,
+)
+from src.schemas.cc_internal_api.statsig import (
+    StatsigCustom,
+    StatsigCustomIDs,
+    StatsigEnvironment,
+    StatsigEvent,
+    StatsigEventMetadata,
+    StatsigInitializeRequest,
+    StatsigInitializeResponse,
+    StatsigMetadata,
+    StatsigRegisterRequest,
+    StatsigRegisterResponse,
+    StatsigUser,
 )
 from src.schemas.cc_internal_api.streaming import (
     ContentBlockDeltaEvent,
@@ -191,7 +206,21 @@ __all__ = [
     'ClientDataResponse',
     'DismissedBanner',
     'PaprikaMode',
+    'ReferralCodeDetails',
+    'ReferralEligibilityResponse',
     # Internal endpoints - Health/Access
     'HelloResponse',
     'ModelAccessResponse',
+    # Statsig
+    'StatsigUser',
+    'StatsigCustomIDs',
+    'StatsigCustom',
+    'StatsigEnvironment',
+    'StatsigMetadata',
+    'StatsigInitializeRequest',
+    'StatsigInitializeResponse',
+    'StatsigEvent',
+    'StatsigEventMetadata',
+    'StatsigRegisterRequest',
+    'StatsigRegisterResponse',
 ]
