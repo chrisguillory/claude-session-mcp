@@ -7,7 +7,7 @@ All models are currently in models.py - see README.md for planned structure.
 
 from __future__ import annotations
 
-# Re-export markers
+# Re-export markers for convenience
 from src.schemas.session.markers import PathField, PathListField, PathMarker
 
 # Re-export all public symbols from models
@@ -112,7 +112,13 @@ from src.schemas.session.models import (
     validated_copy,
 )
 
+# Expose submodules for qualified access (e.g., session.models.TokenUsage)
+from . import markers, models
+
 __all__ = [
+    # Submodules (for qualified access like session.models.TokenUsage)
+    'markers',
+    'models',
     # Schema version
     'SCHEMA_VERSION',
     'CLAUDE_CODE_MIN_VERSION',

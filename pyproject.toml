@@ -73,6 +73,8 @@ init_typed = true
 
 [dependency-groups]
 dev = [
+    "anthropic>=0.75.0",
+    "mitmproxy>=12.2.1",
     "mypy>=1.19.1",
     "pre-commit>=4.5.1",
     "ruff>=0.14.10",

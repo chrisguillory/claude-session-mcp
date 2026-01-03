@@ -296,106 +296,88 @@ Measure preservation strategy effectiveness:
 
 ## Intercepting Claude Code API Traffic
 
-Use mitmproxy to see exactly what Claude Code sends to the API.
+Use mitmproxy to capture Claude Code's API traffic for observation-based schema development.
 
 ### Setup
 
 ```bash
-# Install
+# Install mitmproxy (if not already installed)
 brew install mitmproxy
 
-# Create intercept script at /tmp/intercept_claude.py
-cat > /tmp/intercept_claude.py << 'EOF'
-"""Capture Claude Code API traffic."""
-from mitmproxy import http
-import json
-from datetime import datetime
+# Ensure captures directory exists
+mkdir -p captures
+```
 
-LOG_FILE = "/tmp/claude_traffic.log"
+### Capturing Traffic
 
-def request(flow: http.HTTPFlow):
-    with open(LOG_FILE, "a") as f:
-        f.write(f"\n{'='*80}\n")
-        f.write(f"[{datetime.now().isoformat()}] REQUEST\n")
-        f.write(f"Host: {flow.request.host}\n")
-        f.write(f"URL: {flow.request.url}\n")
-        f.write(f"Content-Length: {len(flow.request.content or b'')} bytes\n")
+```bash
+# Kill any existing proxy
+pkill -f mitmdump 2>/dev/null
 
-        if "anthropic.com" in flow.request.host and flow.request.content:
-            try:
-                body = json.loads(flow.request.content)
-                path = flow.request.path.replace("/", "_").replace("?", "_")[:50]
-                filename = f"/tmp/req_{path}_{datetime.now().strftime('%H%M%S%f')}.json"
-                with open(filename, "w") as req_f:
-                    json.dump(body, req_f, indent=2)
-                f.write(f"Saved to: {filename}\n")
-            except:
-                pass
+# Clear old captures
+rm -f captures/*.json captures/traffic.log
 
-def response(flow: http.HTTPFlow):
-    with open(LOG_FILE, "a") as f:
-        f.write(f"RESPONSE: {flow.response.status_code} ({len(flow.response.content or b'')} bytes)\n")
+# Start the proxy (from repo root)
+# --set stream=false ensures complete SSE capture for streaming responses
+mitmdump -p 8080 -s scripts/intercept_traffic.py --set stream=false
 
-    if "anthropic.com" in flow.request.host and flow.response.content:
-        try:
-            resp = json.loads(flow.response.content)
-            path = flow.request.path.replace("/", "_").replace("?", "_")[:50]
-            filename = f"/tmp/resp_{path}_{datetime.now().strftime('%H%M%S%f')}.json"
-            with open(filename, "w") as resp_f:
-                json.dump(resp, resp_f, indent=2)
-        except:
-            pass
-EOF
-
-# Start proxy
-mitmdump -p 8080 -s /tmp/intercept_claude.py --quiet &
-
-# Run Claude through proxy
+# In another terminal, run Claude through the proxy
 HTTPS_PROXY=http://localhost:8080 NODE_TLS_REJECT_UNAUTHORIZED=0 claude
 ```
 
-### Discovered Endpoints
+### Zero-MCP Capture (Vanilla Baseline)
+
+To capture traffic without MCP tool overhead, temporarily disable MCP servers before running Claude through the proxy. This gives a clean baseline of Claude Code's core API usage.
+
+### Analyzing Captures
+
+Captures now include full metadata (headers, timing, auth info, rate limits, SSE events):
+
+```bash
+# View traffic summary
+cat captures/traffic.log
+
+# List all captured files
+ls -la captures/*.json
+
+# Inspect a messages request (body is nested under .body.json)
+cat captures/req_*messages*.json | jq '{
+  flow_id,
+  method,
+  path,
+  http_version,
+  auth_info,
+  anthropic_headers,
+  model: .body.json.model,
+  max_tokens: .body.json.max_tokens,
+  system_blocks: (.body.json.system | length),
+  messages_count: (.body.json.messages | length),
+  tools_count: (.body.json.tools | length)
+}'
+
+# See request keys
+cat captures/req_*.json | jq 'keys'
+```
+
+### Output Files
+
+| File Pattern | Content |
+|--------------|---------|
+| `captures/req_NNN_*.json` | Request payloads |
+| `captures/resp_NNN_*.json` | Response payloads |
+| `captures/traffic.log` | Summary log |
+
+### Previously Discovered Endpoints
 
 | Endpoint | Purpose |
 |----------|---------|
 | `api.anthropic.com/v1/messages` | Main conversation API |
 | `api.anthropic.com/v1/messages/count_tokens` | Token counting (called per tool!) |
 | `api.anthropic.com/api/event_logging/batch` | Telemetry |
+| `api.anthropic.com/api/hello` | Health check |
 | `statsig.anthropic.com` | Feature flags |
 
-### Analyzing Captured Requests
-
-```bash
-# View traffic log
-cat /tmp/claude_traffic.log
-
-# List captured request/response files
-ls -la /tmp/req_*.json /tmp/resp_*.json
-
-# Inspect a messages request
-cat /tmp/req_*messages*.json | jq '{
-  model,
-  max_tokens,
-  system_chars: (.system | tostring | length),
-  messages_count: (.messages | length),
-  tools_count: (.tools | length)
-}'
-
-# See actual user message
-cat /tmp/req_*messages*.json | jq '.messages[2]'
-```
-
-### Key Finding: Tool Token Overhead
-
-With 108 MCP tools configured, ~75% of context is tools:
-
-| Component | Chars | Est. Tokens |
-|-----------|-------|-------------|
-| Tools | 130k | ~32k |
-| System prompt | 15k | ~4k |
-| Messages | varies | varies |
-
-This is why `/context` shows 43k tokens for a simple "Hello" message.
+See `docs/intercepting-claude-api.md` for detailed exploration notes.
 
 ## Schema Updates
 

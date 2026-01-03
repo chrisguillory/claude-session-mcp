@@ -26,6 +26,8 @@ repos:
           - filelock
           - attrs
           - lazy-object-proxy
+          - mitmproxy
+          - anthropic
         args: [--config-file=pyproject.toml, .]
         pass_filenames: false
         always_run: true
