@@ -398,3 +398,24 @@ git commit -m "message"
 ```
 
 This catches formatting and type errors before the commit hook runs, saving tokens on failed attempts.
+
+### Pre-commit mypy Dependencies
+
+**IMPORTANT:** Pre-commit runs mypy in an isolated virtual environment. Dependencies from `pyproject.toml` are NOT automatically available to the mypy hook.
+
+If you add a new import to a Python file and mypy fails in pre-commit with `Library stubs not installed`, you need to:
+
+1. Add the library AND its type stubs to `.pre-commit-config.yaml` under `additional_dependencies`:
+
+```yaml
+- repo: https://github.com/pre-commit/mirrors-mypy
+  hooks:
+    - id: mypy
+      additional_dependencies:
+        - your-library
+        - types-your-library  # if type stubs exist
+```
+
+2. The same dependency must also be in `pyproject.toml` for normal development.
+
+**Why this happens:** Pre-commit creates isolated environments for reproducibility. This is by design, but means mypy dependencies must be declared twice - once in `pyproject.toml` (for development) and once in `.pre-commit-config.yaml` (for pre-commit hooks).

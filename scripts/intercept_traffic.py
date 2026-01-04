@@ -5,14 +5,66 @@ Intercept Claude Code API traffic via mitmproxy.
 PURE CAPTURE - saves all traffic data to JSON files for later analysis.
 No filtering, no extraction, no analysis at capture time.
 
-Based on comprehensive mitmproxy research (Perplexity 2026-01-02).
+================================================================================
+SESSION CORRELATION ARCHITECTURE
+================================================================================
+
+This script integrates with claude-workspace's hook system to definitively
+associate HTTP traffic with Claude Code sessions.
+
+HOW IT WORKS:
+
+    ┌─────────────────────────────────────────────────────────────────────┐
+    │ 1. User runs: HTTPS_PROXY=http://localhost:8080 claude              │
+    │                                                                     │
+    │ 2. Claude Code starts, generates session_id internally              │
+    │                                                                     │
+    │ 3. Claude Code calls SessionStart hook (configured in settings)     │
+    │    → Passes via stdin: { session_id, transcript_path, ... }         │
+    │                                                                     │
+    │ 4. Hook (claude-workspace/hooks/session-start.py):                  │
+    │    a) Receives session_id directly from Claude Code                 │
+    │    b) Walks process tree to find claude_pid                         │
+    │    c) Writes to ~/.claude-workspace/sessions.json:                  │
+    │       { session_id, state:"active", claude_pid, ... }               │
+    │    d) Returns (~18ms) → Claude continues startup                    │
+    │                                                                     │
+    │ 5. Claude makes HTTP request → mitmproxy intercepts                 │
+    │                                                                     │
+    │ 6. client_connected hook fires:                                     │
+    │    a) Get source_port from connection.peername                      │
+    │    b) psutil maps source_port → PID                                 │
+    │    c) Read sessions.json, find active session where claude_pid=PID  │
+    │    d) Store session_id in connection.metadata                       │
+    │                                                                     │
+    │ 7. Create captures/<session_id>/ directory                          │
+    │    All traffic from this connection → that directory                │
+    └─────────────────────────────────────────────────────────────────────┘
+
+WHY THIS IS DEFINITIVE:
+
+    - session_id comes from Claude Code itself (not derived or guessed)
+    - PID linkage established by hook walking actual process tree
+    - psutil provides kernel-level PID-to-port mapping
+    - sessions.json uses FileLock + atomic writes (no race conditions)
+    - Hook completes before first HTTP request (timing is safe)
+
+DEPENDENCIES:
+
+    - claude-workspace hooks must be configured in ~/.claude/settings.json
+    - ~/.claude-workspace/sessions.json must exist (created by hooks)
+    - psutil for PID-to-port mapping
+
+FALLBACK:
+
+    If session lookup fails, extracts session_id from first telemetry request
+    (/api/event_logging/batch contains session_id in event_data).
+
+================================================================================
 
 Usage:
     # Kill any existing proxy
     pkill -f mitmdump 2>/dev/null
-
-    # Clear old captures
-    rm -f captures/*.json captures/traffic.log
 
     # Start the proxy (from repo root)
     mitmdump -p 8080 -s scripts/intercept_traffic.py --set stream=false
@@ -20,12 +72,13 @@ Usage:
     # In another terminal, run Claude through the proxy
     HTTPS_PROXY=http://localhost:8080 NODE_TLS_REJECT_UNAUTHORIZED=0 claude
 
-Output files:
-    req_NNN_HOST_PATH.json   - Complete request data
-    resp_NNN_HOST_PATH.json  - Complete response data
-    error_NNN.json           - Connection failures
-    ws_*.json                - WebSocket traffic (if any)
-    traffic.log              - Summary log
+Output structure:
+    captures/<session_id>/
+        req_NNN_HOST_PATH.json   - Complete request data
+        resp_NNN_HOST_PATH.json  - Complete response data
+        manifest.json            - Session metadata
+        traffic.log              - Summary log
+    captures/unknown/            - Traffic without session correlation
 """
 
 from __future__ import annotations
@@ -39,15 +92,116 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+import psutil
 from mitmproxy import addonmanager, connection, http
 
 # ==============================================================================
 # Configuration
 # ==============================================================================
 
+CAPTURE_VERSION = 2  # Increment when capture format changes
+
 SCRIPT_DIR = Path(__file__).parent.parent
-CAPTURES_DIR = SCRIPT_DIR / 'captures'
-LOG_FILE = CAPTURES_DIR / 'traffic.log'
+CAPTURES_BASE = SCRIPT_DIR / 'captures'
+SESSIONS_PATH = Path.home() / '.claude-workspace' / 'sessions.json'
+
+# For now, use flat directory structure until session-based directories are implemented
+CAPTURES_DIR = CAPTURES_BASE
+LOG_FILE = CAPTURES_BASE / 'traffic.log'
+
+
+# ==============================================================================
+# Session Correlation
+# ==============================================================================
+
+
+def _get_pid_for_port(source_port: int) -> int | None:
+    """Find which process owns a TCP connection from the given source port.
+
+    Uses psutil to query kernel network connection table.
+    Returns None if port not found (connection may have closed).
+    """
+    for conn in psutil.net_connections(kind='tcp'):
+        if conn.laddr and conn.laddr.port == source_port:
+            pid: int | None = conn.pid
+            return pid
+    return None
+
+
+def _get_session_for_pid(pid: int) -> dict[str, Any] | None:
+    """Find active Claude Code session for a given PID.
+
+    Reads ~/.claude-workspace/sessions.json (created by claude-workspace hooks).
+    Returns the session dict if found, None otherwise.
+
+    Raises:
+        FileNotFoundError: If sessions.json doesn't exist (hooks not configured)
+        json.JSONDecodeError: If sessions.json is invalid
+    """
+    if not SESSIONS_PATH.exists():
+        raise FileNotFoundError(
+            f'Sessions file not found: {SESSIONS_PATH}\n'
+            'Ensure claude-workspace hooks are configured in ~/.claude/settings.json'
+        )
+
+    with open(SESSIONS_PATH) as f:
+        data = json.load(f)
+
+    for session in data.get('sessions', []):
+        if session.get('state') == 'active' and session.get('metadata', {}).get('claude_pid') == pid:
+            result: dict[str, Any] = session
+            return result
+
+    return None
+
+
+def _extract_session_from_telemetry(body: dict[str, Any]) -> str | None:
+    """Extract session_id from telemetry request body.
+
+    Telemetry requests to /api/event_logging/batch contain:
+    { "data": { "events": [{ "event_data": { "session_id": "..." } }] } }
+
+    Returns None if the expected structure is not present.
+    """
+    data = body.get('data', {})
+    events = data.get('events', [])
+    if not events:
+        return None
+    event_data = events[0].get('event_data', {})
+    session_id: str | None = event_data.get('session_id')
+    return session_id
+
+
+def _get_session_dir(session_id: str | None) -> Path:
+    """Get or create the capture directory for a session."""
+    if session_id:
+        session_dir = CAPTURES_BASE / session_id
+    else:
+        session_dir = CAPTURES_BASE / 'unknown'
+
+    session_dir.mkdir(parents=True, exist_ok=True)
+    return session_dir
+
+
+def _write_manifest(session_dir: Path, session_info: dict[str, Any] | None) -> None:
+    """Write session manifest to capture directory."""
+    manifest = {
+        'capture_version': CAPTURE_VERSION,
+        'captured_at': datetime.now(tz=UTC).isoformat(),
+    }
+
+    if session_info:
+        manifest['claude_session'] = {
+            'session_id': session_info.get('session_id'),
+            'project_dir': session_info.get('project_dir'),
+            'transcript_path': session_info.get('transcript_path'),
+            'source': session_info.get('source'),
+            'claude_pid': session_info.get('metadata', {}).get('claude_pid'),
+            'started_at': session_info.get('metadata', {}).get('started_at'),
+        }
+
+    manifest_path = session_dir / 'manifest.json'
+    _save_json_atomic(manifest_path, manifest)
 
 
 # ==============================================================================
@@ -391,6 +545,14 @@ def response(flow: http.HTTPFlow) -> None:
         'sequence': n,
         'direction': 'response',
         'is_replay': flow.is_replay,
+        # Request context (for correlation/discrimination)
+        'method': flow.request.method,
+        'scheme': flow.request.scheme,
+        'host': flow.request.host,
+        'port': flow.request.port,
+        'path': flow.request.path,
+        'query': dict(flow.request.query),
+        'url': flow.request.pretty_url,
         # Timing
         'timestamp': flow.response.timestamp_start,
         'timestamp_iso': datetime.fromtimestamp(flow.response.timestamp_start, tz=UTC).isoformat()

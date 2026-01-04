@@ -15,6 +15,9 @@ repos:
     rev: v1.19.1
     hooks:
       - id: mypy
+        # NOTE: pre-commit runs mypy in an isolated environment. Dependencies from
+        # pyproject.toml are NOT automatically available. Any library or type stub
+        # that mypy needs must be listed here explicitly.
         additional_dependencies:
           - pydantic>=2.12
           - pydantic-settings>=2.12
@@ -28,6 +31,8 @@ repos:
           - lazy-object-proxy
           - mitmproxy
           - anthropic
+          - psutil
+          - types-psutil
         args: [--config-file=pyproject.toml, .]
         pass_filenames: false
         always_run: true
