@@ -462,6 +462,46 @@ def done() -> None:
 
 
 # ==============================================================================
+# Session Discovery
+# ==============================================================================
+
+
+def client_connected(client: connection.Client) -> None:
+    """Discover Claude Code session when client connects.
+
+    This hook fires when a new TCP connection is established.
+    We use psutil to map the client's source port to a PID,
+    then look up the session in ~/.claude-workspace/sessions.json.
+
+    Session info is stored in client.metadata for use by request/response hooks.
+
+    Exceptions (FileNotFoundError, JSONDecodeError) propagate to mitmproxy
+    which logs them and continues - captures will have session_id: null.
+    """
+    if not client.peername:
+        return
+
+    source_port = client.peername[1]
+
+    # Get PID for this connection
+    pid = _get_pid_for_port(source_port)
+    if pid is None:
+        _log(f'WARNING: No PID found for port {source_port}\n')
+        return
+
+    # Look up session
+    # FileNotFoundError/JSONDecodeError propagate → mitmproxy logs, continues
+    session = _get_session_for_pid(pid)
+    if session:
+        # mitmproxy's Client.metadata exists at runtime but isn't in type stubs
+        client.metadata['claude_session'] = session  # type: ignore[attr-defined]
+        client.metadata['session_id'] = session['session_id']  # type: ignore[attr-defined]
+        _log(f'Session {session["session_id"][:8]}... (PID {pid})\n')
+    else:
+        _log(f'WARNING: PID {pid} not in active sessions\n')
+
+
+# ==============================================================================
 # HTTP Capture
 # ==============================================================================
 
@@ -475,12 +515,18 @@ def request(flow: http.HTTPFlow) -> None:
     content_type = headers.get('content-type', headers.get('Content-Type', ''))
     body = _parse_body(flow.request.content, content_type)
 
+    # Get session_id from connection metadata (set by client_connected hook)
+    session_id: str | None = None
+    if flow.client_conn:
+        session_id = flow.client_conn.metadata.get('session_id')  # type: ignore[attr-defined]
+
     capture: dict[str, Any] = {
         # Identification
         'flow_id': flow.id,
         'sequence': n,
         'direction': 'request',
         'is_replay': flow.is_replay,
+        'session_id': session_id,
         # Timing
         'timestamp': flow.request.timestamp_start,
         'timestamp_iso': datetime.fromtimestamp(flow.request.timestamp_start, tz=UTC).isoformat(),
@@ -539,12 +585,18 @@ def response(flow: http.HTTPFlow) -> None:
     if flow.request.timestamp_start and flow.response.timestamp_end:
         duration = flow.response.timestamp_end - flow.request.timestamp_start
 
+    # Get session_id from connection metadata (set by client_connected hook)
+    session_id: str | None = None
+    if flow.client_conn:
+        session_id = flow.client_conn.metadata.get('session_id')  # type: ignore[attr-defined]
+
     capture: dict[str, Any] = {
         # Identification
         'flow_id': flow.id,
         'sequence': n,
         'direction': 'response',
         'is_replay': flow.is_replay,
+        'session_id': session_id,
         # Request context (for correlation/discrimination)
         'method': flow.request.method,
         'scheme': flow.request.scheme,
