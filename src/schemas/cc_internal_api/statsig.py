@@ -93,34 +93,53 @@ class StatsigInitializeRequest(PermissiveModel):
     """
     Request to /v1/initialize.
 
-    VALIDATION STATUS: VALIDATED
+    VALIDATION STATUS: VALIDATED (2026-01-05)
     Initializes feature flag state for a user.
+    All fields are always present in observed requests.
     """
 
     user: StatsigUser
     statsigMetadata: StatsigMetadata
-    sinceTime: int | None = None  # Timestamp for delta updates
-    hash: str | None = None  # Hash algorithm (e.g., "djb2")
-    deltasResponseRequested: bool = False
-    full_checksum: str | None = None
-    previousDerivedFields: Mapping[str, Any] | None = None
+    sinceTime: int  # 0 on first request, timestamp on subsequent
+    hash: str  # Hash algorithm, e.g., "djb2"
+    deltasResponseRequested: bool  # Whether to request delta updates
+    full_checksum: str  # Checksum for delta comparison
+    previousDerivedFields: Mapping[str, Any]  # {} on first request, populated on subsequent
 
 
-class StatsigInitializeResponse(PermissiveModel):
+class StatsigInitializeEmptyBody(PermissiveModel):
     """
-    Response from /v1/initialize.
+    Body structure for 204 No Content response.
 
-    VALIDATION STATUS: VALIDATED
-    Note: Response is often empty when deltasResponseRequested=true.
+    VALIDATION STATUS: VALIDATED (2026-01-05)
+    Returned when deltasResponseRequested=true and no updates available.
+    The intercept script captures this as the raw body (no type/data wrapper).
     """
 
-    empty: bool = False
-    size: int = 0
-    # Full response (when not empty) would include feature_gates, dynamic_configs, etc.
-    feature_gates: Mapping[str, Any] | None = None
-    dynamic_configs: Mapping[str, Any] | None = None
-    layer_configs: Mapping[str, Any] | None = None
-    has_updates: bool | None = None
+    empty: Literal[True]
+    size: int
+
+
+class StatsigInitializeFullBody(PermissiveModel):
+    """
+    Body structure for 200 OK response with feature flags.
+
+    VALIDATION STATUS: VALIDATED (2026-01-05)
+    Returned on initial request or when updates are available.
+    The intercept script extracts this from body.data (json type wrapper).
+
+    Note: Many additional fields (generator, time, derived_fields, evaluated_keys,
+    company_lcut, hash_used, etc.) are captured by PermissiveModel.extra='allow'.
+    """
+
+    feature_gates: Mapping[str, Any]
+    dynamic_configs: Mapping[str, Any]
+    layer_configs: Mapping[str, Any]
+    has_updates: bool
+
+
+# Union type for discriminated dispatch in captures
+StatsigInitializeResponse = StatsigInitializeEmptyBody | StatsigInitializeFullBody
 
 
 # ==============================================================================
@@ -180,8 +199,8 @@ class StatsigRegisterResponse(PermissiveModel):
     """
     Response from /v1/rgstr.
 
-    VALIDATION STATUS: INFERRED
-    Typically returns success acknowledgment.
+    VALIDATION STATUS: VALIDATED (2026-01-05)
+    Returns success acknowledgment.
     """
 
-    success: bool = True
+    success: bool  # Required - no default (fail-fast)

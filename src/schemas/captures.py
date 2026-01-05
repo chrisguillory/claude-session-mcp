@@ -71,8 +71,13 @@ from pydantic import Discriminator, Field, Tag, TypeAdapter, ValidationError
 from src.schemas.cc_internal_api import (
     MessagesRequest,
     SSEEvent,
+    StatsigInitializeEmptyBody,
+    StatsigInitializeFullBody,
+    StatsigInitializeRequest,
     StatsigRegisterRequest,
+    StatsigRegisterResponse,
     TelemetryBatchRequest,
+    TelemetryBatchResponse,
 )
 from src.schemas.cc_internal_api.base import PermissiveModel
 
@@ -224,6 +229,12 @@ class TelemetryRequestCapture(AnthropicRequestCapture):
     body: TelemetryBatchRequest
 
 
+class TelemetryResponseCapture(AnthropicResponseCapture):
+    """Captured POST /api/event_logging/batch response."""
+
+    body: TelemetryBatchResponse
+
+
 # ==============================================================================
 # LEVEL 3: Endpoint-specific wrappers - Statsig
 # ==============================================================================
@@ -234,6 +245,31 @@ class StatsigRegisterRequestCapture(StatsigRequestCapture):
 
     method: Literal['POST'] = 'POST'
     body: StatsigRegisterRequest
+
+
+class StatsigRegisterResponseCapture(StatsigResponseCapture):
+    """Captured POST /v1/rgstr response (202 Accepted)."""
+
+    body: StatsigRegisterResponse
+
+
+class StatsigInitializeRequestCapture(StatsigRequestCapture):
+    """Captured POST /v1/initialize request (feature flag init)."""
+
+    method: Literal['POST'] = 'POST'
+    body: StatsigInitializeRequest
+
+
+class StatsigInitializeResponseCapture(StatsigResponseCapture):
+    """
+    Captured POST /v1/initialize response.
+
+    Two response types:
+    - 200 OK: Full feature flags (StatsigInitializeFullBody)
+    - 204 No Content: Empty response when no updates (StatsigInitializeEmptyBody)
+    """
+
+    body: StatsigInitializeEmptyBody | StatsigInitializeFullBody
 
 
 # ==============================================================================
@@ -276,8 +312,13 @@ CAPTURE_REGISTRY: dict[tuple[str, str, str], str] = {
     ('api.anthropic.com', '/v1/messages', 'request'): 'messages_request',
     # Anthropic API - Telemetry
     ('api.anthropic.com', '/api/event_logging/batch', 'request'): 'telemetry_request',
+    ('api.anthropic.com', '/api/event_logging/batch', 'response'): 'telemetry_response',
     # Statsig - Register
     ('statsig.anthropic.com', '/v1/rgstr', 'request'): 'statsig_register_request',
+    ('statsig.anthropic.com', '/v1/rgstr', 'response'): 'statsig_register_response',
+    # Statsig - Initialize
+    ('statsig.anthropic.com', '/v1/initialize', 'request'): 'statsig_initialize_request',
+    ('statsig.anthropic.com', '/v1/initialize', 'response'): 'statsig_initialize_response',
 }
 
 
@@ -396,11 +437,20 @@ def get_capture_type(v: Any) -> str:
 # ==============================================================================
 
 CapturedTraffic = Annotated[
+    # Anthropic API - Messages
     Annotated[MessagesRequestCapture, Tag('messages_request')]
     | Annotated[MessagesStreamResponseCapture, Tag('messages_stream_response')]
     | Annotated[MessagesJsonResponseCapture, Tag('messages_json_response')]
+    # Anthropic API - Telemetry
     | Annotated[TelemetryRequestCapture, Tag('telemetry_request')]
+    | Annotated[TelemetryResponseCapture, Tag('telemetry_response')]
+    # Statsig - Register
     | Annotated[StatsigRegisterRequestCapture, Tag('statsig_register_request')]
+    | Annotated[StatsigRegisterResponseCapture, Tag('statsig_register_response')]
+    # Statsig - Initialize
+    | Annotated[StatsigInitializeRequestCapture, Tag('statsig_initialize_request')]
+    | Annotated[StatsigInitializeResponseCapture, Tag('statsig_initialize_response')]
+    # Fallback
     | Annotated[UnknownRequestCapture, Tag('unknown_request')]
     | Annotated[UnknownResponseCapture, Tag('unknown_response')],
     Discriminator(get_capture_type),

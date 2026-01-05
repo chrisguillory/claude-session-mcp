@@ -114,8 +114,8 @@ def get_schema_for_endpoint(pattern: str, is_request: bool) -> tuple[str | None,
         ModelAccessResponse,
         ReferralEligibilityResponse,
         StatsigInitializeRequest,
-        StatsigInitializeResponse,
         StatsigRegisterRequest,
+        StatsigRegisterResponse,
         TelemetryBatchRequest,
     )
 
@@ -199,11 +199,12 @@ def get_schema_for_endpoint(pattern: str, is_request: bool) -> tuple[str | None,
         if 'initialize' in pattern_lower:
             if is_request:
                 return 'StatsigInitializeRequest', StatsigInitializeRequest
-            return 'StatsigInitializeResponse', StatsigInitializeResponse
+            # Response is a union type (empty or full), skip direct validation
+            return None, None
         if 'rgstr' in pattern_lower:
             if is_request:
                 return 'StatsigRegisterRequest', StatsigRegisterRequest
-            return None, None  # Response is just acknowledgment
+            return 'StatsigRegisterResponse', StatsigRegisterResponse
 
     return None, None
 
