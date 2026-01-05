@@ -41,7 +41,7 @@ class ArchiveMetadata(StrictModel):
     archived_at: datetime
     record_count: int  # Total records across all files
     file_count: int  # Number of JSONL files included (main + agents)
-    files: list[FileMetadata]  # Per-file breakdown
+    files: Sequence[FileMetadata]  # Per-file breakdown
 
 
 class SessionArchive(StrictModel):

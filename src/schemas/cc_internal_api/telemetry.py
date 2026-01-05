@@ -13,6 +13,7 @@ Privacy controls:
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from typing import Any, Literal
 
 from src.schemas.cc_internal_api.base import PermissiveModel
@@ -129,7 +130,7 @@ class TelemetryBatchRequest(PermissiveModel):
     Observed in request body.
     """
 
-    events: list[TelemetryEvent]
+    events: Sequence[TelemetryEvent]
 
 
 class TelemetryBatchResponse(PermissiveModel):

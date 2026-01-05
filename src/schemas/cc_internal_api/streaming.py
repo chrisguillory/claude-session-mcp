@@ -13,6 +13,7 @@ With 'ping' events interspersed for keepalive.
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from typing import Annotated, Any, Literal
 
 from pydantic import Discriminator
@@ -123,7 +124,7 @@ class ToolUseBlockStart(PermissiveModel):
     type: Literal['tool_use']
     id: str
     name: str
-    input: dict[str, Any]  # Usually empty dict at start
+    input: Mapping[str, Any]  # Usually empty dict at start
 
 
 # Union of content block start types
@@ -166,7 +167,7 @@ class InitialMessage(PermissiveModel):
     id: str  # e.g., "msg_01WsgytDj2C14cRxDGqz36ZF"
     type: Literal['message']
     role: Literal['assistant']
-    content: list[Any]  # Usually empty at start
+    content: Sequence[Any]  # Usually empty at start
     stop_reason: None  # Always null at start
     stop_sequence: None  # Always null at start
     usage: InitialUsage
@@ -213,7 +214,7 @@ class MessageDeltaContextManagement(PermissiveModel):
     Observed in message_delta.context_management.
     """
 
-    applied_edits: list[dict[str, Any]]  # Usually empty
+    applied_edits: Sequence[Mapping[str, Any]]  # Usually empty
 
 
 # ==============================================================================
@@ -316,7 +317,7 @@ class ErrorEvent(PermissiveModel):
     """
 
     type: Literal['error']
-    error: dict[str, Any]
+    error: Mapping[str, Any]
 
 
 # ==============================================================================

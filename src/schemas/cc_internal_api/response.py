@@ -7,6 +7,7 @@ Validated against mitmproxy captures of actual Claude Code traffic.
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from typing import Annotated, Any, Literal
 
 import anthropic.types
@@ -90,7 +91,7 @@ class ToolUseContent(PermissiveModel):
         FromSession(session.models.ToolUseContent, 'name', status='inferred'),
     ]
     input: Annotated[
-        dict[str, Any],
+        Mapping[str, Any],
         FromSession(session.models.ToolUseContent, 'input', status='inferred'),
     ]
 
@@ -114,7 +115,7 @@ class ResponseContextManagement(PermissiveModel):
     Note: Response has 'applied_edits' vs request has 'edits'.
     """
 
-    applied_edits: list[dict[str, Any]]  # Observed as empty array
+    applied_edits: Sequence[Mapping[str, Any]]  # Observed as empty array
 
 
 # ==============================================================================
@@ -160,7 +161,7 @@ class MessagesResponse(PermissiveModel):
     ]
 
     content: Annotated[
-        list[ResponseContent],
+        Sequence[ResponseContent],
         FromSdk(anthropic.types.Message, 'content'),
     ]
 

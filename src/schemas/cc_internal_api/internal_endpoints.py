@@ -13,6 +13,7 @@ These model Claude Code's internal API endpoints beyond the Messages API:
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from typing import Any, Literal
 
 from src.schemas.cc_internal_api.base import PermissiveModel
@@ -34,9 +35,9 @@ class CountTokensRequest(PermissiveModel):
     """
 
     model: ModelId
-    messages: list[dict[str, Any]]  # Can be empty
-    tools: list[dict[str, Any]] | None = None
-    system: list[dict[str, Any]] | None = None
+    messages: Sequence[Mapping[str, Any]]  # Can be empty
+    tools: Sequence[Mapping[str, Any]] | None = None
+    system: Sequence[Mapping[str, Any]] | None = None
 
 
 class CountTokensResponse(PermissiveModel):
@@ -105,7 +106,7 @@ class ExperimentConfig(PermissiveModel):
     """
 
     key: str  # Experiment key
-    variations: list[str]  # Possible variations
+    variations: Sequence[str]  # Possible variations
 
 
 class ExperimentResult(PermissiveModel):
@@ -129,7 +130,7 @@ class FeatureValue(PermissiveModel):
     Observed in features dict values.
     """
 
-    value: bool | str | dict[str, Any]  # Feature value (varies by flag)
+    value: bool | str | Mapping[str, Any]  # Feature value (varies by flag)
     on: bool  # Whether feature is on
     off: bool  # Whether feature is off
     source: FeatureSource  # Where value comes from
@@ -165,8 +166,8 @@ class EvalRequest(PermissiveModel):
     """
 
     attributes: EvalAttributes
-    forcedVariations: dict[str, Any]  # Forced variations (usually empty)
-    forcedFeatures: list[str]  # Forced features (usually empty)
+    forcedVariations: Mapping[str, Any]  # Forced variations (usually empty)
+    forcedFeatures: Sequence[str]  # Forced features (usually empty)
     url: str  # URL context (usually empty string)
 
 
@@ -178,7 +179,7 @@ class EvalResponse(PermissiveModel):
     Contains all feature flags for the user.
     """
 
-    features: dict[str, FeatureValue]
+    features: Mapping[str, FeatureValue]
 
 
 # Known feature flag names (observed)
@@ -221,7 +222,7 @@ class ClientDataResponse(PermissiveModel):
     Contains client-specific configuration. Currently empty in captures.
     """
 
-    client_data: dict[str, Any]
+    client_data: Mapping[str, Any]
 
 
 # ==============================================================================
@@ -283,11 +284,11 @@ class AccountSettingsResponse(PermissiveModel):
     enable_chat_suggestions: bool | None = None
 
     # MCP tools permissions (per-tool boolean map)
-    enabled_mcp_tools: dict[str, bool] | None = None
+    enabled_mcp_tools: Mapping[str, bool] | None = None
 
     # UI state
-    input_menu_pinned_items: list[str] | None = None
-    dismissed_claudeai_banners: list[DismissedBanner] | None = None
+    input_menu_pinned_items: Sequence[str] | None = None
+    dismissed_claudeai_banners: Sequence[DismissedBanner] | None = None
     dismissed_artifacts_announcement: bool | None = None
     dismissed_artifact_feedback_form: bool | None = None
     dismissed_claude_code_spotlight: bool | None = None
@@ -304,7 +305,7 @@ class AccountSettingsResponse(PermissiveModel):
     grove_notice_viewed_at: str | None = None
 
     # Wiggle egress
-    wiggle_egress_allowed_hosts: list[str] | None = None
+    wiggle_egress_allowed_hosts: Sequence[str] | None = None
     wiggle_egress_hosts_template: str | None = None
     wiggle_egress_spotlight_viewed_at: str | None = None
 

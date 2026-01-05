@@ -7,6 +7,7 @@ Validated against mitmproxy captures of actual Claude Code traffic.
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from typing import Annotated, Any, Literal
 
 import anthropic.types
@@ -48,8 +49,8 @@ class ToolInputSchema(PermissiveModel):
     """
 
     type: Literal['object']
-    properties: dict[str, Any] | None = None
-    required: list[str] | None = None
+    properties: Mapping[str, Any] | None = None
+    required: Sequence[str] | None = None
     additionalProperties: bool | None = None
 
 
@@ -120,7 +121,7 @@ class RequestMessage(PermissiveModel):
     """
 
     role: Literal['user', 'assistant']
-    content: list[RequestContentBlock] | str
+    content: Sequence[RequestContentBlock] | str
 
 
 # ==============================================================================
@@ -165,7 +166,7 @@ class RequestContextManagement(PermissiveModel):
     Observed in request.context_management.
     """
 
-    edits: list[ContextManagementEdit]
+    edits: Sequence[ContextManagementEdit]
 
 
 # ==============================================================================
@@ -202,9 +203,9 @@ class MessagesRequest(PermissiveModel):
     model: ModelId
     max_tokens: int
     stream: bool | None = None
-    system: list[SystemBlock] | None = None
-    messages: list[RequestMessage]
-    tools: list[ToolDefinition] | None = None
+    system: Sequence[SystemBlock] | None = None
+    messages: Sequence[RequestMessage]
+    tools: Sequence[ToolDefinition] | None = None
     thinking: ThinkingConfig | None = None
     context_management: RequestContextManagement | None = None
     metadata: RequestMetadata | None = None

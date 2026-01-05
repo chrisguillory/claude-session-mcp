@@ -11,6 +11,7 @@ Endpoints:
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from typing import Any, Literal
 
 from src.schemas.cc_internal_api.base import PermissiveModel
@@ -102,7 +103,7 @@ class StatsigInitializeRequest(PermissiveModel):
     hash: str | None = None  # Hash algorithm (e.g., "djb2")
     deltasResponseRequested: bool = False
     full_checksum: str | None = None
-    previousDerivedFields: dict[str, Any] | None = None
+    previousDerivedFields: Mapping[str, Any] | None = None
 
 
 class StatsigInitializeResponse(PermissiveModel):
@@ -116,9 +117,9 @@ class StatsigInitializeResponse(PermissiveModel):
     empty: bool = False
     size: int = 0
     # Full response (when not empty) would include feature_gates, dynamic_configs, etc.
-    feature_gates: dict[str, Any] | None = None
-    dynamic_configs: dict[str, Any] | None = None
-    layer_configs: dict[str, Any] | None = None
+    feature_gates: Mapping[str, Any] | None = None
+    dynamic_configs: Mapping[str, Any] | None = None
+    layer_configs: Mapping[str, Any] | None = None
     has_updates: bool | None = None
 
 
@@ -171,7 +172,7 @@ class StatsigRegisterRequest(PermissiveModel):
     Logs feature flag usage and events.
     """
 
-    events: list[StatsigEvent]
+    events: Sequence[StatsigEvent]
     statsigMetadata: StatsigMetadata
 
 

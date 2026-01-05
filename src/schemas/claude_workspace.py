@@ -32,6 +32,7 @@ USAGE:
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
@@ -98,4 +99,4 @@ class SessionDatabase(BaseModel):
 
     model_config = ConfigDict(extra='forbid', strict=True)
 
-    sessions: list[Session] = []
+    sessions: Sequence[Session] = ()

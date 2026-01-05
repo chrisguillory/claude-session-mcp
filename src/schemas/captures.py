@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
@@ -71,12 +72,12 @@ class CaptureBase(PermissiveModel):
 
     # HTTP metadata
     http_version: str = Field(default='HTTP/1.1', description='HTTP version')
-    headers: dict[str, str] = Field(default_factory=dict, description='HTTP headers')
+    headers: Mapping[str, str] = Field(default_factory=dict, description='HTTP headers')
 
     # Request-specific (optional for responses)
     scheme: str = Field(default='https', description='URL scheme')
     port: int = Field(default=443, description='Port number')
-    query: dict[str, str] = Field(default_factory=dict, description='Query parameters')
+    query: Mapping[str, str] = Field(default_factory=dict, description='Query parameters')
 
     # Response-specific (optional for requests)
     status_code: int | None = Field(default=None, description='HTTP status code')
@@ -119,7 +120,7 @@ class MessagesResponseCapture(AnthropicCapture):
 
     direction: Literal['response'] = 'response'
     status_code: int = 200
-    events: list[SSEEvent] = Field(default_factory=list)
+    events: Sequence[SSEEvent] = Field(default_factory=list)
 
 
 class TelemetryRequestCapture(AnthropicCapture):
@@ -158,8 +159,8 @@ class UnknownCapture(CaptureBase):
     """
 
     # Body can be dict OR list (Datadog sends list of log entries)
-    body: dict[str, Any] | list[Any] = Field(default_factory=dict)
-    events: list[dict[str, Any]] = Field(default_factory=list)
+    body: Mapping[str, Any] | Sequence[Any] = Field(default_factory=dict)
+    events: Sequence[Mapping[str, Any]] = Field(default_factory=list)
 
 
 # ==============================================================================
