@@ -33,6 +33,7 @@ repos:
           - anthropic
           - psutil
           - types-psutil
+          - expiringdict
         args: [--config-file=pyproject.toml, .]
         pass_filenames: false
         always_run: true

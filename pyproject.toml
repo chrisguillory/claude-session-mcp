@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "attrs>=25.4.0",
+    "expiringdict>=1.2.2",
     "fastmcp>=2.13.0.2",
     "filelock>=3.20.1",
     "httpx>=0.28.1",

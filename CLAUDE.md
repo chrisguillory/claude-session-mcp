@@ -353,16 +353,16 @@ ls -la captures/<session-id>/
 # Verify session_id in captures
 jq '.session_id' captures/<session-id>/req_*.json | head
 
-# Inspect a messages request (body is nested under .body.json)
+# Inspect a messages request (body is nested under .body.data for JSON)
 cat captures/<session-id>/req_*messages*.json | jq '{
   session_id,
   flow_id,
   method,
   path,
-  model: .body.json.model,
-  max_tokens: .body.json.max_tokens,
-  messages_count: (.body.json.messages | length),
-  tools_count: (.body.json.tools | length)
+  model: .body.data.model,
+  max_tokens: .body.data.max_tokens,
+  messages_count: (.body.data.messages | length),
+  tools_count: (.body.data.tools | length)
 }'
 ```
 

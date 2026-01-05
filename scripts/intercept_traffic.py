@@ -81,14 +81,20 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import subprocess
 import tempfile
 import threading
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import psutil
+from expiringdict import ExpiringDict
 from mitmproxy import addonmanager, connection, http
+from pydantic import TypeAdapter
+
+from src.schemas import claude_workspace
 
 # ==============================================================================
 # Configuration
@@ -105,6 +111,159 @@ LOG_FILE = CAPTURES_BASE / 'traffic.log'
 _SESSIONS_SEEN: set[str] = set()
 _SESSIONS_SEEN_LOCK = threading.Lock()
 
+# Store session info per connection, keyed by connection ID (mitmproxy's Client.id)
+# mitmproxy's Client object does NOT have a metadata attribute, so we use our own storage
+_CONNECTION_SESSIONS: dict[str, claude_workspace.Session] = {}
+_CONNECTION_SESSIONS_LOCK = threading.Lock()
+
+# TypeAdapter for parsing sessions.json with Pydantic validation
+_SESSION_DB_ADAPTER: TypeAdapter[claude_workspace.SessionDatabase] = TypeAdapter(claude_workspace.SessionDatabase)
+
+# Cache for codesign verification results: exe_path -> is_claude_code (expires after 1 hour)
+# We only need to verify each executable once per proxy lifetime
+_CODESIGN_CACHE: ExpiringDict[str, bool] = ExpiringDict(max_len=100, max_age_seconds=3600)
+
+# Track (pid, create_time) pairs we've already attempted retry for (expires after 2 min)
+# This prevents repeated retry attempts for the same process
+_RETRY_ATTEMPTED: ExpiringDict[tuple[int, float], bool] = ExpiringDict(max_len=1000, max_age_seconds=120)
+
+# Retry configuration for session lookup timing race
+_RETRY_MAX_ATTEMPTS = 10  # 10 attempts
+_RETRY_DELAY_SECONDS = 0.3  # 300ms between attempts = 3s max total
+
+# Session cache: maps PID → Session for active sessions
+# Invalidated when sessions.json mtime changes (handles /clear correctly)
+_SESSION_CACHE: dict[int, claude_workspace.Session] = {}
+_SESSION_CACHE_MTIME: float = 0.0
+_SESSION_CACHE_LOCK = threading.Lock()
+
+
+# ==============================================================================
+# Claude Code Process Verification
+# ==============================================================================
+
+
+def _is_claude_code_process(pid: int) -> bool:
+    """Verify if a process is Claude Code using macOS codesign.
+
+    Uses `codesign -dv` to check if the executable is signed by Anthropic.
+    Results are cached by executable path to avoid repeated verification.
+
+    Returns True if:
+    - The process exists and we can get its executable path
+    - The executable is signed with a Developer ID containing "Anthropic"
+
+    Returns False if:
+    - Process doesn't exist or we can't access it
+    - Executable is not signed or not by Anthropic
+    - codesign command fails for any reason
+    """
+    try:
+        proc = psutil.Process(pid)
+        exe_path = proc.exe()
+    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+        return False
+
+    if not exe_path:
+        return False
+
+    # Check cache first
+    if exe_path in _CODESIGN_CACHE:
+        cached: bool = _CODESIGN_CACHE[exe_path]
+        return cached
+
+    # Run codesign to verify
+    try:
+        result = subprocess.run(
+            ['codesign', '-dv', exe_path],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        # codesign outputs to stderr, look for anthropic in the output (case-insensitive)
+        # e.g., "Identifier=com.anthropic.claude-code"
+        output = result.stderr.lower()
+        is_claude = 'anthropic' in output
+        _CODESIGN_CACHE[exe_path] = is_claude
+        return is_claude
+    except (subprocess.TimeoutExpired, subprocess.SubprocessError, OSError):
+        # If codesign fails, assume not Claude Code
+        _CODESIGN_CACHE[exe_path] = False
+        return False
+
+
+def _should_retry_session_lookup(pid: int) -> tuple[bool, tuple[int, float] | None]:
+    """Check if we should retry session lookup for this PID.
+
+    Returns (should_retry, key) where:
+    - should_retry: True if this is a Claude Code process worth retrying
+    - key: (pid, create_time) tuple to mark in _RETRY_ATTEMPTED when done
+
+    Does NOT mark the key - caller must mark after retry completes.
+    This allows multiple concurrent connections to all attempt retry,
+    rather than only the first one.
+
+    This prevents:
+    - Wasting time retrying for non-Claude processes (curl, wget, etc.)
+    - Repeated retry attempts after retry has already completed
+    """
+    # First check if it's Claude Code
+    if not _is_claude_code_process(pid):
+        return False, None
+
+    # Get create_time for deduplication
+    try:
+        proc = psutil.Process(pid)
+        create_time = proc.create_time()
+    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+        return False, None
+
+    key = (pid, create_time)
+
+    # Check if retry already completed for this process
+    if key in _RETRY_ATTEMPTED:
+        return False, None
+
+    # Don't mark here - caller marks when done
+    return True, key
+
+
+def _get_session_with_retry(pid: int) -> claude_workspace.Session | None:
+    """Get session for PID with retry logic for timing race.
+
+    If session not found immediately and process is Claude Code,
+    retries for up to 3 seconds (10 attempts * 300ms).
+
+    This handles the timing race where HTTP requests arrive before
+    the SessionStart hook has written to sessions.json.
+
+    Multiple concurrent connections from the same PID will all retry
+    in parallel, allowing all of them to find the session when it appears.
+    The key is only marked in _RETRY_ATTEMPTED after retry completes.
+    """
+    # Quick check first
+    session = _get_session_for_pid(pid)
+    if session:
+        return session
+
+    # Check if we should retry for this process
+    should_retry, key = _should_retry_session_lookup(pid)
+    if not should_retry or key is None:
+        return None
+
+    # Retry with backoff
+    for attempt in range(_RETRY_MAX_ATTEMPTS):
+        time.sleep(_RETRY_DELAY_SECONDS)
+        session = _get_session_for_pid(pid)
+        if session:
+            _log(f'Session found after {attempt + 1} retries (PID {pid})\n')
+            _RETRY_ATTEMPTED[key] = True  # Mark completed
+            return session
+
+    _log(f'Session not found after {_RETRY_MAX_ATTEMPTS} retries (PID {pid})\n')
+    _RETRY_ATTEMPTED[key] = True  # Mark completed (not found)
+    return None
+
 
 # ==============================================================================
 # Session Correlation
@@ -114,41 +273,92 @@ _SESSIONS_SEEN_LOCK = threading.Lock()
 def _get_pid_for_port(source_port: int) -> int | None:
     """Find which process owns a TCP connection from the given source port.
 
-    Uses psutil to query kernel network connection table.
-    Returns None if port not found (connection may have closed).
+    Iterates through processes and checks their connections. This approach
+    does NOT require elevated privileges because we only access processes
+    where the effective UID matches ours.
+
+    AccessDenied handling:
+    - If effective UID matches ours and we get AccessDenied → raise (unexpected)
+    - If effective UID differs (system/elevated processes) → skip (expected)
+
+    ZombieProcess and NoSuchProcess are caught and skipped - these occur when
+    processes terminate mid-iteration (observed in practice with CommCenter, bash).
+
+    Returns None if port not found (connection may have closed or belongs
+    to a process with elevated privileges).
     """
-    for conn in psutil.net_connections(kind='tcp'):
-        if conn.laddr and conn.laddr.port == source_port:
-            pid: int | None = conn.pid
-            return pid
+    my_uid = os.getuid()
+
+    for proc in psutil.process_iter(['pid', 'name', 'uids']):
+        proc_pid = proc.info['pid']
+        proc_name = proc.info['name']
+        proc_uids = proc.info['uids']
+
+        # We can access processes where effective UID matches ours.
+        # Setuid binaries (like /usr/bin/login) have effective UID = 0
+        # even if we launched them, so we correctly skip those.
+        should_be_accessible = proc_uids and proc_uids.effective == my_uid
+
+        try:
+            for conn in proc.net_connections():
+                if conn.laddr and conn.laddr.port == source_port:
+                    pid: int = proc_pid
+                    return pid
+        except psutil.AccessDenied:
+            if should_be_accessible:
+                # This is truly unexpected - we should be able to access this
+                raise RuntimeError(
+                    f'Unexpected AccessDenied for process with matching effective UID: '
+                    f'PID {proc_pid} ({proc_name}) uids={proc_uids}'
+                )
+            # Expected - process has elevated/different effective UID, skip
+        except psutil.ZombieProcess:
+            # Zombie processes can't own active connections, skip
+            pass
+        except psutil.NoSuchProcess:
+            # Process terminated mid-iteration, skip
+            pass
+
     return None
 
 
-def _get_session_for_pid(pid: int) -> dict[str, Any] | None:
+def _get_session_for_pid(pid: int) -> claude_workspace.Session | None:
     """Find active Claude Code session for a given PID.
 
-    Reads ~/.claude-workspace/sessions.json (created by claude-workspace hooks).
-    Returns the session dict if found, None otherwise.
+    Uses mtime-based caching: only re-reads sessions.json when it changes.
+    This handles /clear correctly (file updated → cache invalidated).
+
+    Thread-safe via _SESSION_CACHE_LOCK.
 
     Raises:
         FileNotFoundError: If sessions.json doesn't exist (hooks not configured)
-        json.JSONDecodeError: If sessions.json is invalid
+        json.JSONDecodeError: If sessions.json is invalid JSON
+        pydantic.ValidationError: If sessions.json doesn't match schema
     """
-    if not SESSIONS_PATH.exists():
-        raise FileNotFoundError(
-            f'Sessions file not found: {SESSIONS_PATH}\n'
-            'Ensure claude-workspace hooks are configured in ~/.claude/settings.json'
-        )
+    global _SESSION_CACHE_MTIME, _SESSION_CACHE
 
-    with open(SESSIONS_PATH) as f:
-        data = json.load(f)
+    with _SESSION_CACHE_LOCK:
+        # stat() inside lock to avoid TOCTOU race between threads
+        try:
+            current_mtime = SESSIONS_PATH.stat().st_mtime
+        except FileNotFoundError:
+            raise FileNotFoundError(
+                f'Sessions file not found: {SESSIONS_PATH}\n'
+                'Ensure claude-workspace hooks are configured in ~/.claude/settings.json'
+            ) from None
+        if current_mtime != _SESSION_CACHE_MTIME:
+            # File changed, rebuild cache
+            with open(SESSIONS_PATH) as f:
+                data = json.load(f)
 
-    for session in data.get('sessions', []):
-        if session.get('state') == 'active' and session.get('metadata', {}).get('claude_pid') == pid:
-            result: dict[str, Any] = session
-            return result
+            # Validate with Pydantic - will raise ValidationError if schema doesn't match
+            session_db = _SESSION_DB_ADAPTER.validate_python(data)
 
-    return None
+            # Build PID → Session mapping for active sessions only
+            _SESSION_CACHE = {s.metadata.claude_pid: s for s in session_db.sessions if s.state == 'active'}
+            _SESSION_CACHE_MTIME = current_mtime
+
+        return _SESSION_CACHE.get(pid)
 
 
 def _get_session_dir(session_id: str | None) -> Path:
@@ -162,21 +372,21 @@ def _get_session_dir(session_id: str | None) -> Path:
     return session_dir
 
 
-def _write_manifest(session_dir: Path, session_info: dict[str, Any] | None) -> None:
+def _write_manifest(session_dir: Path, session: claude_workspace.Session | None) -> None:
     """Write session manifest to capture directory."""
-    manifest = {
+    manifest: dict[str, Any] = {
         'capture_version': CAPTURE_VERSION,
         'captured_at': datetime.now(tz=UTC).isoformat(),
     }
 
-    if session_info:
+    if session:
         manifest['claude_session'] = {
-            'session_id': session_info.get('session_id'),
-            'project_dir': session_info.get('project_dir'),
-            'transcript_path': session_info.get('transcript_path'),
-            'source': session_info.get('source'),
-            'claude_pid': session_info.get('metadata', {}).get('claude_pid'),
-            'started_at': session_info.get('metadata', {}).get('started_at'),
+            'session_id': session.session_id,
+            'project_dir': session.project_dir,
+            'transcript_path': session.transcript_path,
+            'source': session.source,
+            'claude_pid': session.metadata.claude_pid,
+            'started_at': session.metadata.started_at.isoformat(),
         }
 
     manifest_path = session_dir / 'manifest.json'
@@ -445,6 +655,12 @@ def done() -> None:
 # ==============================================================================
 
 
+def _get_session_for_connection(client_id: str) -> claude_workspace.Session | None:
+    """Get session for a connection ID (thread-safe)."""
+    with _CONNECTION_SESSIONS_LOCK:
+        return _CONNECTION_SESSIONS.get(client_id)
+
+
 def client_connected(client: connection.Client) -> None:
     """Discover Claude Code session when client connects.
 
@@ -452,10 +668,13 @@ def client_connected(client: connection.Client) -> None:
     We use psutil to map the client's source port to a PID,
     then look up the session in ~/.claude-workspace/sessions.json.
 
-    Session info is stored in client.metadata for use by request/response hooks.
+    For Claude Code processes, uses smart retry to handle the timing race
+    where HTTP requests arrive before the SessionStart hook writes to sessions.json.
 
-    Exceptions (FileNotFoundError, JSONDecodeError) propagate to mitmproxy
-    which logs them and continues - captures will have session_id: null.
+    Session info is stored in _CONNECTION_SESSIONS for use by request/response hooks.
+
+    Exceptions (FileNotFoundError, JSONDecodeError, ValidationError) propagate to
+    mitmproxy which logs them and continues - captures will have session_id: null.
     """
     if not client.peername:
         return
@@ -468,16 +687,22 @@ def client_connected(client: connection.Client) -> None:
         _log(f'WARNING: No PID found for port {source_port}\n')
         return
 
-    # Look up session
-    # FileNotFoundError/JSONDecodeError propagate → mitmproxy logs, continues
-    session = _get_session_for_pid(pid)
+    # Look up session with smart retry for Claude Code processes
+    # FileNotFoundError/JSONDecodeError/ValidationError propagate → mitmproxy logs, continues
+    session = _get_session_with_retry(pid)
     if session:
-        # mitmproxy's Client.metadata exists at runtime but isn't in type stubs
-        client.metadata['claude_session'] = session  # type: ignore[attr-defined]
-        client.metadata['session_id'] = session['session_id']  # type: ignore[attr-defined]
-        _log(f'Session {session["session_id"][:8]}... (PID {pid})\n')
+        # Store session keyed by client.id for later retrieval
+        with _CONNECTION_SESSIONS_LOCK:
+            _CONNECTION_SESSIONS[client.id] = session
+        _log(f'Session {session.session_id[:8]}... (PID {pid})\n')
     else:
         _log(f'WARNING: PID {pid} not in active sessions\n')
+
+
+def client_disconnected(client: connection.Client) -> None:
+    """Clean up session storage when client disconnects."""
+    with _CONNECTION_SESSIONS_LOCK:
+        _CONNECTION_SESSIONS.pop(client.id, None)
 
 
 # ==============================================================================
@@ -494,10 +719,11 @@ def request(flow: http.HTTPFlow) -> None:
     content_type = headers.get('content-type', headers.get('Content-Type', ''))
     body = _parse_body(flow.request.content, content_type)
 
-    # Get session_id from connection metadata (set by client_connected hook)
-    session_id: str | None = None
+    # Get session from our connection storage (set by client_connected hook)
+    session: claude_workspace.Session | None = None
     if flow.client_conn:
-        session_id = flow.client_conn.metadata.get('session_id')  # type: ignore[attr-defined]
+        session = _get_session_for_connection(flow.client_conn.id)
+    session_id = session.session_id if session else None
 
     capture: dict[str, Any] = {
         # Identification
@@ -540,8 +766,7 @@ def request(flow: http.HTTPFlow) -> None:
     if session_id:
         with _SESSIONS_SEEN_LOCK:
             if session_id not in _SESSIONS_SEEN:
-                session_info = flow.client_conn.metadata.get('claude_session') if flow.client_conn else None  # type: ignore[attr-defined]
-                _write_manifest(session_dir, session_info)
+                _write_manifest(session_dir, session)
                 _SESSIONS_SEEN.add(session_id)
 
     # Save
@@ -574,10 +799,11 @@ def response(flow: http.HTTPFlow) -> None:
     if flow.request.timestamp_start and flow.response.timestamp_end:
         duration = flow.response.timestamp_end - flow.request.timestamp_start
 
-    # Get session_id from connection metadata (set by client_connected hook)
-    session_id: str | None = None
+    # Get session from our connection storage (set by client_connected hook)
+    session: claude_workspace.Session | None = None
     if flow.client_conn:
-        session_id = flow.client_conn.metadata.get('session_id')  # type: ignore[attr-defined]
+        session = _get_session_for_connection(flow.client_conn.id)
+    session_id = session.session_id if session else None
 
     capture: dict[str, Any] = {
         # Identification
@@ -645,10 +871,11 @@ def error(flow: http.HTTPFlow) -> None:
 
     error_msg = flow.error.msg if flow.error else 'unknown'
 
-    # Try to get session_id if available
-    session_id: str | None = None
+    # Get session from our connection storage (set by client_connected hook)
+    session: claude_workspace.Session | None = None
     if flow.client_conn:
-        session_id = flow.client_conn.metadata.get('session_id')  # type: ignore[attr-defined]
+        session = _get_session_for_connection(flow.client_conn.id)
+    session_id = session.session_id if session else None
 
     capture: dict[str, Any] = {
         'sequence': n,
@@ -698,10 +925,11 @@ def websocket_start(flow: http.HTTPFlow) -> None:
     """Capture WebSocket connection initiation."""
     n = COUNTER.increment('ws')
 
-    # Try to get session_id if available
-    session_id: str | None = None
+    # Get session from our connection storage (set by client_connected hook)
+    session: claude_workspace.Session | None = None
     if flow.client_conn:
-        session_id = flow.client_conn.metadata.get('session_id')  # type: ignore[attr-defined]
+        session = _get_session_for_connection(flow.client_conn.id)
+    session_id = session.session_id if session else None
 
     capture = {
         'sequence': n,
@@ -727,10 +955,11 @@ def websocket_message(flow: http.HTTPFlow) -> None:
     message = flow.websocket.messages[-1]
     n = len(flow.websocket.messages)
 
-    # Try to get session_id if available
-    session_id: str | None = None
+    # Get session from our connection storage (set by client_connected hook)
+    session: claude_workspace.Session | None = None
     if flow.client_conn:
-        session_id = flow.client_conn.metadata.get('session_id')  # type: ignore[attr-defined]
+        session = _get_session_for_connection(flow.client_conn.id)
+    session_id = session.session_id if session else None
 
     capture = {
         'flow_id': flow.id,
@@ -756,10 +985,11 @@ def websocket_end(flow: http.HTTPFlow) -> None:
     """Capture WebSocket connection closure."""
     message_count = len(flow.websocket.messages) if flow.websocket else 0
 
-    # Try to get session_id if available
-    session_id: str | None = None
+    # Get session from our connection storage (set by client_connected hook)
+    session: claude_workspace.Session | None = None
     if flow.client_conn:
-        session_id = flow.client_conn.metadata.get('session_id')  # type: ignore[attr-defined]
+        session = _get_session_for_connection(flow.client_conn.id)
+    session_id = session.session_id if session else None
 
     capture = {
         'flow_id': flow.id,
