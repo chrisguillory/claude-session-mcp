@@ -5,11 +5,47 @@ This module provides Pydantic v2 models for capturing, validating, and
 analyzing HTTP traffic from the Claude Code observability platform.
 
 Architecture:
-- CaptureBase: Common HTTP context for all captures
-- Service-level inheritance: AnthropicCapture, StatsigCapture
+- RequestCapture / ResponseCapture: Separate bases for requests vs responses
+- Service-level inheritance: AnthropicRequestCapture, StatsigResponseCapture, etc.
 - Endpoint-specific wrappers: MessagesRequestCapture, etc.
 - Discriminated union: CapturedTraffic with callable discriminator
 - Registry-based dispatch: get_capture_type()
+
+Design Decisions:
+
+    1. Decomposed Request/Response Bases (2026-01-05)
+
+    HTTP requests and responses are fundamentally different entities. Using a
+    shared base class with `status_code: int | None` loses type precision and
+    prevents fail-fast validation. Decomposed bases provide:
+    - Type precision: ResponseCapture.status_code is `int`, not `int | None`
+    - Fail-fast: Missing status_code on response fails validation immediately
+    - Clean semantics: No defensive coding for impossible None cases
+
+    The ~12 duplicated fields between bases are acceptable because:
+    - Each base is self-contained and readable
+    - No hidden inheritance to trace
+    - PermissiveModel.extra='ignore' handles JSON fields not in model
+
+    2. Callable Discriminator for Type Dispatch (2026-01-05)
+
+    We use a callable discriminator (`get_capture_type()`) rather than a simple
+    field-based discriminator. This is a deliberate architectural choice:
+
+    WHY NOT a simple field discriminator?
+    - Type dispatch depends on MULTIPLE fields: host, path, direction
+    - For messages responses, we also inspect body.type (SSE vs JSON)
+    - Pydantic's simple Discriminator('field') only supports single-field lookup
+
+    WHY NOT inject a `capture_type` field in intercept_traffic.py?
+    - Separation of concerns: intercept_traffic.py is a "dumb" memorializer
+    - It captures raw HTTP faithfully without semantic interpretation
+    - All type/schema logic belongs here in the validation layer
+    - Adding new capture types should only require changes to this file
+    - Keeps the capture format stable while interpretation can evolve
+
+    The callable discriminator is the RIGHT place for this logic - it maintains
+    clean separation between Layer 1 (capture) and Layer 2 (validation).
 
 Usage:
     from src.schemas.captures import load_capture, CapturedTraffic
@@ -41,48 +77,81 @@ from src.schemas.cc_internal_api import (
 from src.schemas.cc_internal_api.base import PermissiveModel
 
 # ==============================================================================
-# LEVEL 1: Base class with HTTP context
+# LEVEL 1: Decomposed base classes for requests vs responses
 # ==============================================================================
 
 
-class CaptureBase(PermissiveModel):
+class RequestCapture(PermissiveModel):
     """
-    Common HTTP context for all captures.
+    Base for all HTTP request captures.
 
-    This base class captures the HTTP metadata that is orthogonal to
-    the API contract. All captures have flow_id, direction, timestamp, etc.
+    Contains fields that are meaningful for requests. Response-specific fields
+    (status_code, reason, duration_seconds) are NOT included - they exist in
+    the JSON as null but are ignored by PermissiveModel.extra='ignore'.
 
-    Note: Response captures may not have host/path directly - these are
-    extracted from the filename or correlated with requests.
+    This enables fail-fast validation: if a capture is missing a required
+    request field, validation fails immediately.
     """
 
-    # Identification
+    # --- Identity (common to requests and responses) ---
     flow_id: str = Field(description='mitmproxy flow ID for correlation')
     sequence: int = Field(description='Sequence number in capture session')
-    direction: Literal['request', 'response'] = Field(description='HTTP direction')
-
-    # URL components (may be extracted from filename for responses)
-    host: str = Field(default='', description='Request host')
-    path: str = Field(default='', description='Request path')
-    method: str = Field(default='', description='HTTP method')
-
-    # Timing
     timestamp: float = Field(description='Unix timestamp')
     timestamp_iso: str = Field(description='ISO 8601 timestamp')
 
-    # HTTP metadata
-    http_version: str = Field(default='HTTP/1.1', description='HTTP version')
-    headers: Mapping[str, str] = Field(default_factory=dict, description='HTTP headers')
+    # --- Direction (discriminator field, no default - fail-fast) ---
+    direction: Literal['request'] = Field(description='HTTP direction')
 
-    # Request-specific (optional for responses)
-    scheme: str = Field(default='https', description='URL scheme')
-    port: int = Field(default=443, description='Port number')
-    query: Mapping[str, str] = Field(default_factory=dict, description='Query parameters')
+    # --- HTTP request context ---
+    host: str = Field(description='Request host')
+    path: str = Field(description='Request path')
+    method: str = Field(description='HTTP method')
+    scheme: str = Field(description='URL scheme')
+    port: int = Field(description='Port number')
+    query: Mapping[str, str] = Field(description='Query parameters')
+    headers: Mapping[str, str] = Field(description='HTTP headers')
+    http_version: str = Field(description='HTTP version')
 
-    # Response-specific (optional for requests)
-    status_code: int | None = Field(default=None, description='HTTP status code')
-    reason: str | None = Field(default=None, description='HTTP status reason')
-    duration_seconds: float | None = Field(default=None, description='Request duration')
+    # NOTE: status_code, reason, duration_seconds exist in JSON as null
+    # but are NOT declared here - PermissiveModel ignores them
+
+
+class ResponseCapture(PermissiveModel):
+    """
+    Base for all HTTP response captures.
+
+    Contains fields that are meaningful for responses. Response-specific fields
+    (status_code, reason, duration_seconds) are REQUIRED - no None allowed.
+
+    This enables fail-fast validation: if a response capture is missing
+    status_code, validation fails immediately with a clear error.
+    """
+
+    # --- Identity (common to requests and responses) ---
+    flow_id: str = Field(description='mitmproxy flow ID for correlation')
+    sequence: int = Field(description='Sequence number in capture session')
+    timestamp: float = Field(description='Unix timestamp')
+    timestamp_iso: str = Field(description='ISO 8601 timestamp')
+
+    # --- Direction (discriminator field, no default - fail-fast) ---
+    direction: Literal['response'] = Field(description='HTTP direction')
+
+    # --- Correlation fields (copied from request for correlation) ---
+    host: str = Field(description='Request host (for correlation)')
+    path: str = Field(description='Request path (for correlation)')
+    method: str = Field(description='HTTP method (echoed from request)')
+
+    # --- HTTP response context ---
+    status_code: int = Field(description='HTTP status code')
+    reason: str = Field(description='HTTP status reason')
+    headers: Mapping[str, str] = Field(description='HTTP headers')
+    http_version: str = Field(description='HTTP version')
+    duration_seconds: float = Field(description='Request duration')
+
+    # --- Echoed from request (present in JSON, included for completeness) ---
+    scheme: str = Field(description='URL scheme (echoed from request)')
+    port: int = Field(description='Port number (echoed from request)')
+    query: Mapping[str, str] = Field(description='Query parameters (echoed)')
 
 
 # ==============================================================================
@@ -90,14 +159,26 @@ class CaptureBase(PermissiveModel):
 # ==============================================================================
 
 
-class AnthropicCapture(CaptureBase):
-    """Base for all Anthropic API captures."""
+class AnthropicRequestCapture(RequestCapture):
+    """Base for all Anthropic API request captures."""
 
     host: Literal['api.anthropic.com'] = 'api.anthropic.com'
 
 
-class StatsigCapture(CaptureBase):
-    """Base for all Statsig captures."""
+class AnthropicResponseCapture(ResponseCapture):
+    """Base for all Anthropic API response captures."""
+
+    host: Literal['api.anthropic.com'] = 'api.anthropic.com'
+
+
+class StatsigRequestCapture(RequestCapture):
+    """Base for all Statsig request captures."""
+
+    host: Literal['statsig.anthropic.com'] = 'statsig.anthropic.com'
+
+
+class StatsigResponseCapture(ResponseCapture):
+    """Base for all Statsig response captures."""
 
     host: Literal['statsig.anthropic.com'] = 'statsig.anthropic.com'
 
@@ -107,26 +188,38 @@ class StatsigCapture(CaptureBase):
 # ==============================================================================
 
 
-class MessagesRequestCapture(AnthropicCapture):
+class MessagesRequestCapture(AnthropicRequestCapture):
     """Captured POST /v1/messages request."""
 
-    direction: Literal['request'] = 'request'
     method: Literal['POST'] = 'POST'
     body: MessagesRequest
 
 
-class MessagesResponseCapture(AnthropicCapture):
-    """Captured POST /v1/messages response (SSE stream)."""
+class MessagesStreamResponseCapture(AnthropicResponseCapture):
+    """
+    Captured POST /v1/messages streaming response (SSE).
 
-    direction: Literal['response'] = 'response'
-    status_code: int = 200
-    events: Sequence[SSEEvent] = Field(default_factory=list)
+    Used when request has stream: true (the common case for Claude Code).
+    The events field contains parsed SSE events from the stream.
+    """
+
+    events: Sequence[SSEEvent] = Field(description='Parsed SSE events')
 
 
-class TelemetryRequestCapture(AnthropicCapture):
+class MessagesJsonResponseCapture(AnthropicResponseCapture):
+    """
+    Captured POST /v1/messages non-streaming response (JSON).
+
+    Used when request has stream: false, OR for error responses (4xx/5xx).
+    The body contains either a complete Message or an error object.
+    """
+
+    body: Mapping[str, Any] = Field(description='Complete message or error response')
+
+
+class TelemetryRequestCapture(AnthropicRequestCapture):
     """Captured POST /api/event_logging/batch request."""
 
-    direction: Literal['request'] = 'request'
     method: Literal['POST'] = 'POST'
     body: TelemetryBatchRequest
 
@@ -136,10 +229,9 @@ class TelemetryRequestCapture(AnthropicCapture):
 # ==============================================================================
 
 
-class StatsigRegisterCapture(StatsigCapture):
+class StatsigRegisterRequestCapture(StatsigRequestCapture):
     """Captured POST /v1/rgstr request (event logging)."""
 
-    direction: Literal['request'] = 'request'
     method: Literal['POST'] = 'POST'
     body: StatsigRegisterRequest
 
@@ -149,16 +241,25 @@ class StatsigRegisterCapture(StatsigCapture):
 # ==============================================================================
 
 
-class UnknownCapture(CaptureBase):
+class UnknownRequestCapture(RequestCapture):
     """
-    Fallback capture for unmapped endpoints.
+    Fallback capture for unmapped request endpoints.
 
-    This allows the system to gracefully handle new APIs without
-    breaking validation. When a new endpoint is added, captures will
-    validate against this model until a specific wrapper is created.
+    Allows the system to gracefully handle new APIs without breaking validation.
     """
 
     # Body can be dict OR list (Datadog sends list of log entries)
+    body: Mapping[str, Any] | Sequence[Any] = Field(default_factory=dict)
+
+
+class UnknownResponseCapture(ResponseCapture):
+    """
+    Fallback capture for unmapped response endpoints.
+
+    Allows the system to gracefully handle new APIs without breaking validation.
+    """
+
+    # Body can be dict OR list
     body: Mapping[str, Any] | Sequence[Any] = Field(default_factory=dict)
     events: Sequence[Mapping[str, Any]] = Field(default_factory=list)
 
@@ -169,14 +270,14 @@ class UnknownCapture(CaptureBase):
 
 # Mapping from (host, path_pattern, direction) to discriminator tag
 # Path patterns are normalized (no query strings, SDK variants normalized)
+# Note: Messages responses require body.type inspection, handled in get_capture_type()
 CAPTURE_REGISTRY: dict[tuple[str, str, str], str] = {
-    # Anthropic API - Messages
+    # Anthropic API - Messages (request only; response needs body.type inspection)
     ('api.anthropic.com', '/v1/messages', 'request'): 'messages_request',
-    ('api.anthropic.com', '/v1/messages', 'response'): 'messages_response',
     # Anthropic API - Telemetry
     ('api.anthropic.com', '/api/event_logging/batch', 'request'): 'telemetry_request',
     # Statsig - Register
-    ('statsig.anthropic.com', '/v1/rgstr', 'request'): 'statsig_register',
+    ('statsig.anthropic.com', '/v1/rgstr', 'request'): 'statsig_register_request',
 }
 
 
@@ -242,6 +343,10 @@ def get_capture_type(v: Any) -> str:
     Reads HTTP context (host, path, direction) from input data
     and returns discriminator tag for union dispatch.
 
+    Special handling:
+    - Messages responses: inspects body.type to distinguish SSE vs JSON
+    - Other endpoints: uses registry lookup
+
     Must handle both dict (deserialization) and model instances
     (serialization/re-validation).
     """
@@ -250,30 +355,40 @@ def get_capture_type(v: Any) -> str:
         host = v.get('host', '')
         raw_path = v.get('path', '')
         direction = v.get('direction', '')
+        events = v.get('events')
     else:
         # During serialization, input is model instance
         host = getattr(v, 'host', '')
         raw_path = getattr(v, 'path', '')
         direction = getattr(v, 'direction', '')
+        events = getattr(v, 'events', None)
 
     # Normalize path for lookup
     path = _normalize_path(raw_path)
+
+    # Special handling for Messages API responses - need to distinguish SSE vs JSON
+    # After _preprocess_capture():
+    #   - SSE responses: body deleted, events populated from body.events
+    #   - JSON responses: body.data extracted to body field
+    # Discriminate based on presence of events field (set by preprocessing)
+    if host == 'api.anthropic.com' and path == '/v1/messages' and direction == 'response':
+        if events is not None:
+            return 'messages_stream_response'
+        return 'messages_json_response'
 
     # Registry lookup: (host, path, direction)
     key = (host, path, direction)
     if key in CAPTURE_REGISTRY:
         return CAPTURE_REGISTRY[key]
 
-    # Partial match - try with just host and path (for responses that
-    # might have direction but different path due to normalization)
-    for (reg_host, reg_path, reg_dir), tag in CAPTURE_REGISTRY.items():
-        if host == reg_host and path == reg_path:
-            # Found matching host/path, use correct direction
-            if direction == reg_dir:
-                return tag
+    # Fallback for unknown endpoints - dispatch based on direction
+    if direction == 'request':
+        return 'unknown_request'
+    elif direction == 'response':
+        return 'unknown_response'
 
-    # Fallback for unknown endpoints
-    return 'unknown'
+    # Ultimate fallback
+    return 'unknown_request'
 
 
 # ==============================================================================
@@ -282,10 +397,12 @@ def get_capture_type(v: Any) -> str:
 
 CapturedTraffic = Annotated[
     Annotated[MessagesRequestCapture, Tag('messages_request')]
-    | Annotated[MessagesResponseCapture, Tag('messages_response')]
+    | Annotated[MessagesStreamResponseCapture, Tag('messages_stream_response')]
+    | Annotated[MessagesJsonResponseCapture, Tag('messages_json_response')]
     | Annotated[TelemetryRequestCapture, Tag('telemetry_request')]
-    | Annotated[StatsigRegisterCapture, Tag('statsig_register')]
-    | Annotated[UnknownCapture, Tag('unknown')],
+    | Annotated[StatsigRegisterRequestCapture, Tag('statsig_register_request')]
+    | Annotated[UnknownRequestCapture, Tag('unknown_request')]
+    | Annotated[UnknownResponseCapture, Tag('unknown_response')],
     Discriminator(get_capture_type),
 ]
 
@@ -364,13 +481,15 @@ def load_capture(filepath: Path) -> CapturedTraffic:
     Load and validate a capture file.
 
     Returns a CapturedTraffic instance, which will be one of:
-    - MessagesRequestCapture, MessagesResponseCapture for /v1/messages
+    - MessagesRequestCapture for /v1/messages requests
+    - MessagesStreamResponseCapture for /v1/messages SSE responses (stream: true)
+    - MessagesJsonResponseCapture for /v1/messages JSON responses (stream: false)
     - TelemetryRequestCapture for /api/event_logging/batch
-    - StatsigRegisterCapture for Statsig /v1/rgstr
-    - UnknownCapture for unmapped endpoints
+    - StatsigRegisterRequestCapture for Statsig /v1/rgstr
+    - UnknownRequestCapture, UnknownResponseCapture for unmapped endpoints
 
     The discriminator automatically routes to the correct type based on
-    HTTP context (host, path, direction).
+    HTTP context (host, path, direction, body format).
 
     Args:
         filepath: Path to capture JSON file
