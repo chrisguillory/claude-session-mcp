@@ -373,14 +373,17 @@ captures/
 ├── traffic.log              # Global summary log
 ├── <session-id-1>/          # One directory per Claude session
 │   ├── manifest.json        # Session metadata from claude-workspace
-│   ├── req_001_*.json       # Request payloads
-│   ├── resp_001_*.json      # Response payloads
+│   ├── 001_req_*.json       # Request payloads (sequence-first for sorting)
+│   ├── 001_resp_*.json      # Response payloads (pairs stay adjacent)
 │   └── ...
 ├── <session-id-2>/
 │   └── ...
 └── unknown/                  # Traffic without session correlation
     └── ...
 ```
+
+Note: Sequence-first naming (`NNN_req_*`, `NNN_resp_*`) keeps request/response
+pairs adjacent when sorted alphabetically.
 
 ### Previously Discovered Endpoints
 
