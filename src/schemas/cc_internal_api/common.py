@@ -23,7 +23,7 @@ class CacheControl(PermissiveModel):
     """
     Cache control directive for API requests.
 
-    VALIDATION STATUS: VALIDATED (2026-01-02)
+    VALIDATION STATUS: VALIDATED
     Observed on system blocks and user message blocks.
 
     No ttl field was observed in captured traffic - CC uses default TTL.
@@ -41,7 +41,7 @@ class ApiCacheCreation(PermissiveModel):
     """
     Detailed cache creation breakdown in API responses.
 
-    VALIDATION STATUS: VALIDATED (2026-01-02)
+    VALIDATION STATUS: VALIDATED
     Observed in response.usage.cache_creation.
 
     CORRESPONDING SESSION TYPE: session.models.CacheCreation
@@ -67,7 +67,7 @@ class ApiUsage(PermissiveModel):
     """
     Token usage in API responses.
 
-    VALIDATION STATUS: VALIDATED (2026-01-02)
+    VALIDATION STATUS: VALIDATED
     Observed in response.usage field.
 
     CORRESPONDING TYPES:

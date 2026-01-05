@@ -14,7 +14,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any, Literal
 
-from src.schemas.cc_internal_api.base import PermissiveModel
+from src.schemas.cc_internal_api.base import EmptyBody, PermissiveModel
 
 # ==============================================================================
 # Common Types
@@ -93,7 +93,7 @@ class StatsigInitializeRequest(PermissiveModel):
     """
     Request to /v1/initialize.
 
-    VALIDATION STATUS: VALIDATED (2026-01-05)
+    VALIDATION STATUS: VALIDATED
     Initializes feature flag state for a user.
     All fields are always present in observed requests.
     """
@@ -107,24 +107,11 @@ class StatsigInitializeRequest(PermissiveModel):
     previousDerivedFields: Mapping[str, Any]  # {} on first request, populated on subsequent
 
 
-class StatsigInitializeEmptyBody(PermissiveModel):
-    """
-    Body structure for 204 No Content response.
-
-    VALIDATION STATUS: VALIDATED (2026-01-05)
-    Returned when deltasResponseRequested=true and no updates available.
-    The intercept script captures this as the raw body (no type/data wrapper).
-    """
-
-    empty: Literal[True]
-    size: int
-
-
 class StatsigInitializeFullBody(PermissiveModel):
     """
     Body structure for 200 OK response with feature flags.
 
-    VALIDATION STATUS: VALIDATED (2026-01-05)
+    VALIDATION STATUS: VALIDATED
     Returned on initial request or when updates are available.
     The intercept script extracts this from body.data (json type wrapper).
 
@@ -139,7 +126,8 @@ class StatsigInitializeFullBody(PermissiveModel):
 
 
 # Union type for discriminated dispatch in captures
-StatsigInitializeResponse = StatsigInitializeEmptyBody | StatsigInitializeFullBody
+# EmptyBody = 204 No Content (no updates), FullBody = 200 OK (has updates)
+StatsigInitializeResponse = EmptyBody | StatsigInitializeFullBody
 
 
 # ==============================================================================
@@ -199,7 +187,7 @@ class StatsigRegisterResponse(PermissiveModel):
     """
     Response from /v1/rgstr.
 
-    VALIDATION STATUS: VALIDATED (2026-01-05)
+    VALIDATION STATUS: VALIDATED
     Returns success acknowledgment.
     """
 

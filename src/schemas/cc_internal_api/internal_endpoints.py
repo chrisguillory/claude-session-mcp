@@ -83,7 +83,7 @@ class MetricsDataPoint(PermissiveModel):
     """
     Single data point in a metrics report.
 
-    VALIDATION STATUS: VALIDATED (2026-01-05)
+    VALIDATION STATUS: VALIDATED
     OpenTelemetry-style data point.
     """
 
@@ -96,7 +96,7 @@ class MetricDefinition(PermissiveModel):
     """
     Single metric in a metrics report.
 
-    VALIDATION STATUS: VALIDATED (2026-01-05)
+    VALIDATION STATUS: VALIDATED
     """
 
     name: str  # e.g., "claude_code.session.count", "claude_code.cost.usage"
@@ -109,7 +109,7 @@ class MetricsRequest(PermissiveModel):
     """
     Request to /api/claude_code/metrics.
 
-    VALIDATION STATUS: VALIDATED (2026-01-05)
+    VALIDATION STATUS: VALIDATED
     OpenTelemetry-style metrics reporting.
     """
 
@@ -121,7 +121,7 @@ class MetricsResponse(PermissiveModel):
     """
     Response from /api/claude_code/metrics.
 
-    VALIDATION STATUS: VALIDATED (2026-01-05)
+    VALIDATION STATUS: VALIDATED
     Same structure as telemetry response.
     """
 

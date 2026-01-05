@@ -13,7 +13,7 @@ Architecture:
 
 Design Decisions:
 
-    1. Decomposed Request/Response Bases (2026-01-05)
+    1. Decomposed Request/Response Bases
 
     HTTP requests and responses are fundamentally different entities. Using a
     shared base class with `status_code: int | None` loses type precision and
@@ -27,7 +27,7 @@ Design Decisions:
     - No hidden inheritance to trace
     - PermissiveModel.extra='ignore' handles JSON fields not in model
 
-    2. Callable Discriminator for Type Dispatch (2026-01-05)
+    2. Callable Discriminator for Type Dispatch
 
     We use a callable discriminator (`get_capture_type()`) rather than a simple
     field-based discriminator. This is a deliberate architectural choice:
@@ -72,6 +72,7 @@ from src.schemas.cc_internal_api import (
     ClientDataResponse,
     CountTokensRequest,
     CountTokensResponse,
+    EmptyBody,
     EvalRequest,
     EvalResponse,
     HelloResponse,
@@ -80,7 +81,6 @@ from src.schemas.cc_internal_api import (
     MetricsRequest,
     MetricsResponse,
     SSEEvent,
-    StatsigInitializeEmptyBody,
     StatsigInitializeFullBody,
     StatsigInitializeRequest,
     StatsigRegisterRequest,
@@ -176,25 +176,25 @@ class ResponseCapture(PermissiveModel):
 class AnthropicRequestCapture(RequestCapture):
     """Base for all Anthropic API request captures."""
 
-    host: Literal['api.anthropic.com'] = 'api.anthropic.com'
+    host: Literal['api.anthropic.com']
 
 
 class AnthropicResponseCapture(ResponseCapture):
     """Base for all Anthropic API response captures."""
 
-    host: Literal['api.anthropic.com'] = 'api.anthropic.com'
+    host: Literal['api.anthropic.com']
 
 
 class StatsigRequestCapture(RequestCapture):
     """Base for all Statsig request captures."""
 
-    host: Literal['statsig.anthropic.com'] = 'statsig.anthropic.com'
+    host: Literal['statsig.anthropic.com']
 
 
 class StatsigResponseCapture(ResponseCapture):
     """Base for all Statsig response captures."""
 
-    host: Literal['statsig.anthropic.com'] = 'statsig.anthropic.com'
+    host: Literal['statsig.anthropic.com']
 
 
 # ==============================================================================
@@ -205,7 +205,7 @@ class StatsigResponseCapture(ResponseCapture):
 class MessagesRequestCapture(AnthropicRequestCapture):
     """Captured POST /v1/messages request."""
 
-    method: Literal['POST'] = 'POST'
+    method: Literal['POST']
     body: MessagesRequest
 
 
@@ -234,7 +234,7 @@ class MessagesJsonResponseCapture(AnthropicResponseCapture):
 class TelemetryRequestCapture(AnthropicRequestCapture):
     """Captured POST /api/event_logging/batch request."""
 
-    method: Literal['POST'] = 'POST'
+    method: Literal['POST']
     body: TelemetryBatchRequest
 
 
@@ -250,7 +250,7 @@ class TelemetryResponseCapture(AnthropicResponseCapture):
 class CountTokensRequestCapture(AnthropicRequestCapture):
     """Captured POST /v1/messages/count_tokens request."""
 
-    method: Literal['POST'] = 'POST'
+    method: Literal['POST']
     body: CountTokensRequest
 
 
@@ -266,7 +266,7 @@ class CountTokensResponseCapture(AnthropicResponseCapture):
 class EvalRequestCapture(AnthropicRequestCapture):
     """Captured POST /api/eval/sdk-{code} request (feature flags)."""
 
-    method: Literal['POST'] = 'POST'
+    method: Literal['POST']
     body: EvalRequest
 
 
@@ -282,7 +282,7 @@ class EvalResponseCapture(AnthropicResponseCapture):
 class MetricsRequestCapture(AnthropicRequestCapture):
     """Captured POST /api/claude_code/metrics request (OpenTelemetry metrics)."""
 
-    method: Literal['POST'] = 'POST'
+    method: Literal['POST']
     body: MetricsRequest
 
 
@@ -298,7 +298,14 @@ class MetricsEnabledResponseCapture(AnthropicResponseCapture):
     body: MetricsEnabledResponse
 
 
-# --- Health/OAuth (GET requests - no request body) ---
+# --- Health/OAuth (GET requests) ---
+
+
+class HelloRequestCapture(AnthropicRequestCapture):
+    """Captured GET /api/hello request (health check)."""
+
+    method: Literal['GET']
+    body: EmptyBody
 
 
 class HelloResponseCapture(AnthropicResponseCapture):
@@ -307,10 +314,24 @@ class HelloResponseCapture(AnthropicResponseCapture):
     body: HelloResponse
 
 
+class ClientDataRequestCapture(AnthropicRequestCapture):
+    """Captured GET /api/oauth/claude_cli/client_data request."""
+
+    method: Literal['GET']
+    body: EmptyBody
+
+
 class ClientDataResponseCapture(AnthropicResponseCapture):
     """Captured GET /api/oauth/claude_cli/client_data response."""
 
     body: ClientDataResponse
+
+
+class MetricsEnabledRequestCapture(AnthropicRequestCapture):
+    """Captured GET /api/claude_code/organizations/metrics_enabled request."""
+
+    method: Literal['GET']
+    body: EmptyBody
 
 
 # ==============================================================================
@@ -321,7 +342,7 @@ class ClientDataResponseCapture(AnthropicResponseCapture):
 class StatsigRegisterRequestCapture(StatsigRequestCapture):
     """Captured POST /v1/rgstr request (event logging)."""
 
-    method: Literal['POST'] = 'POST'
+    method: Literal['POST']
     body: StatsigRegisterRequest
 
 
@@ -334,7 +355,7 @@ class StatsigRegisterResponseCapture(StatsigResponseCapture):
 class StatsigInitializeRequestCapture(StatsigRequestCapture):
     """Captured POST /v1/initialize request (feature flag init)."""
 
-    method: Literal['POST'] = 'POST'
+    method: Literal['POST']
     body: StatsigInitializeRequest
 
 
@@ -344,10 +365,50 @@ class StatsigInitializeResponseCapture(StatsigResponseCapture):
 
     Two response types:
     - 200 OK: Full feature flags (StatsigInitializeFullBody)
-    - 204 No Content: Empty response when no updates (StatsigInitializeEmptyBody)
+    - 204 No Content: Empty response when no updates (EmptyBody)
     """
 
-    body: StatsigInitializeEmptyBody | StatsigInitializeFullBody
+    body: EmptyBody | StatsigInitializeFullBody
+
+
+# ==============================================================================
+# LEVEL 3: Endpoint-specific wrappers - External Services
+# ==============================================================================
+
+
+class DatadogRequestCapture(RequestCapture):
+    """Captured POST /api/v2/logs request (Datadog logging)."""
+
+    host: Literal['http-intake.logs.us5.datadoghq.com']
+    method: Literal['POST']
+    body: Sequence[Mapping[str, Any]]  # Array of log entries
+
+
+class DatadogResponseCapture(ResponseCapture):
+    """
+    Captured POST /api/v2/logs response (202 Accepted).
+
+    Datadog returns empty JSON on success. We don't use EmptyBody here because
+    that's for empty HTTP bodies, while this is an empty JSON object.
+    """
+
+    host: Literal['http-intake.logs.us5.datadoghq.com']
+    # Body is always {} on 202 success - nothing to type beyond empty mapping
+
+
+class GCSVersionRequestCapture(RequestCapture):
+    """Captured GET /claude-code-dist-.../latest request (version check)."""
+
+    host: Literal['storage.googleapis.com']
+    method: Literal['GET']
+    body: EmptyBody
+
+
+class GCSVersionResponseCapture(ResponseCapture):
+    """Captured GET /claude-code-dist-.../latest response (version string)."""
+
+    host: Literal['storage.googleapis.com']
+    body: Mapping[str, Any]  # Contains _raw_text with version
 
 
 # ==============================================================================
@@ -401,15 +462,24 @@ CAPTURE_REGISTRY: dict[tuple[str, str, str], str] = {
     ('api.anthropic.com', '/api/claude_code/metrics', 'request'): 'metrics_request',
     ('api.anthropic.com', '/api/claude_code/metrics', 'response'): 'metrics_response',
     ('api.anthropic.com', '/api/claude_code/organizations/metrics_enabled', 'response'): 'metrics_enabled_response',
-    # Anthropic API - Health/OAuth (GET - response only)
+    # Anthropic API - Health/OAuth (GET)
+    ('api.anthropic.com', '/api/hello', 'request'): 'hello_request',
     ('api.anthropic.com', '/api/hello', 'response'): 'hello_response',
+    ('api.anthropic.com', '/api/oauth/claude_cli/client_data', 'request'): 'client_data_request',
     ('api.anthropic.com', '/api/oauth/claude_cli/client_data', 'response'): 'client_data_response',
+    ('api.anthropic.com', '/api/claude_code/organizations/metrics_enabled', 'request'): 'metrics_enabled_request',
     # Statsig - Register
     ('statsig.anthropic.com', '/v1/rgstr', 'request'): 'statsig_register_request',
     ('statsig.anthropic.com', '/v1/rgstr', 'response'): 'statsig_register_response',
     # Statsig - Initialize
     ('statsig.anthropic.com', '/v1/initialize', 'request'): 'statsig_initialize_request',
     ('statsig.anthropic.com', '/v1/initialize', 'response'): 'statsig_initialize_response',
+    # External - Datadog
+    ('http-intake.logs.us5.datadoghq.com', '/api/v2/logs', 'request'): 'datadog_request',
+    ('http-intake.logs.us5.datadoghq.com', '/api/v2/logs', 'response'): 'datadog_response',
+    # External - GCS (version check)
+    ('storage.googleapis.com', '/claude-code-dist/latest', 'request'): 'gcs_version_request',
+    ('storage.googleapis.com', '/claude-code-dist/latest', 'response'): 'gcs_version_response',
 }
 
 
@@ -420,12 +490,20 @@ def _normalize_path(path: str) -> str:
     Handles:
     - Query string removal: /path?query=value → /path
     - SDK variant normalization: /api/eval/sdk-ABC123 → /api/eval/sdk
+    - GCS path normalization: /claude-code-dist-UUID/claude-code-releases/latest → /claude-code-dist/latest
     """
     # Remove query string
     path = path.split('?')[0]
 
     # Normalize dynamic SDK paths
     path = re.sub(r'/api/eval/sdk-[a-zA-Z0-9]+', '/api/eval/sdk', path)
+
+    # Normalize GCS version check paths (strip UUID and intermediate dir)
+    path = re.sub(
+        r'/claude-code-dist-[a-f0-9-]+/claude-code-releases/latest',
+        '/claude-code-dist/latest',
+        path,
+    )
 
     return path
 
@@ -545,15 +623,24 @@ CapturedTraffic = Annotated[
     | Annotated[MetricsRequestCapture, Tag('metrics_request')]
     | Annotated[MetricsResponseCapture, Tag('metrics_response')]
     | Annotated[MetricsEnabledResponseCapture, Tag('metrics_enabled_response')]
-    # Anthropic API - Health/OAuth
+    # Anthropic API - Health/OAuth (GET)
+    | Annotated[HelloRequestCapture, Tag('hello_request')]
     | Annotated[HelloResponseCapture, Tag('hello_response')]
+    | Annotated[ClientDataRequestCapture, Tag('client_data_request')]
     | Annotated[ClientDataResponseCapture, Tag('client_data_response')]
+    | Annotated[MetricsEnabledRequestCapture, Tag('metrics_enabled_request')]
     # Statsig - Register
     | Annotated[StatsigRegisterRequestCapture, Tag('statsig_register_request')]
     | Annotated[StatsigRegisterResponseCapture, Tag('statsig_register_response')]
     # Statsig - Initialize
     | Annotated[StatsigInitializeRequestCapture, Tag('statsig_initialize_request')]
     | Annotated[StatsigInitializeResponseCapture, Tag('statsig_initialize_response')]
+    # External - Datadog
+    | Annotated[DatadogRequestCapture, Tag('datadog_request')]
+    | Annotated[DatadogResponseCapture, Tag('datadog_response')]
+    # External - GCS
+    | Annotated[GCSVersionRequestCapture, Tag('gcs_version_request')]
+    | Annotated[GCSVersionResponseCapture, Tag('gcs_version_response')]
     # Fallback
     | Annotated[UnknownRequestCapture, Tag('unknown_request')]
     | Annotated[UnknownResponseCapture, Tag('unknown_response')],

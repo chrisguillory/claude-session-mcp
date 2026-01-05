@@ -44,7 +44,7 @@ class ResponseTextContent(PermissiveModel):
     """
     Text content block in API response.
 
-    VALIDATION STATUS: VALIDATED (2026-01-02)
+    VALIDATION STATUS: VALIDATED
     Observed in response.content[].
 
     Note: Unlike request TextContentBlock, no cache_control field in response.
@@ -109,7 +109,7 @@ class ResponseContextManagement(PermissiveModel):
     """
     Context management in API response.
 
-    VALIDATION STATUS: VALIDATED (2026-01-02)
+    VALIDATION STATUS: VALIDATED
     Observed in response.context_management.
 
     Note: Response has 'applied_edits' vs request has 'edits'.
@@ -127,7 +127,7 @@ class MessagesResponse(PermissiveModel):
     """
     Complete response payload from /v1/messages.
 
-    VALIDATION STATUS: VALIDATED (2026-01-02)
+    VALIDATION STATUS: VALIDATED
     Observed in non-streaming quota check response.
 
     CORRESPONDING SESSION TYPE: session.models.Message (nested in AssistantRecord)

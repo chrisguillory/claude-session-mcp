@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from src.schemas.cc_internal_api.base import FromSdk, FromSession, PermissiveModel
+from src.schemas.cc_internal_api.base import EmptyBody, FromSdk, FromSession, PermissiveModel
 from src.schemas.cc_internal_api.common import ApiCacheCreation, ApiUsage, CacheControl
 from src.schemas.cc_internal_api.internal_endpoints import (
     KNOWN_FEATURE_FLAGS,
@@ -67,7 +67,6 @@ from src.schemas.cc_internal_api.statsig import (
     StatsigEnvironment,
     StatsigEvent,
     StatsigEventMetadata,
-    StatsigInitializeEmptyBody,
     StatsigInitializeFullBody,
     StatsigInitializeRequest,
     StatsigInitializeResponse,
@@ -117,6 +116,7 @@ from src.schemas.cc_internal_api.telemetry import (
 
 __all__ = [
     # Base
+    'EmptyBody',
     'FromSdk',
     'FromSession',
     'PermissiveModel',
@@ -229,7 +229,6 @@ __all__ = [
     'StatsigMetadata',
     'StatsigInitializeRequest',
     'StatsigInitializeResponse',
-    'StatsigInitializeEmptyBody',
     'StatsigInitializeFullBody',
     'StatsigEvent',
     'StatsigEventMetadata',

@@ -37,6 +37,29 @@ class PermissiveModel(BaseModel):
 
 
 # ==============================================================================
+# Empty Body Type
+# ==============================================================================
+
+
+class EmptyBody(PermissiveModel):
+    """
+    Marker type for empty HTTP bodies at the capture layer.
+
+    This structure is produced by intercept_traffic.py's _parse_body()
+    when HTTP content is empty (size=0). It's an infrastructure convention
+    for the capture layer, not an API protocol.
+
+    Used for:
+    - GET request bodies (no request content)
+    - 204 No Content responses (e.g., Statsig delta with no updates)
+    - Any HTTP message with empty body
+    """
+
+    empty: Literal[True]
+    size: int
+
+
+# ==============================================================================
 # Type Correspondence Markers
 # ==============================================================================
 #
