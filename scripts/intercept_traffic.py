@@ -69,11 +69,14 @@ Usage:
 
 Output structure:
     captures/<session_id>/
-        req_NNN_HOST_PATH.json   - Complete request data
-        resp_NNN_HOST_PATH.json  - Complete response data
+        NNN_req_HOST_PATH.json   - Complete request data
+        NNN_resp_HOST_PATH.json  - Complete response data
         manifest.json            - Session metadata
         traffic.log              - Summary log
     captures/unknown/            - Traffic without session correlation
+
+    Note: Sequence-first naming (NNN_req/resp) keeps request/response pairs
+    adjacent when sorted alphabetically.
 """
 
 from __future__ import annotations
@@ -770,7 +773,7 @@ def request(flow: http.HTTPFlow) -> None:
                 _SESSIONS_SEEN.add(session_id)
 
     # Save
-    filename = session_dir / f'req_{n:03d}_{_safe_filename(flow.request.host, flow.request.path)}.json'
+    filename = session_dir / f'{n:03d}_req_{_safe_filename(flow.request.host, flow.request.path)}.json'
     _save_json_atomic(filename, capture)
 
     # Log
@@ -854,7 +857,7 @@ def response(flow: http.HTTPFlow) -> None:
     session_dir = _get_session_dir(session_id)
 
     # Save
-    filename = session_dir / f'resp_{n:03d}_{_safe_filename(flow.request.host, flow.request.path)}.json'
+    filename = session_dir / f'{n:03d}_resp_{_safe_filename(flow.request.host, flow.request.path)}.json'
     _save_json_atomic(filename, capture)
 
     # Log
