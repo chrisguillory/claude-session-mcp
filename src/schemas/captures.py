@@ -69,7 +69,16 @@ from pydantic import Discriminator, Field, Tag, TypeAdapter, ValidationError
 
 # Import existing body schemas - NO DUPLICATION
 from src.schemas.cc_internal_api import (
+    ClientDataResponse,
+    CountTokensRequest,
+    CountTokensResponse,
+    EvalRequest,
+    EvalResponse,
+    HelloResponse,
     MessagesRequest,
+    MetricsEnabledResponse,
+    MetricsRequest,
+    MetricsResponse,
     SSEEvent,
     StatsigInitializeEmptyBody,
     StatsigInitializeFullBody,
@@ -235,6 +244,75 @@ class TelemetryResponseCapture(AnthropicResponseCapture):
     body: TelemetryBatchResponse
 
 
+# --- Count Tokens ---
+
+
+class CountTokensRequestCapture(AnthropicRequestCapture):
+    """Captured POST /v1/messages/count_tokens request."""
+
+    method: Literal['POST'] = 'POST'
+    body: CountTokensRequest
+
+
+class CountTokensResponseCapture(AnthropicResponseCapture):
+    """Captured POST /v1/messages/count_tokens response."""
+
+    body: CountTokensResponse
+
+
+# --- Feature Flags (Eval) ---
+
+
+class EvalRequestCapture(AnthropicRequestCapture):
+    """Captured POST /api/eval/sdk-{code} request (feature flags)."""
+
+    method: Literal['POST'] = 'POST'
+    body: EvalRequest
+
+
+class EvalResponseCapture(AnthropicResponseCapture):
+    """Captured POST /api/eval/sdk-{code} response (feature flags)."""
+
+    body: EvalResponse
+
+
+# --- Metrics ---
+
+
+class MetricsRequestCapture(AnthropicRequestCapture):
+    """Captured POST /api/claude_code/metrics request (OpenTelemetry metrics)."""
+
+    method: Literal['POST'] = 'POST'
+    body: MetricsRequest
+
+
+class MetricsResponseCapture(AnthropicResponseCapture):
+    """Captured POST /api/claude_code/metrics response."""
+
+    body: MetricsResponse
+
+
+class MetricsEnabledResponseCapture(AnthropicResponseCapture):
+    """Captured GET /api/claude_code/organizations/metrics_enabled response."""
+
+    body: MetricsEnabledResponse
+
+
+# --- Health/OAuth (GET requests - no request body) ---
+
+
+class HelloResponseCapture(AnthropicResponseCapture):
+    """Captured GET /api/hello response (health check)."""
+
+    body: HelloResponse
+
+
+class ClientDataResponseCapture(AnthropicResponseCapture):
+    """Captured GET /api/oauth/claude_cli/client_data response."""
+
+    body: ClientDataResponse
+
+
 # ==============================================================================
 # LEVEL 3: Endpoint-specific wrappers - Statsig
 # ==============================================================================
@@ -313,6 +391,19 @@ CAPTURE_REGISTRY: dict[tuple[str, str, str], str] = {
     # Anthropic API - Telemetry
     ('api.anthropic.com', '/api/event_logging/batch', 'request'): 'telemetry_request',
     ('api.anthropic.com', '/api/event_logging/batch', 'response'): 'telemetry_response',
+    # Anthropic API - Count Tokens
+    ('api.anthropic.com', '/v1/messages/count_tokens', 'request'): 'count_tokens_request',
+    ('api.anthropic.com', '/v1/messages/count_tokens', 'response'): 'count_tokens_response',
+    # Anthropic API - Feature Flags (Eval)
+    ('api.anthropic.com', '/api/eval/sdk', 'request'): 'eval_request',
+    ('api.anthropic.com', '/api/eval/sdk', 'response'): 'eval_response',
+    # Anthropic API - Metrics
+    ('api.anthropic.com', '/api/claude_code/metrics', 'request'): 'metrics_request',
+    ('api.anthropic.com', '/api/claude_code/metrics', 'response'): 'metrics_response',
+    ('api.anthropic.com', '/api/claude_code/organizations/metrics_enabled', 'response'): 'metrics_enabled_response',
+    # Anthropic API - Health/OAuth (GET - response only)
+    ('api.anthropic.com', '/api/hello', 'response'): 'hello_response',
+    ('api.anthropic.com', '/api/oauth/claude_cli/client_data', 'response'): 'client_data_response',
     # Statsig - Register
     ('statsig.anthropic.com', '/v1/rgstr', 'request'): 'statsig_register_request',
     ('statsig.anthropic.com', '/v1/rgstr', 'response'): 'statsig_register_response',
@@ -444,6 +535,19 @@ CapturedTraffic = Annotated[
     # Anthropic API - Telemetry
     | Annotated[TelemetryRequestCapture, Tag('telemetry_request')]
     | Annotated[TelemetryResponseCapture, Tag('telemetry_response')]
+    # Anthropic API - Count Tokens
+    | Annotated[CountTokensRequestCapture, Tag('count_tokens_request')]
+    | Annotated[CountTokensResponseCapture, Tag('count_tokens_response')]
+    # Anthropic API - Feature Flags (Eval)
+    | Annotated[EvalRequestCapture, Tag('eval_request')]
+    | Annotated[EvalResponseCapture, Tag('eval_response')]
+    # Anthropic API - Metrics
+    | Annotated[MetricsRequestCapture, Tag('metrics_request')]
+    | Annotated[MetricsResponseCapture, Tag('metrics_response')]
+    | Annotated[MetricsEnabledResponseCapture, Tag('metrics_enabled_response')]
+    # Anthropic API - Health/OAuth
+    | Annotated[HelloResponseCapture, Tag('hello_response')]
+    | Annotated[ClientDataResponseCapture, Tag('client_data_response')]
     # Statsig - Register
     | Annotated[StatsigRegisterRequestCapture, Tag('statsig_register_request')]
     | Annotated[StatsigRegisterResponseCapture, Tag('statsig_register_response')]

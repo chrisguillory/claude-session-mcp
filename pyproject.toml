@@ -67,6 +67,7 @@ strict = true
 mypy_path = "stubs"
 exclude = [
     ".venv",
+    "scratch",
 ]
 
 [tool.pydantic-mypy]

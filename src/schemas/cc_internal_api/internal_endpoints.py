@@ -75,8 +75,58 @@ class GroveResponse(PermissiveModel):
 
 
 # ==============================================================================
-# Metrics (/api/claude_code/organizations/metrics_enabled)
+# Metrics (/api/claude_code/metrics, /api/claude_code/organizations/metrics_enabled)
 # ==============================================================================
+
+
+class MetricsDataPoint(PermissiveModel):
+    """
+    Single data point in a metrics report.
+
+    VALIDATION STATUS: VALIDATED (2026-01-05)
+    OpenTelemetry-style data point.
+    """
+
+    attributes: Mapping[str, Any]  # Metric dimensions
+    value: float | int  # Metric value
+    timestamp: str  # ISO 8601 timestamp
+
+
+class MetricDefinition(PermissiveModel):
+    """
+    Single metric in a metrics report.
+
+    VALIDATION STATUS: VALIDATED (2026-01-05)
+    """
+
+    name: str  # e.g., "claude_code.session.count", "claude_code.cost.usage"
+    description: str
+    unit: str  # e.g., "", "USD"
+    data_points: Sequence[MetricsDataPoint]
+
+
+class MetricsRequest(PermissiveModel):
+    """
+    Request to /api/claude_code/metrics.
+
+    VALIDATION STATUS: VALIDATED (2026-01-05)
+    OpenTelemetry-style metrics reporting.
+    """
+
+    resource_attributes: Mapping[str, Any]  # Service metadata
+    metrics: Sequence[MetricDefinition]
+
+
+class MetricsResponse(PermissiveModel):
+    """
+    Response from /api/claude_code/metrics.
+
+    VALIDATION STATUS: VALIDATED (2026-01-05)
+    Same structure as telemetry response.
+    """
+
+    accepted_count: int
+    rejected_count: int
 
 
 class MetricsEnabledResponse(PermissiveModel):

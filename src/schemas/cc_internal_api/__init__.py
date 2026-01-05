@@ -20,7 +20,11 @@ from src.schemas.cc_internal_api.internal_endpoints import (
     FeatureValue,
     GroveResponse,
     HelloResponse,
+    MetricDefinition,
+    MetricsDataPoint,
     MetricsEnabledResponse,
+    MetricsRequest,
+    MetricsResponse,
     ModelAccessResponse,
     PaprikaMode,
     ReferralCodeDetails,
@@ -193,6 +197,10 @@ __all__ = [
     'CountTokensResponse',
     # Internal endpoints - Grove/Metrics
     'GroveResponse',
+    'MetricsRequest',
+    'MetricsResponse',
+    'MetricDefinition',
+    'MetricsDataPoint',
     'MetricsEnabledResponse',
     # Internal endpoints - Feature flags
     'EvalRequest',
