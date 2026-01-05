@@ -55,11 +55,6 @@ DEPENDENCIES:
     - ~/.claude-workspace/sessions.json must exist (created by hooks)
     - psutil for PID-to-port mapping
 
-FALLBACK:
-
-    If session lookup fails, extracts session_id from first telemetry request
-    (/api/event_logging/batch contains session_id in event_data).
-
 ================================================================================
 
 Usage:
@@ -104,10 +99,11 @@ CAPTURE_VERSION = 2  # Increment when capture format changes
 SCRIPT_DIR = Path(__file__).parent.parent
 CAPTURES_BASE = SCRIPT_DIR / 'captures'
 SESSIONS_PATH = Path.home() / '.claude-workspace' / 'sessions.json'
-
-# For now, use flat directory structure until session-based directories are implemented
-CAPTURES_DIR = CAPTURES_BASE
 LOG_FILE = CAPTURES_BASE / 'traffic.log'
+
+# Track sessions that have had manifests written (in-memory, resets on proxy restart)
+_SESSIONS_SEEN: set[str] = set()
+_SESSIONS_SEEN_LOCK = threading.Lock()
 
 
 # ==============================================================================
@@ -153,23 +149,6 @@ def _get_session_for_pid(pid: int) -> dict[str, Any] | None:
             return result
 
     return None
-
-
-def _extract_session_from_telemetry(body: dict[str, Any]) -> str | None:
-    """Extract session_id from telemetry request body.
-
-    Telemetry requests to /api/event_logging/batch contain:
-    { "data": { "events": [{ "event_data": { "session_id": "..." } }] } }
-
-    Returns None if the expected structure is not present.
-    """
-    data = body.get('data', {})
-    events = data.get('events', [])
-    if not events:
-        return None
-    event_data = events[0].get('event_data', {})
-    session_id: str | None = event_data.get('session_id')
-    return session_id
 
 
 def _get_session_dir(session_id: str | None) -> Path:
@@ -443,13 +422,13 @@ def _extract_connection_timing(
 
 def load(loader: addonmanager.Loader) -> None:
     """Called when mitmproxy starts."""
-    # Create captures directory
-    CAPTURES_DIR.mkdir(parents=True, exist_ok=True)
+    # Create base captures directory
+    CAPTURES_BASE.mkdir(parents=True, exist_ok=True)
 
     # Initialize log file
     with open(LOG_FILE, 'w') as f:
         f.write(f'=== Capture started at {datetime.now(tz=UTC).isoformat()} ===\n')
-        f.write(f'Output directory: {CAPTURES_DIR}\n\n')
+        f.write(f'Output directory: {CAPTURES_BASE}\n\n')
 
 
 def done() -> None:
@@ -556,8 +535,17 @@ def request(flow: http.HTTPFlow) -> None:
             'timing': _extract_connection_timing(flow.client_conn),
         }
 
+    # Get session directory and write manifest on first capture (thread-safe)
+    session_dir = _get_session_dir(session_id)
+    if session_id:
+        with _SESSIONS_SEEN_LOCK:
+            if session_id not in _SESSIONS_SEEN:
+                session_info = flow.client_conn.metadata.get('claude_session') if flow.client_conn else None  # type: ignore[attr-defined]
+                _write_manifest(session_dir, session_info)
+                _SESSIONS_SEEN.add(session_id)
+
     # Save
-    filename = CAPTURES_DIR / f'req_{n:03d}_{_safe_filename(flow.request.host, flow.request.path)}.json'
+    filename = session_dir / f'req_{n:03d}_{_safe_filename(flow.request.host, flow.request.path)}.json'
     _save_json_atomic(filename, capture)
 
     # Log
@@ -565,6 +553,7 @@ def request(flow: http.HTTPFlow) -> None:
     _log(f'[{capture["timestamp_iso"]}] REQUEST #{n}\n')
     _log(f'  {flow.request.method} {flow.request.pretty_url}\n')
     _log(f'  Size: {body.get("size", 0)} bytes\n')
+    _log(f'  Session: {session_id or "unknown"}\n')
     _log(f'  Saved: {filename.name}\n')
 
 
@@ -635,8 +624,11 @@ def response(flow: http.HTTPFlow) -> None:
             'timing': _extract_connection_timing(flow.server_conn),
         }
 
+    # Get session directory (manifest already written in request())
+    session_dir = _get_session_dir(session_id)
+
     # Save
-    filename = CAPTURES_DIR / f'resp_{n:03d}_{_safe_filename(flow.request.host, flow.request.path)}.json'
+    filename = session_dir / f'resp_{n:03d}_{_safe_filename(flow.request.host, flow.request.path)}.json'
     _save_json_atomic(filename, capture)
 
     # Log
@@ -653,11 +645,17 @@ def error(flow: http.HTTPFlow) -> None:
 
     error_msg = flow.error.msg if flow.error else 'unknown'
 
+    # Try to get session_id if available
+    session_id: str | None = None
+    if flow.client_conn:
+        session_id = flow.client_conn.metadata.get('session_id')  # type: ignore[attr-defined]
+
     capture: dict[str, Any] = {
         'sequence': n,
         'flow_id': flow.id,
         'timestamp_iso': datetime.now(tz=UTC).isoformat(),
         'direction': 'error',
+        'session_id': session_id,
     }
 
     if flow.error:
@@ -679,7 +677,8 @@ def error(flow: http.HTTPFlow) -> None:
             'reason': flow.response.reason,
         }
 
-    filename = CAPTURES_DIR / f'error_{n:03d}_{flow.id[:8]}.json'
+    session_dir = _get_session_dir(session_id)
+    filename = session_dir / f'error_{n:03d}_{flow.id[:8]}.json'
     _save_json_atomic(filename, capture)
 
     _log(f'\n{"!" * 80}\n')
@@ -699,16 +698,23 @@ def websocket_start(flow: http.HTTPFlow) -> None:
     """Capture WebSocket connection initiation."""
     n = COUNTER.increment('ws')
 
+    # Try to get session_id if available
+    session_id: str | None = None
+    if flow.client_conn:
+        session_id = flow.client_conn.metadata.get('session_id')  # type: ignore[attr-defined]
+
     capture = {
         'sequence': n,
         'flow_id': flow.id,
         'direction': 'websocket_start',
+        'session_id': session_id,
         'timestamp_iso': datetime.fromtimestamp(flow.request.timestamp_start, tz=UTC).isoformat(),
         'url': flow.request.pretty_url,
         'headers': _headers_to_dict(flow.request.headers),
     }
 
-    filename = CAPTURES_DIR / f'ws_start_{n:03d}_{_safe_filename(flow.request.host, flow.request.path)}.json'
+    session_dir = _get_session_dir(session_id)
+    filename = session_dir / f'ws_start_{n:03d}_{_safe_filename(flow.request.host, flow.request.path)}.json'
     _save_json_atomic(filename, capture)
     _log(f'\nWEBSOCKET START #{n}: {flow.request.pretty_url}\n')
 
@@ -721,10 +727,16 @@ def websocket_message(flow: http.HTTPFlow) -> None:
     message = flow.websocket.messages[-1]
     n = len(flow.websocket.messages)
 
+    # Try to get session_id if available
+    session_id: str | None = None
+    if flow.client_conn:
+        session_id = flow.client_conn.metadata.get('session_id')  # type: ignore[attr-defined]
+
     capture = {
         'flow_id': flow.id,
         'message_index': n,
         'direction': 'websocket_message',
+        'session_id': session_id,
         'from_client': message.from_client,
         'timestamp': message.timestamp,
         'message_type': message.type.name if hasattr(message.type, 'name') else str(message.type),
@@ -735,20 +747,29 @@ def websocket_message(flow: http.HTTPFlow) -> None:
         else None,
     }
 
-    filename = CAPTURES_DIR / f'ws_msg_{flow.id[:8]}_{n:03d}.json'
+    session_dir = _get_session_dir(session_id)
+    filename = session_dir / f'ws_msg_{flow.id[:8]}_{n:03d}.json'
     _save_json_atomic(filename, capture)
 
 
 def websocket_end(flow: http.HTTPFlow) -> None:
     """Capture WebSocket connection closure."""
     message_count = len(flow.websocket.messages) if flow.websocket else 0
+
+    # Try to get session_id if available
+    session_id: str | None = None
+    if flow.client_conn:
+        session_id = flow.client_conn.metadata.get('session_id')  # type: ignore[attr-defined]
+
     capture = {
         'flow_id': flow.id,
         'direction': 'websocket_end',
+        'session_id': session_id,
         'message_count': message_count,
         'timestamp_iso': datetime.now(tz=UTC).isoformat(),
     }
 
-    filename = CAPTURES_DIR / f'ws_end_{flow.id[:8]}.json'
+    session_dir = _get_session_dir(session_id)
+    filename = session_dir / f'ws_end_{flow.id[:8]}.json'
     _save_json_atomic(filename, capture)
     _log(f'WEBSOCKET END: {message_count} messages\n')
