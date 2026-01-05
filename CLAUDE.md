@@ -314,8 +314,8 @@ mkdir -p captures
 # Kill any existing proxy
 pkill -f mitmdump 2>/dev/null
 
-# Clear old captures
-rm -f captures/*.json captures/traffic.log
+# Clear old captures (now session-based directories)
+rm -rf captures/*/
 
 # Start the proxy (from repo root)
 # --set stream=false ensures complete SSE capture for streaming responses
@@ -325,47 +325,62 @@ mitmdump -p 8080 -s scripts/intercept_traffic.py --set stream=false
 HTTPS_PROXY=http://localhost:8080 NODE_TLS_REJECT_UNAUTHORIZED=0 claude
 ```
 
+**Session Correlation**: The proxy now correlates traffic with Claude Code sessions. Captures go to `captures/<session_id>/` directories. This requires:
+- claude-workspace hooks configured in `~/.claude/settings.json`
+- `~/.claude-workspace/sessions.json` exists (written by hooks)
+
 ### Zero-MCP Capture (Vanilla Baseline)
 
 To capture traffic without MCP tool overhead, temporarily disable MCP servers before running Claude through the proxy. This gives a clean baseline of Claude Code's core API usage.
 
 ### Analyzing Captures
 
-Captures now include full metadata (headers, timing, auth info, rate limits, SSE events):
+Captures now include full metadata (headers, timing, auth info, rate limits, SSE events, session_id):
 
 ```bash
-# View traffic summary
+# View traffic summary (global log)
 cat captures/traffic.log
 
-# List all captured files
-ls -la captures/*.json
+# List session directories
+ls -la captures/
+
+# View a session's manifest
+cat captures/<session-id>/manifest.json
+
+# List captures for a specific session
+ls -la captures/<session-id>/
+
+# Verify session_id in captures
+jq '.session_id' captures/<session-id>/req_*.json | head
 
 # Inspect a messages request (body is nested under .body.json)
-cat captures/req_*messages*.json | jq '{
+cat captures/<session-id>/req_*messages*.json | jq '{
+  session_id,
   flow_id,
   method,
   path,
-  http_version,
-  auth_info,
-  anthropic_headers,
   model: .body.json.model,
   max_tokens: .body.json.max_tokens,
-  system_blocks: (.body.json.system | length),
   messages_count: (.body.json.messages | length),
   tools_count: (.body.json.tools | length)
 }'
-
-# See request keys
-cat captures/req_*.json | jq 'keys'
 ```
 
-### Output Files
+### Output Structure
 
-| File Pattern | Content |
-|--------------|---------|
-| `captures/req_NNN_*.json` | Request payloads |
-| `captures/resp_NNN_*.json` | Response payloads |
-| `captures/traffic.log` | Summary log |
+```
+captures/
+├── traffic.log              # Global summary log
+├── <session-id-1>/          # One directory per Claude session
+│   ├── manifest.json        # Session metadata from claude-workspace
+│   ├── req_001_*.json       # Request payloads
+│   ├── resp_001_*.json      # Response payloads
+│   └── ...
+├── <session-id-2>/
+│   └── ...
+└── unknown/                  # Traffic without session correlation
+    └── ...
+```
 
 ### Previously Discovered Endpoints
 
@@ -419,3 +434,64 @@ If you add a new import to a Python file and mypy fails in pre-commit with `Libr
 2. The same dependency must also be in `pyproject.toml` for normal development.
 
 **Why this happens:** Pre-commit creates isolated environments for reproducibility. This is by design, but means mypy dependencies must be declared twice - once in `pyproject.toml` (for development) and once in `.pre-commit-config.yaml` (for pre-commit hooks).
+
+## Error Handling Philosophy
+
+**Do NOT prematurely handle exceptions.** This is a firm project guideline.
+
+### The Principle
+
+Let exceptions propagate until you **actually observe them in practice**. Only then add handling for that specific case.
+
+### Why This Matters
+
+1. **Visibility**: Unhandled exceptions are loud - you see exactly what went wrong
+2. **Simplicity**: No speculative try/except blocks cluttering code
+3. **Learning**: Real failures teach you what actually breaks, not what might break
+4. **Accuracy**: Handling exceptions you've never seen often handles them incorrectly
+
+### What NOT To Do
+
+```python
+# BAD: Premature exception handling
+def get_pid_for_port(port: int) -> int | None:
+    try:
+        for conn in psutil.net_connections():
+            ...
+    except psutil.AccessDenied:  # Have we ever seen this? No.
+        return None
+    except OSError:  # What OSError? We don't know.
+        return None
+```
+
+### What TO Do
+
+```python
+# GOOD: Let it fail, handle when observed
+def get_pid_for_port(port: int) -> int | None:
+    for conn in psutil.net_connections():
+        if conn.laddr and conn.laddr.port == port:
+            return conn.pid
+    return None
+
+# If psutil.AccessDenied occurs in production:
+# 1. You'll see the actual error
+# 2. You'll understand the context
+# 3. THEN add targeted handling
+```
+
+### Exceptions to This Rule
+
+Handle exceptions when:
+1. You've **actually seen** the exception occur
+2. The exception is **expected as part of normal flow** (e.g., file existence checks)
+3. The library documentation **explicitly requires** handling specific exceptions
+
+### Code Review Guidance
+
+When reviewing code, ignore suggestions like:
+- "Should catch X exception for robustness"
+- "Add try/except for potential Y error"
+- "Handle Z case that might occur"
+
+These are premature. Wait for the failure, then handle it.
