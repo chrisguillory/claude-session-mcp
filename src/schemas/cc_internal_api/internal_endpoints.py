@@ -5,16 +5,17 @@ These model Claude Code's internal API endpoints beyond the Messages API:
 - /v1/messages/count_tokens - Token counting
 - /api/claude_code/grove - Feature gating by region/tier
 - /api/claude_code/organizations/metrics_enabled - Telemetry opt-in
-- /api/eval/sdk-{code} - Feature flags
 - /api/oauth/account/settings - User preferences
 - /api/oauth/claude_cli/client_data - Client configuration
 - /api/hello - Health check
+
+Note: Feature flag schemas (/api/eval/sdk-*) moved to feature_flags.py
 """
 
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from typing import Annotated, Any, Literal
+from typing import Literal
 
 import pydantic
 
@@ -184,127 +185,6 @@ class MetricsEnabledResponse(StrictModel):
 
     metrics_logging_enabled: bool  # Whether telemetry is enabled
     vcs_account_linking_enabled: bool  # Whether VCS account linking is enabled
-
-
-# ==============================================================================
-# Feature Flags (/api/eval/sdk-{code})
-# ==============================================================================
-
-FeatureSource = Literal['force', 'defaultValue', 'experiment']
-
-
-class ExperimentConfig(StrictModel):
-    """
-    Experiment configuration for a feature flag.
-
-    VALIDATION STATUS: VALIDATED
-    """
-
-    key: str  # Experiment key
-    variations: Sequence[str]  # Possible variations
-
-
-class ExperimentResult(StrictModel):
-    """
-    Result of experiment assignment.
-
-    VALIDATION STATUS: VALIDATED
-    """
-
-    inExperiment: bool  # Whether user is in experiment
-    variationId: int  # Assigned variation ID
-    value: str  # Assigned variation value
-    hashUsed: bool  # Whether hash was used for assignment
-
-
-class FeatureValue(StrictModel):
-    """
-    Individual feature flag value.
-
-    VALIDATION STATUS: VALIDATED
-    Observed in features dict values.
-    """
-
-    # GENUINELY POLYMORPHIC: Feature values can be boolean (simple toggle),
-    # string (variation name), or complex config objects depending on flag type.
-    # TODO: Refactor to strict per-flag typing in feature_flags.py module.
-    value: bool | str | Mapping[str, Any]
-    on: bool  # Whether feature is on
-    off: bool  # Whether feature is off
-    source: FeatureSource  # Where value comes from
-    experiment: ExperimentConfig | None = None  # Experiment config if applicable
-    experimentResult: ExperimentResult | None = None  # Experiment result if applicable
-
-
-class EvalAttributes(StrictModel):
-    """
-    Attributes sent with feature flag evaluation request.
-
-    VALIDATION STATUS: VALIDATED
-    Identifies user/device for feature targeting.
-    """
-
-    id: str  # Device ID (hashed)
-    sessionId: str  # Session UUID
-    deviceID: str  # Device ID (same as id)
-    organizationUUID: str  # Organization UUID
-    accountUUID: str  # Account UUID
-    userType: Literal['external', 'internal']
-    subscriptionType: Literal['free', 'pro', 'team', 'max', 'enterprise']
-    firstTokenTime: int  # Timestamp of first token
-    appVersion: str  # Claude Code version
-
-
-class EvalRequest(StrictModel):
-    """
-    Request to /api/eval/sdk-{code}.
-
-    VALIDATION STATUS: VALIDATED
-    Feature flag evaluation request.
-    """
-
-    attributes: EvalAttributes
-    # ALWAYS EMPTY in observed captures - strict typing for fail-fast validation
-    forcedVariations: EmptyDict  # Always {} - will fail if API starts sending data
-    # max_length=0 enforces empty list (Pydantic doesn't support Sequence[Never])
-    forcedFeatures: Annotated[Sequence[str], pydantic.Field(max_length=0)]
-    url: Literal['']  # Always "" - will fail if API starts sending data
-
-
-class EvalResponse(StrictModel):
-    """
-    Response from /api/eval/sdk-{code}.
-
-    VALIDATION STATUS: VALIDATED
-    Contains all feature flags for the user.
-    """
-
-    features: Mapping[str, FeatureValue]
-
-
-# Known feature flag names (observed)
-KNOWN_FEATURE_FLAGS = [
-    'auto_migrate_to_native',
-    'tengu_accept_with_feedback',
-    'tengu_ant_attribution_header_new',
-    'tengu_c4w_usage_limit_notifications_enabled',
-    'tengu_disable_bypass_permissions_mode',
-    'tengu_feedback_survey_config',
-    'tengu_gha_plugin_code_review',
-    'tengu_mcp_tool_search',
-    'tengu_pid_based_version_locking',
-    'tengu_prompt_suggestion',
-    'tengu_react_vulnerability_warning',
-    'tengu_scratch',
-    'tengu_spinner_words',
-    'tengu_sumi',
-    'tengu_thinkback',
-    'tengu_tool_pear',
-    'tengu_tool_result_persistence',
-    'tengu_version_config',
-    'tengu_vscode_review_upsell',
-    'tengu_year_end_2025_campaign_promo',
-]
 
 
 # ==============================================================================

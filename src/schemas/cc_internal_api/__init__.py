@@ -4,20 +4,31 @@ from __future__ import annotations
 
 from src.schemas.cc_internal_api.base import EmptyBody, FromSdk, FromSession, StrictModel
 from src.schemas.cc_internal_api.common import ApiCacheCreation, ApiUsage, CacheControl
-from src.schemas.cc_internal_api.internal_endpoints import (
+from src.schemas.cc_internal_api.feature_flags import (
     KNOWN_FEATURE_FLAGS,
-    AccountSettingsResponse,
-    ClientDataResponse,
-    CountTokensRequest,
-    CountTokensResponse,
-    DismissedBanner,
+    BoolFeatureValue,
     EvalAttributes,
     EvalRequest,
     EvalResponse,
     ExperimentConfig,
     ExperimentResult,
+    FeaturesDict,
     FeatureSource,
     FeatureValue,
+    FeedbackSurveyConfig,
+    FeedbackSurveyFeatureValue,
+    SpinnerWordsConfig,
+    SpinnerWordsFeatureValue,
+    StringFeatureValue,
+    VersionConfig,
+    VersionConfigFeatureValue,
+)
+from src.schemas.cc_internal_api.internal_endpoints import (
+    AccountSettingsResponse,
+    ClientDataResponse,
+    CountTokensRequest,
+    CountTokensResponse,
+    DismissedBanner,
     GroveResponse,
     HelloResponse,
     MetricDefinition,
@@ -202,15 +213,26 @@ __all__ = [
     'MetricDefinition',
     'MetricsDataPoint',
     'MetricsEnabledResponse',
-    # Internal endpoints - Feature flags
+    # Feature flags (strict per-flag typing)
     'EvalRequest',
     'EvalResponse',
     'EvalAttributes',
     'FeatureValue',
     'FeatureSource',
+    'FeaturesDict',
     'ExperimentConfig',
     'ExperimentResult',
     'KNOWN_FEATURE_FLAGS',
+    # Feature flag value types
+    'BoolFeatureValue',
+    'StringFeatureValue',
+    'FeedbackSurveyFeatureValue',
+    'VersionConfigFeatureValue',
+    'SpinnerWordsFeatureValue',
+    # Feature flag config types
+    'FeedbackSurveyConfig',
+    'VersionConfig',
+    'SpinnerWordsConfig',
     # Internal endpoints - OAuth
     'AccountSettingsResponse',
     'ClientDataResponse',
