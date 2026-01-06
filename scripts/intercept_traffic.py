@@ -469,13 +469,16 @@ def _save_json_atomic(filename: Path, data: dict[str, Any]) -> bool:
     """Write JSON atomically via temp file + rename."""
     try:
         fd, temp_path = tempfile.mkstemp(dir=filename.parent, prefix=f'.tmp_{filename.stem}_', suffix='.json')
+        fd_owned_by_file = False
         try:
             with os.fdopen(fd, 'w') as f:
+                fd_owned_by_file = True  # fdopen took ownership, will close on exit
                 json.dump(data, f, indent=2, default=str)
                 f.flush()
                 os.fsync(f.fileno())
         except Exception:
-            os.close(fd)
+            if not fd_owned_by_file:
+                os.close(fd)  # Only close if fdopen didn't take ownership
             if os.path.exists(temp_path):
                 os.unlink(temp_path)
             raise

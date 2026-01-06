@@ -1,11 +1,13 @@
 #!/usr/bin/env -S uv run
-"""Check for mutable and loose types in model annotations.
+"""Check for mutable, loose, and default value patterns in model annotations.
 
-This script enforces:
+This script enforces "maximum strictness":
 1. IMMUTABLE TYPES: Use Sequence/Mapping/Set instead of list/dict/set
 2. STRICT TYPING: No Any, Mapping[str, Any], Sequence[Any] etc.
+3. NO DEFAULTS: No default values on model fields - bifurcate instead
 
-The goal is "maximum strictness" - every field has an exact type.
+The goal is "maximum strictness" - every field has an exact type and
+every value must be explicitly provided by the data being validated.
 
 Design Philosophy:
     - Error-only, no auto-fix: Forces conscious decision at each occurrence
@@ -13,6 +15,7 @@ Design Philosophy:
     - Escape hatches:
       - # noqa: mutable-type - suppress mutable type violations (list, dict, set)
       - # noqa: loose-typing - suppress loose typing violations (Any)
+      - # noqa: default-value - suppress default value violations
 
 Usage:
     ./scripts/check_schema_typing.py <files...>
@@ -32,76 +35,65 @@ from __future__ import annotations
 import argparse
 import ast
 import sys
-from collections.abc import Sequence, Set
+from collections.abc import Mapping, Sequence, Set
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 # =============================================================================
 # Configuration - What to check (not WHERE to check - that's the caller's job)
 # =============================================================================
 
 # Types that trigger mutable-type errors
-MUTABLE_TYPES: frozenset[str] = frozenset(
-    {
-        # Lowercase built-ins (Python 3.9+) - concrete mutable types
-        'list',
-        'dict',
-        'set',
-        # Uppercase from typing module (legacy, deprecated in 3.9+)
-        'List',
-        'Dict',
-        # Note: typing.Set is NOT here because it's an alias for collections.abc.Set
-        # (the abstract interface), not the concrete set type
-    }
-)
+MUTABLE_TYPES: Set[str] = {
+    # Lowercase built-ins (Python 3.9+) - concrete mutable types
+    'list',
+    'dict',
+    'set',
+    # Uppercase from typing module (legacy, deprecated in 3.9+)
+    'List',
+    'Dict',
+    # Note: typing.Set is NOT here because it's an alias for collections.abc.Set
+    # (the abstract interface), not the concrete set type
+}
 
 # Types that trigger loose-typing errors
-LOOSE_TYPES: frozenset[str] = frozenset(
-    {
-        'Any',  # Escape hatch that hides structure
-    }
-)
+LOOSE_TYPES: Set[str] = {
+    'Any',  # Escape hatch that hides structure
+}
 
 # Combined forbidden types
-FORBIDDEN_TYPES: frozenset[str] = MUTABLE_TYPES | LOOSE_TYPES
+FORBIDDEN_TYPES: Set[str] = MUTABLE_TYPES | LOOSE_TYPES
 
 # Types that are always allowed (don't recurse into these looking for violations)
-ALLOWED_CONTAINERS: frozenset[str] = frozenset(
-    {
-        'Mapping',
-        'Sequence',
-        'Set',  # collections.abc.Set (abstract interface for set-like types)
-        'tuple',
-        'frozenset',
-        'FrozenSet',  # typing module variant
-    }
-)
+ALLOWED_CONTAINERS: Set[str] = {
+    'Mapping',
+    'Sequence',
+    'Set',  # collections.abc.Set (abstract interface for set-like types)
+    'tuple',
+    'frozenset',
+    'FrozenSet',  # typing module variant
+}
 
 # Types that indicate "check nested contents" even though container is allowed
 # e.g., Mapping[str, list[int]] - Mapping is allowed, but check the value type
-TRANSPARENT_CONTAINERS: frozenset[str] = frozenset(
-    {
-        'Mapping',
-        'Sequence',  # Check what's inside these
-    }
-)
+TRANSPARENT_CONTAINERS: Set[str] = {
+    'Mapping',
+    'Sequence',  # Check what's inside these
+}
 
 # Base classes whose subclasses should be checked
-MODEL_BASE_CLASSES: frozenset[str] = frozenset(
-    {
-        'StrictModel',
-        'BaseModel',
-        'PermissiveModel',
-    }
-)
+MODEL_BASE_CLASSES: Set[str] = {
+    'StrictModel',
+    'BaseModel',
+    'PermissiveModel',
+}
 
 # Classes that are exempt from checking (interface definitions)
-EXEMPT_BASE_CLASSES: frozenset[str] = frozenset(
-    {
-        'TypedDict',
-        'Protocol',
-    }
-)
+EXEMPT_BASE_CLASSES: Set[str] = {
+    'TypedDict',
+    'Protocol',
+}
 
 
 # =============================================================================
@@ -109,16 +101,22 @@ EXEMPT_BASE_CLASSES: frozenset[str] = frozenset(
 # =============================================================================
 
 
+# Type aliases for constrained string values
+ViolationKind = Literal['mutable', 'loose', 'default']
+FieldContext = Literal['field', 'parameter']
+NoqaCode = Literal['mutable-type', 'loose-typing', 'default-value']
+
+
 @dataclass(frozen=True)
 class Violation:
-    """A single type violation (mutable or loose)."""
+    """A single type violation (mutable, loose, or default)."""
 
     filepath: Path
     line: int
     column: int
-    context: str  # 'field' or 'parameter'
-    bad_type: str  # The forbidden type found
-    violation_kind: str  # 'mutable' or 'loose'
+    context: FieldContext
+    bad_type: str  # The forbidden type found (or 'default' for default values)
+    violation_kind: ViolationKind
     source_line: str
     suggestion: str
 
@@ -128,8 +126,8 @@ class Violation:
 # =============================================================================
 
 
-class MutableTypeChecker(ast.NodeVisitor):
-    """AST visitor that checks for mutable types in model annotations."""
+class SchemaTypeChecker(ast.NodeVisitor):
+    """AST visitor that checks for mutable types, loose types, and defaults in model annotations."""
 
     SUGGESTIONS: dict[str, str] = {
         # Mutable type suggestions
@@ -140,6 +138,8 @@ class MutableTypeChecker(ast.NodeVisitor):
         'set': 'Set[T] (from collections.abc)',
         # Loose type suggestions
         'Any': 'a specific type (TypedDict, StrictModel, or concrete type)',
+        # Default value suggestions
+        'default': 'bifurcate into separate types, or remove default if always present',
     }
 
     def __init__(self, filepath: Path, source_lines: Sequence[str]) -> None:
@@ -148,6 +148,8 @@ class MutableTypeChecker(ast.NodeVisitor):
         self.violations: list[Violation] = []  # Internal - OK to be mutable
         self._in_model_class = False
         self._function_depth = 0  # Track nesting depth in functions
+        # Track model classes defined in this file for multi-level inheritance
+        self._model_classes_seen: set[str] = set()
 
     def visit_ClassDef(self, node: ast.ClassDef) -> None:
         """Track when we enter a class that inherits from model bases."""
@@ -172,10 +174,13 @@ class MutableTypeChecker(ast.NodeVisitor):
         self._in_model_class = prev_in_model
 
     def _is_model_class(self, node: ast.ClassDef) -> bool:
-        """Check if class inherits from a model base class."""
+        """Check if class inherits from a model base class (direct or via seen classes)."""
         for base in node.bases:
             base_name = self._get_type_name(base)
-            if base_name in MODEL_BASE_CLASSES:
+            # Check against configured bases OR classes we've seen inherit from them
+            if base_name in MODEL_BASE_CLASSES or base_name in self._model_classes_seen:
+                # Track this class so its subclasses are also checked
+                self._model_classes_seen.add(node.name)
                 return True
         return False
 
@@ -202,7 +207,68 @@ class MutableTypeChecker(ast.NodeVisitor):
         # Only check if we're in a model class and NOT in a function body
         if self._in_model_class and self._function_depth == 0:
             self._check_annotation(node.annotation, node.lineno, 'field')
+            self._check_for_default(node)
         self.generic_visit(node)
+
+    def _check_for_default(self, node: ast.AnnAssign) -> None:
+        """Check if field has a default value (violates maximum strictness)."""
+        if node.value is None:
+            return  # No default - OK
+
+        lineno = node.lineno
+
+        # Check for noqa before doing detailed analysis
+        if self._has_noqa(lineno, 'default'):
+            return
+
+        # Case 1: Field() call - check for default/default_factory
+        if isinstance(node.value, ast.Call):
+            func_name = self._get_type_name(node.value.func)
+            if func_name == 'Field':
+                has_default = False
+
+                # Check positional args first - first positional arg is 'default'
+                if node.value.args:
+                    first_arg = node.value.args[0]
+                    # Field(...) = explicitly required, NOT a default
+                    if isinstance(first_arg, ast.Constant) and first_arg.value is ...:
+                        return  # OK - explicitly required
+                    # Any other positional arg (e.g., Field(None)) is a default value
+                    has_default = True
+                else:
+                    # No positional args - check keyword arguments
+                    for keyword in node.value.keywords:
+                        if keyword.arg == 'default':
+                            # Field(default=...) = explicitly required
+                            if isinstance(keyword.value, ast.Constant) and keyword.value.value is ...:
+                                return  # OK - explicitly required
+                            has_default = True
+                            break
+                        elif keyword.arg == 'default_factory':
+                            has_default = True
+                            break
+
+                if not has_default:
+                    # Field() with no default args - required, OK
+                    return
+
+        # At this point, we have a default value - report violation
+        source_line = ''
+        if 0 < lineno <= len(self.source_lines):
+            source_line = self.source_lines[lineno - 1].strip()
+
+        self.violations.append(
+            Violation(
+                filepath=self.filepath,
+                line=lineno,
+                column=getattr(node.value, 'col_offset', 0),
+                context='field',
+                bad_type='default',
+                violation_kind='default',
+                source_line=source_line,
+                suggestion=self.SUGGESTIONS['default'],
+            )
+        )
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
         """Check method parameter annotations."""
@@ -237,12 +303,12 @@ class MutableTypeChecker(ast.NodeVisitor):
             if arg.annotation:
                 self._check_annotation(arg.annotation, arg.lineno, 'parameter')
 
-    def _check_annotation(self, node: ast.expr, lineno: int, context: str) -> None:
+    def _check_annotation(self, node: ast.expr, lineno: int, context: FieldContext) -> None:
         """Check if an annotation contains forbidden types."""
         bad_type = self._find_forbidden_type(node)
         if bad_type:
             # Determine violation kind
-            kind = 'loose' if bad_type in LOOSE_TYPES else 'mutable'
+            kind: ViolationKind = 'loose' if bad_type in LOOSE_TYPES else 'mutable'
 
             # Check for noqa comment with appropriate code
             if self._has_noqa(lineno, kind):
@@ -352,12 +418,19 @@ class MutableTypeChecker(ast.NodeVisitor):
             # Invalid annotation - let other tools catch this
             return None
 
-    def _has_noqa(self, lineno: int, violation_kind: str) -> bool:
+    # Mapping from violation kind to noqa code
+    _NOQA_CODES: Mapping[ViolationKind, NoqaCode] = {
+        'mutable': 'mutable-type',
+        'loose': 'loose-typing',
+        'default': 'default-value',
+    }
+
+    def _has_noqa(self, lineno: int, violation_kind: ViolationKind) -> bool:
         """Check if line has a noqa comment for this check.
 
         Args:
             lineno: Line number to check
-            violation_kind: 'mutable' or 'loose' - determines which noqa code to check
+            violation_kind: 'mutable', 'loose', or 'default' - determines which noqa code to check
 
         Returns:
             True if a matching noqa comment is found
@@ -381,10 +454,9 @@ class MutableTypeChecker(ast.NodeVisitor):
             codes_part = noqa_part[1:].strip()
             codes = [c.strip().lower() for c in codes_part.split(',')]
 
-            # Check for the appropriate noqa code based on violation kind
-            if violation_kind == 'mutable' and 'mutable-type' in codes:
-                return True
-            if violation_kind == 'loose' and 'loose-typing' in codes:
+            # Look up the noqa code for this violation kind
+            expected_code = self._NOQA_CODES.get(violation_kind)
+            if expected_code and expected_code in codes:
                 return True
 
         return False
@@ -410,7 +482,7 @@ def check_file(filepath: Path) -> list[Violation]:
         return []
 
     source_lines = source.splitlines()
-    checker = MutableTypeChecker(filepath, source_lines)
+    checker = SchemaTypeChecker(filepath, source_lines)
     checker.visit(tree)
 
     return checker.violations
@@ -429,7 +501,10 @@ def find_python_files(root: Path, exclude_dirs: Set[str]) -> list[Path]:
 def format_violation(v: Violation) -> str:
     """Format a violation for display."""
     # Determine error type description and noqa code
-    if v.violation_kind == 'loose':
+    if v.violation_kind == 'default':
+        type_desc = 'Default value'
+        noqa_code = 'default-value'
+    elif v.violation_kind == 'loose':
         type_desc = 'Loose type'
         noqa_code = 'loose-typing'
     else:
@@ -501,11 +576,14 @@ def main() -> int:
         file_count = len({v.filepath for v in all_violations})
         mutable_count = sum(1 for v in all_violations if v.violation_kind == 'mutable')
         loose_count = sum(1 for v in all_violations if v.violation_kind == 'loose')
+        default_count = sum(1 for v in all_violations if v.violation_kind == 'default')
         summary_parts = []
         if mutable_count:
             summary_parts.append(f'{mutable_count} mutable')
         if loose_count:
             summary_parts.append(f'{loose_count} loose')
+        if default_count:
+            summary_parts.append(f'{default_count} default')
         print(f'Found {len(all_violations)} violation(s) ({", ".join(summary_parts)}) in {file_count} file(s).')
         return 1
 
