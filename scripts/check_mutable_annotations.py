@@ -25,9 +25,10 @@ Exit codes:
 
 from __future__ import annotations
 
+import argparse
 import ast
 import sys
-from collections.abc import Sequence
+from collections.abc import Sequence, Set
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -383,9 +384,9 @@ def check_file(filepath: Path) -> list[Violation]:
     return checker.violations
 
 
-def find_python_files(root: Path) -> list[Path]:
-    """Find all .py files recursively under root."""
-    return sorted(root.rglob('*.py'))
+def find_python_files(root: Path, exclude_dirs: Set[str]) -> list[Path]:
+    """Find all .py files recursively under root, skipping excluded directories."""
+    return sorted(path for path in root.rglob('*.py') if not any(part in exclude_dirs for part in path.parts))
 
 
 # =============================================================================
@@ -411,18 +412,33 @@ def format_violation(v: Violation) -> str:
 
 def main() -> int:
     """Main entry point."""
-    if len(sys.argv) < 2:
-        print('Usage: check_mutable_annotations.py <files...>', file=sys.stderr)
-        print('       check_mutable_annotations.py .  # All .py files in cwd', file=sys.stderr)
-        return 2
+    parser = argparse.ArgumentParser(
+        description='Check for mutable collection types in model annotations.',
+        epilog='Example: %(prog)s . --exclude .venv .git',
+    )
+    parser.add_argument(
+        'paths',
+        nargs='+',
+        help='Files or directories to check (use . for current directory)',
+    )
+    parser.add_argument(
+        '--exclude',
+        nargs='*',
+        default=[],
+        metavar='DIR',
+        help='Directories to exclude when searching recursively',
+    )
+
+    args = parser.parse_args()
+    exclude_dirs = set(args.exclude)
 
     # Collect files to check
     files: list[Path] = []
-    for arg in sys.argv[1:]:
+    for arg in args.paths:
         path = Path(arg)
         if arg == '.' or path.is_dir():
             # Directory: find all .py files recursively
-            files.extend(find_python_files(path))
+            files.extend(find_python_files(path, exclude_dirs))
         elif path.suffix == '.py' and path.is_file():
             files.append(path)
         # Silently skip non-.py files (allows pre-commit to pass mixed file lists)

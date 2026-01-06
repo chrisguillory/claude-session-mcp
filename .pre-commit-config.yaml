@@ -39,7 +39,7 @@ repos:
       - id: check-mutable-annotations
         name: check-mutable-annotations
         description: Enforce immutable types (Sequence, Mapping, Set) in model annotations
-        entry: ./scripts/check_mutable_annotations.py
+        entry: ./scripts/check_mutable_annotations.py . --exclude .venv .git __pycache__ .mypy_cache
         language: script
-        types: [python]
-        files: ^src/schemas/
+        pass_filenames: false
+        always_run: true
