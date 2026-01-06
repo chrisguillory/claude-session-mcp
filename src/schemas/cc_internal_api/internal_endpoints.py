@@ -14,9 +14,12 @@ These model Claude Code's internal API endpoints beyond the Messages API:
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from src.schemas.cc_internal_api.base import PermissiveModel
+import pydantic
+
+from src.schemas.cc_internal_api.base import EmptyDict, StrictModel
+from src.schemas.cc_internal_api.request import RequestMessage, SystemBlock, ToolDefinition
 from src.schemas.types import ModelId
 
 # ==============================================================================
@@ -24,7 +27,7 @@ from src.schemas.types import ModelId
 # ==============================================================================
 
 
-class CountTokensRequest(PermissiveModel):
+class CountTokensRequest(StrictModel):
     """
     Request to /v1/messages/count_tokens.
 
@@ -35,12 +38,12 @@ class CountTokensRequest(PermissiveModel):
     """
 
     model: ModelId
-    messages: Sequence[Mapping[str, Any]]  # Can be empty
-    tools: Sequence[Mapping[str, Any]] | None = None
-    system: Sequence[Mapping[str, Any]] | None = None
+    messages: Sequence[RequestMessage]
+    tools: Sequence[ToolDefinition] | None = None
+    system: Sequence[SystemBlock] | None = None
 
 
-class CountTokensResponse(PermissiveModel):
+class CountTokensResponse(StrictModel):
     """
     Response from /v1/messages/count_tokens.
 
@@ -56,7 +59,7 @@ class CountTokensResponse(PermissiveModel):
 # ==============================================================================
 
 
-class GroveResponse(PermissiveModel):
+class GroveResponse(StrictModel):
     """
     Response from /api/claude_code/grove or /api/claude_code_grove.
 
@@ -79,7 +82,49 @@ class GroveResponse(PermissiveModel):
 # ==============================================================================
 
 
-class MetricsDataPoint(PermissiveModel):
+class ResourceAttributes(StrictModel):
+    """
+    Resource attributes in OpenTelemetry metrics.
+
+    VALIDATION STATUS: VALIDATED
+    Service identification and environment metadata.
+
+    JSON keys use dots per OpenTelemetry convention (e.g., "service.name").
+    Python field names use underscores with Field(alias=...) for mapping.
+    """
+
+    service_name: str = pydantic.Field(alias='service.name')
+    service_version: str = pydantic.Field(alias='service.version')
+    os_type: str = pydantic.Field(alias='os.type')
+    os_version: str = pydantic.Field(alias='os.version')
+    host_arch: str = pydantic.Field(alias='host.arch')
+    aggregation_temporality: str = pydantic.Field(alias='aggregation.temporality')
+    user_customer_type: str = pydantic.Field(alias='user.customer_type')
+    user_subscription_type: str = pydantic.Field(alias='user.subscription_type')
+
+
+class MetricsAttributes(StrictModel):
+    """
+    Attributes on a metric data point.
+
+    VALIDATION STATUS: VALIDATED
+    OpenTelemetry-style dimensions with dot-notation keys.
+    """
+
+    # --- Always present ---
+    user_id: str = pydantic.Field(alias='user.id')
+    session_id: str = pydantic.Field(alias='session.id')
+    organization_id: str = pydantic.Field(alias='organization.id')
+    user_email: str = pydantic.Field(alias='user.email')
+    user_account_uuid: str = pydantic.Field(alias='user.account_uuid')
+    terminal_type: str = pydantic.Field(alias='terminal.type')
+
+    # --- Present on token usage metrics only ---
+    type: Literal['input', 'output', 'cacheRead', 'cacheCreation', 'user', 'cli'] | None = None
+    model: str | None = None  # Model ID for token metrics
+
+
+class MetricsDataPoint(StrictModel):
     """
     Single data point in a metrics report.
 
@@ -87,12 +132,12 @@ class MetricsDataPoint(PermissiveModel):
     OpenTelemetry-style data point.
     """
 
-    attributes: Mapping[str, Any]  # Metric dimensions
-    value: float | int  # Metric value
+    attributes: MetricsAttributes | None  # Null for some metrics
+    value: float | int
     timestamp: str  # ISO 8601 timestamp
 
 
-class MetricDefinition(PermissiveModel):
+class MetricDefinition(StrictModel):
     """
     Single metric in a metrics report.
 
@@ -105,7 +150,7 @@ class MetricDefinition(PermissiveModel):
     data_points: Sequence[MetricsDataPoint]
 
 
-class MetricsRequest(PermissiveModel):
+class MetricsRequest(StrictModel):
     """
     Request to /api/claude_code/metrics.
 
@@ -113,11 +158,11 @@ class MetricsRequest(PermissiveModel):
     OpenTelemetry-style metrics reporting.
     """
 
-    resource_attributes: Mapping[str, Any]  # Service metadata
+    resource_attributes: ResourceAttributes
     metrics: Sequence[MetricDefinition]
 
 
-class MetricsResponse(PermissiveModel):
+class MetricsResponse(StrictModel):
     """
     Response from /api/claude_code/metrics.
 
@@ -129,7 +174,7 @@ class MetricsResponse(PermissiveModel):
     rejected_count: int
 
 
-class MetricsEnabledResponse(PermissiveModel):
+class MetricsEnabledResponse(StrictModel):
     """
     Response from /api/claude_code/organizations/metrics_enabled.
 
@@ -148,7 +193,7 @@ class MetricsEnabledResponse(PermissiveModel):
 FeatureSource = Literal['force', 'defaultValue', 'experiment']
 
 
-class ExperimentConfig(PermissiveModel):
+class ExperimentConfig(StrictModel):
     """
     Experiment configuration for a feature flag.
 
@@ -159,7 +204,7 @@ class ExperimentConfig(PermissiveModel):
     variations: Sequence[str]  # Possible variations
 
 
-class ExperimentResult(PermissiveModel):
+class ExperimentResult(StrictModel):
     """
     Result of experiment assignment.
 
@@ -172,7 +217,7 @@ class ExperimentResult(PermissiveModel):
     hashUsed: bool  # Whether hash was used for assignment
 
 
-class FeatureValue(PermissiveModel):
+class FeatureValue(StrictModel):
     """
     Individual feature flag value.
 
@@ -180,7 +225,10 @@ class FeatureValue(PermissiveModel):
     Observed in features dict values.
     """
 
-    value: bool | str | Mapping[str, Any]  # Feature value (varies by flag)
+    # GENUINELY POLYMORPHIC: Feature values can be boolean (simple toggle),
+    # string (variation name), or complex config objects depending on flag type.
+    # TODO: Refactor to strict per-flag typing in feature_flags.py module.
+    value: bool | str | Mapping[str, Any]
     on: bool  # Whether feature is on
     off: bool  # Whether feature is off
     source: FeatureSource  # Where value comes from
@@ -188,7 +236,7 @@ class FeatureValue(PermissiveModel):
     experimentResult: ExperimentResult | None = None  # Experiment result if applicable
 
 
-class EvalAttributes(PermissiveModel):
+class EvalAttributes(StrictModel):
     """
     Attributes sent with feature flag evaluation request.
 
@@ -207,7 +255,7 @@ class EvalAttributes(PermissiveModel):
     appVersion: str  # Claude Code version
 
 
-class EvalRequest(PermissiveModel):
+class EvalRequest(StrictModel):
     """
     Request to /api/eval/sdk-{code}.
 
@@ -216,12 +264,14 @@ class EvalRequest(PermissiveModel):
     """
 
     attributes: EvalAttributes
-    forcedVariations: Mapping[str, Any]  # Forced variations (usually empty)
-    forcedFeatures: Sequence[str]  # Forced features (usually empty)
-    url: str  # URL context (usually empty string)
+    # ALWAYS EMPTY in observed captures - strict typing for fail-fast validation
+    forcedVariations: EmptyDict  # Always {} - will fail if API starts sending data
+    # max_length=0 enforces empty list (Pydantic doesn't support Sequence[Never])
+    forcedFeatures: Annotated[Sequence[str], pydantic.Field(max_length=0)]
+    url: Literal['']  # Always "" - will fail if API starts sending data
 
 
-class EvalResponse(PermissiveModel):
+class EvalResponse(StrictModel):
     """
     Response from /api/eval/sdk-{code}.
 
@@ -262,17 +312,18 @@ KNOWN_FEATURE_FLAGS = [
 # ==============================================================================
 
 
-class ClientDataResponse(PermissiveModel):
+class ClientDataResponse(StrictModel):
     """
     Response from /api/oauth/claude_cli/client_data.
 
     VALIDATION STATUS: VALIDATED
     Observed: {"client_data": {}}
 
-    Contains client-specific configuration. Currently empty in captures.
+    Contains client-specific configuration.
+    ALWAYS EMPTY in observed captures - strict typing for fail-fast validation.
     """
 
-    client_data: Mapping[str, Any]
+    client_data: EmptyDict  # Always {} - will fail if API starts sending data
 
 
 # ==============================================================================
@@ -282,7 +333,7 @@ class ClientDataResponse(PermissiveModel):
 PaprikaMode = Literal['basic', 'extended', 'disabled']
 
 
-class DismissedBanner(PermissiveModel):
+class DismissedBanner(StrictModel):
     """
     Dismissed banner record.
 
@@ -293,15 +344,15 @@ class DismissedBanner(PermissiveModel):
     dismissed_at: str  # ISO 8601 timestamp
 
 
-class AccountSettingsResponse(PermissiveModel):
+class AccountSettingsResponse(StrictModel):
     """
     Response from /api/oauth/account/settings.
 
     VALIDATION STATUS: VALIDATED
     User preferences and feature toggles.
 
-    Note: This is a large structure with ~47 fields. We model known fields
-    and let PermissiveModel handle unknown ones.
+    Note: This is a large structure with ~47 fields. With strict validation
+    (extra='forbid'), all fields must be modeled or validation fails.
     """
 
     # Onboarding state
@@ -376,7 +427,7 @@ class AccountSettingsResponse(PermissiveModel):
 # ==============================================================================
 
 
-class HelloResponse(PermissiveModel):
+class HelloResponse(StrictModel):
     """
     Response from /api/hello.
 
@@ -392,7 +443,7 @@ class HelloResponse(PermissiveModel):
 # ==============================================================================
 
 
-class ModelAccessResponse(PermissiveModel):
+class ModelAccessResponse(StrictModel):
     """
     Response from /api/organization/{uuid}/claude_code_sonnet_1m_access.
 
@@ -409,7 +460,7 @@ class ModelAccessResponse(PermissiveModel):
 # ==============================================================================
 
 
-class ReferralCodeDetails(PermissiveModel):
+class ReferralCodeDetails(StrictModel):
     """
     Referral code details.
 
@@ -421,7 +472,7 @@ class ReferralCodeDetails(PermissiveModel):
     referral_link: str  # Full referral URL
 
 
-class ReferralEligibilityResponse(PermissiveModel):
+class ReferralEligibilityResponse(StrictModel):
     """
     Response from /api/oauth/organizations/{uuid}/referral/eligibility.
 

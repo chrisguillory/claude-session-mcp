@@ -12,7 +12,7 @@ from typing import Annotated, Any, Literal
 
 import anthropic.types
 
-from src.schemas.cc_internal_api.base import FromSdk, PermissiveModel
+from src.schemas.cc_internal_api.base import FromSdk, StrictModel
 from src.schemas.cc_internal_api.common import CacheControl
 from src.schemas.types import ModelId
 
@@ -21,7 +21,7 @@ from src.schemas.types import ModelId
 # ==============================================================================
 
 
-class SystemBlock(PermissiveModel):
+class SystemBlock(StrictModel):
     """
     Text block in the system parameter array.
 
@@ -40,7 +40,7 @@ class SystemBlock(PermissiveModel):
 # ==============================================================================
 
 
-class ToolInputSchema(PermissiveModel):
+class ToolInputSchema(StrictModel):
     """
     JSON Schema for tool input parameters.
 
@@ -49,12 +49,15 @@ class ToolInputSchema(PermissiveModel):
     """
 
     type: Literal['object']
+    # GENUINELY POLYMORPHIC: JSON Schema properties define tool parameters.
+    # Each tool has its own schema structure - this is meta-schema by design.
+    # Cannot be typed more strictly (would require typing JSON Schema itself).
     properties: Mapping[str, Any] | None = None
     required: Sequence[str] | None = None
     additionalProperties: bool | None = None
 
 
-class ToolDefinition(PermissiveModel):
+class ToolDefinition(StrictModel):
     """
     Tool definition sent in API requests.
 
@@ -77,7 +80,7 @@ class ToolDefinition(PermissiveModel):
 # ==============================================================================
 
 
-class TextContentBlock(PermissiveModel):
+class TextContentBlock(StrictModel):
     """
     Text content block in messages.
 
@@ -90,7 +93,7 @@ class TextContentBlock(PermissiveModel):
     cache_control: CacheControl | None = None
 
 
-class RequestThinkingBlock(PermissiveModel):
+class RequestThinkingBlock(StrictModel):
     """
     Thinking content block in assistant messages (multi-turn conversations).
 
@@ -112,7 +115,7 @@ RequestContentBlock = TextContentBlock | RequestThinkingBlock
 # ==============================================================================
 
 
-class RequestMessage(PermissiveModel):
+class RequestMessage(StrictModel):
     """
     Message in the messages array.
 
@@ -129,7 +132,7 @@ class RequestMessage(PermissiveModel):
 # ==============================================================================
 
 
-class ThinkingConfig(PermissiveModel):
+class ThinkingConfig(StrictModel):
     """
     Extended thinking configuration.
 
@@ -146,7 +149,7 @@ class ThinkingConfig(PermissiveModel):
 # ==============================================================================
 
 
-class ContextManagementEdit(PermissiveModel):
+class ContextManagementEdit(StrictModel):
     """
     Context management edit directive.
 
@@ -158,7 +161,7 @@ class ContextManagementEdit(PermissiveModel):
     keep: str | None = None  # e.g., "all"
 
 
-class RequestContextManagement(PermissiveModel):
+class RequestContextManagement(StrictModel):
     """
     Context management in requests.
 
@@ -174,7 +177,7 @@ class RequestContextManagement(PermissiveModel):
 # ==============================================================================
 
 
-class RequestMetadata(PermissiveModel):
+class RequestMetadata(StrictModel):
     """
     Request metadata.
 
@@ -190,7 +193,7 @@ class RequestMetadata(PermissiveModel):
 # ==============================================================================
 
 
-class MessagesRequest(PermissiveModel):
+class MessagesRequest(StrictModel):
     """
     Complete request payload for /v1/messages.
 

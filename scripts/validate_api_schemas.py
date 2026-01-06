@@ -28,7 +28,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from pydantic import ValidationError
 
-from src.schemas.cc_internal_api.base import PermissiveModel
+from src.schemas.cc_internal_api.base import StrictModel
 
 
 @dataclass
@@ -97,7 +97,7 @@ def load_capture_body(filepath: Path, is_request: bool) -> dict[str, Any] | None
     return None
 
 
-def get_schema_for_endpoint(pattern: str, is_request: bool) -> tuple[str | None, type[PermissiveModel] | None]:
+def get_schema_for_endpoint(pattern: str, is_request: bool) -> tuple[str | None, type[StrictModel] | None]:
     """Get the appropriate schema class for an endpoint pattern."""
     # Import schemas lazily to avoid import errors if schemas have issues
     from src.schemas.cc_internal_api import (

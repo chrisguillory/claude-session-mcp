@@ -2,7 +2,7 @@
 Base classes and type markers for Claude Code internal API schemas.
 
 This module provides:
-- PermissiveModel: Base class that allows unknown fields during observation
+- StrictModel: Base class with strict validation (extra='forbid')
 - Type correspondence markers: Link fields to session schemas and SDK types
 """
 
@@ -14,23 +14,23 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict
 
 # ==============================================================================
-# Permissive Base Model
+# Strict Base Model
 # ==============================================================================
 
 
-class PermissiveModel(BaseModel):
+class StrictModel(BaseModel):
     """
-    Base model for API schemas during observation phase.
+    Base model for API schemas with strict validation.
 
-    Uses extra='ignore' to accept unknown fields, allowing us to parse
-    real API traffic even when fields haven't been modeled yet.
+    Uses extra='forbid' to reject unknown fields - any field not modeled
+    causes immediate validation failure (fail-fast).
 
-    Once a schema is fully validated against captured traffic, consider
-    switching to extra='forbid' for stricter validation.
+    This was previously 'ignore' during the observation phase. Now that
+    schemas are complete, we enforce strict field coverage.
     """
 
     model_config = ConfigDict(
-        extra='ignore',  # Accept unknown fields during observation
+        extra='forbid',  # Reject unknown fields (fail-fast)
         strict=True,  # Strict type coercion
         frozen=True,  # Immutable after creation
     )
@@ -41,7 +41,7 @@ class PermissiveModel(BaseModel):
 # ==============================================================================
 
 
-class EmptyBody(PermissiveModel):
+class EmptyBody(StrictModel):
     """
     Marker type for empty HTTP bodies at the capture layer.
 
@@ -59,6 +59,23 @@ class EmptyBody(PermissiveModel):
     size: int
 
 
+class EmptyDict(StrictModel):
+    """
+    Marker type for empty JSON object {} in API traffic.
+
+    With extra='forbid', a model with no fields will only validate against
+    an empty dict. This is used for fields that are {} on first request and
+    populated on subsequent requests (e.g., Statsig previousDerivedFields).
+
+    Using a named model rather than bare Mapping[str, Never] because:
+    1. Pydantic can't validate against Never
+    2. This clearly documents the semantic meaning
+    3. Union with populated model works naturally
+    """
+
+    pass
+
+
 # ==============================================================================
 # Type Correspondence Markers
 # ==============================================================================
@@ -73,7 +90,7 @@ class EmptyBody(PermissiveModel):
 #   from src.schemas import session
 #   import anthropic.types
 #
-#   class ApiUsage(PermissiveModel):
+#   class ApiUsage(StrictModel):
 #       input_tokens: Annotated[int,
 #           FromSession(session.models.TokenUsage, 'input_tokens'),
 #           FromSdk(anthropic.types.Usage, 'input_tokens'),

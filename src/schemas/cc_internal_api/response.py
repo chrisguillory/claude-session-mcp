@@ -7,13 +7,13 @@ Validated against mitmproxy captures of actual Claude Code traffic.
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
-from typing import Annotated, Any, Literal
+from collections.abc import Sequence
+from typing import Annotated, Literal
 
 import anthropic.types
 
 from src.schemas import session
-from src.schemas.cc_internal_api.base import FromSdk, FromSession, PermissiveModel
+from src.schemas.cc_internal_api.base import FromSdk, FromSession, StrictModel
 from src.schemas.cc_internal_api.common import ApiUsage
 from src.schemas.types import ModelId
 
@@ -40,7 +40,7 @@ StopReason = Literal[
 # ==============================================================================
 
 
-class ResponseTextContent(PermissiveModel):
+class ResponseTextContent(StrictModel):
     """
     Text content block in API response.
 
@@ -54,7 +54,7 @@ class ResponseTextContent(PermissiveModel):
     text: str
 
 
-class ThinkingContent(PermissiveModel):
+class ThinkingContent(StrictModel):
     """
     Thinking content block in API response.
 
@@ -73,7 +73,7 @@ class ThinkingContent(PermissiveModel):
     ] = None
 
 
-class ToolUseContent(PermissiveModel):
+class ToolUseContent(StrictModel):
     """
     Tool use content block in API response.
 
@@ -90,8 +90,9 @@ class ToolUseContent(PermissiveModel):
         str,
         FromSession(session.models.ToolUseContent, 'name', status='inferred'),
     ]
+    # Reuse ToolInput from session models - typed union for known tools, dict fallback for MCP
     input: Annotated[
-        Mapping[str, Any],
+        session.models.ToolInput,
         FromSession(session.models.ToolUseContent, 'input', status='inferred'),
     ]
 
@@ -105,7 +106,19 @@ ResponseContent = ResponseTextContent | ThinkingContent | ToolUseContent
 # ==============================================================================
 
 
-class ResponseContextManagement(PermissiveModel):
+class AppliedEdit(StrictModel):
+    """
+    Applied context management edit in response.
+
+    VALIDATION STATUS: INFERRED
+    Based on request-side ContextManagementEdit structure.
+    Always observed as empty array - this types what we'd expect when populated.
+    """
+
+    type: str  # Edit type, e.g., "clear_thinking_20251015"
+
+
+class ResponseContextManagement(StrictModel):
     """
     Context management in API response.
 
@@ -115,7 +128,7 @@ class ResponseContextManagement(PermissiveModel):
     Note: Response has 'applied_edits' vs request has 'edits'.
     """
 
-    applied_edits: Sequence[Mapping[str, Any]]  # Observed as empty array
+    applied_edits: Sequence[AppliedEdit]
 
 
 # ==============================================================================
@@ -123,7 +136,7 @@ class ResponseContextManagement(PermissiveModel):
 # ==============================================================================
 
 
-class MessagesResponse(PermissiveModel):
+class MessagesResponse(StrictModel):
     """
     Complete response payload from /v1/messages.
 

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from src.schemas.cc_internal_api.base import PermissiveModel
+from src.schemas.cc_internal_api.base import StrictModel
 
 # ==============================================================================
 # Rate Limit Status Types
@@ -28,7 +28,7 @@ RepresentativeClaim = Literal['five_hour', 'seven_day']
 # ==============================================================================
 
 
-class RateLimitWindow(PermissiveModel):
+class RateLimitWindow(StrictModel):
     """
     Rate limit status for a specific time window (5h or 7d).
 
@@ -46,7 +46,7 @@ class RateLimitWindow(PermissiveModel):
 # ==============================================================================
 
 
-class UnifiedRateLimit(PermissiveModel):
+class UnifiedRateLimit(StrictModel):
     """
     Complete rate limit information extracted from response headers.
 

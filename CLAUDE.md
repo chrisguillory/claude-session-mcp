@@ -498,3 +498,19 @@ When reviewing code, ignore suggestions like:
 - "Handle Z case that might occur"
 
 These are premature. Wait for the failure, then handle it.
+
+## Tool Usage Rules
+
+### Never Silently Fall Back on Tool Failures
+
+**CRITICAL:** When the user explicitly requests a specific tool (e.g., Perplexity for research) and that tool is unavailable, **DO NOT silently fall back to an alternative** (e.g., WebSearch). Instead:
+
+1. **Hard fail** - Tell the user the tool is not available
+2. **Ask them to enable it** - e.g., "Perplexity MCP is not connected. Please run `/mcp reconnect perplexity`"
+3. **Wait for their instruction** - Do not proceed with a substitute
+
+This applies especially to:
+- `mcp__perplexity__*` tools - Never substitute with WebSearch
+- Any MCP tool the user explicitly names
+
+**Why:** The user chose a specific tool for a reason. Silent fallback wastes their time with inferior results and hides the real problem (tool not connected).
