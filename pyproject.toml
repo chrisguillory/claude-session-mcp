@@ -53,6 +53,8 @@ ignore = [
     "SIM102",  # allow nested if statements
     "SIM108",  # allow if-else over ternary
 ]
+# External linter code from scripts/check_mutable_annotations.py
+external = ["mutable-type"]
 
 [tool.ruff.lint.isort]
 required-imports = ["from __future__ import annotations"]

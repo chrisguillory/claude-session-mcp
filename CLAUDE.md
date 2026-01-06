@@ -407,6 +407,12 @@ When Claude Code updates break validation:
 
 ## Git Workflow
 
+**Setup**: Ensure dev dependencies are installed before committing:
+
+```bash
+uv sync --all-groups  # Install all dependencies including dev group
+```
+
 **Always run pre-commit before committing** to avoid failed commits:
 
 ```bash
@@ -417,26 +423,15 @@ git commit -m "message"
 
 This catches formatting and type errors before the commit hook runs, saving tokens on failed attempts.
 
-### Pre-commit mypy Dependencies
+### Pre-commit Configuration
 
-**IMPORTANT:** Pre-commit runs mypy in an isolated virtual environment. Dependencies from `pyproject.toml` are NOT automatically available to the mypy hook.
+Pre-commit hooks use `language: system` with `uv run` to execute in the project's virtualenv. This means:
 
-If you add a new import to a Python file and mypy fails in pre-commit with `Library stubs not installed`, you need to:
+- **No dependency duplication**: All deps are in `pyproject.toml` only
+- **Fast execution**: Uses project's already-installed packages
+- **Consistent versions**: Hooks use exact same versions as development (via `uv.lock`)
 
-1. Add the library AND its type stubs to `.pre-commit-config.yaml` under `additional_dependencies`:
-
-```yaml
-- repo: https://github.com/pre-commit/mirrors-mypy
-  hooks:
-    - id: mypy
-      additional_dependencies:
-        - your-library
-        - types-your-library  # if type stubs exist
-```
-
-2. The same dependency must also be in `pyproject.toml` for normal development.
-
-**Why this happens:** Pre-commit creates isolated environments for reproducibility. This is by design, but means mypy dependencies must be declared twice - once in `pyproject.toml` (for development) and once in `.pre-commit-config.yaml` (for pre-commit hooks).
+If you add a new dev dependency (e.g., a mypy plugin or type stubs), just add it to the dev group in `pyproject.toml` and run `uv sync --all-groups`.
 
 ## Error Handling Philosophy
 

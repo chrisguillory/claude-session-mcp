@@ -9,6 +9,7 @@ Headers follow the pattern: anthropic-ratelimit-unified-{component}
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Literal
 
 from src.schemas.cc_internal_api.base import StrictModel
@@ -85,7 +86,7 @@ class UnifiedRateLimit(StrictModel):
     overage_disabled_reason: str | None = None
 
     @classmethod
-    def from_headers(cls, headers: dict[str, str]) -> UnifiedRateLimit:
+    def from_headers(cls, headers: Mapping[str, str]) -> UnifiedRateLimit:
         """
         Extract rate limit information from response headers.
 
@@ -130,7 +131,7 @@ class UnifiedRateLimit(StrictModel):
         )
 
     @classmethod
-    def from_headers_safe(cls, headers: dict[str, str]) -> UnifiedRateLimit | None:
+    def from_headers_safe(cls, headers: Mapping[str, str]) -> UnifiedRateLimit | None:
         """
         Extract rate limit information, returning None if headers are missing.
 

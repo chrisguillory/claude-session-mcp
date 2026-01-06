@@ -588,10 +588,10 @@ class RawTextBody(StrictModel):
     Body container for text responses that couldn't be parsed as JSON.
 
     Created by preprocessing when body type is 'text' and JSON parsing fails.
-    The _raw_text field contains the original text content.
+    The raw_text field contains the original text content.
     """
 
-    _raw_text: str
+    raw_text: str
 
 
 class GCSVersionResponseCapture(ResponseCapture):
@@ -898,7 +898,7 @@ def _preprocess_capture(data: dict[str, Any], filepath: Path | None = None) -> d
                     data['body'] = json.loads(raw)
                 except json.JSONDecodeError:
                     # Keep as raw text in a dict
-                    data['body'] = {'_raw_text': raw}
+                    data['body'] = {'raw_text': raw}
 
         elif body_type == 'empty' or not body_wrapper:
             # Empty body

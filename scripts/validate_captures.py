@@ -6,11 +6,7 @@ This script finds all .json capture files in the captures/ directory and validat
 them against the Pydantic models to ensure complete schema coverage.
 
 Usage:
-    ./scripts/validate_captures.py [--verbose|-v] [--errors-only] [captures_dir]
-
-Options:
-    --verbose, -v    Show detailed error breakdown by field path
-    --errors-only    Only show error analysis, skip success summary
+    ./scripts/validate_captures.py [captures_dir]
 
 If captures_dir is not specified, defaults to ./captures/
 """
