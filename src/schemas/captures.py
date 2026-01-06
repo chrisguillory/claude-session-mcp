@@ -89,7 +89,7 @@ from src.schemas.cc_internal_api import (
     TelemetryBatchRequest,
     TelemetryBatchResponse,
 )
-from src.schemas.cc_internal_api.base import StrictModel
+from src.schemas.cc_internal_api.base import EmptyDict, StrictModel
 
 # ==============================================================================
 # Connection metadata from mitmproxy
@@ -163,7 +163,8 @@ class RequestCapture(StrictModel):
 
     # --- mitmproxy metadata ---
     url: str = Field(description='Full URL')
-    cookies: Mapping[str, str] = Field(description='HTTP cookies')
+    # Cookie values can be strings or lists (e.g., GCLB includes [value, attrs])
+    cookies: Mapping[str, str | Sequence[str]] = Field(description='HTTP cookies')
     is_replay: bool | None = Field(description='mitmproxy replay flag')
     client_conn: ClientConnection = Field(description='Client connection info')
 
@@ -210,7 +211,8 @@ class ResponseCapture(StrictModel):
 
     # --- mitmproxy metadata ---
     url: str = Field(description='Full URL')
-    cookies: Mapping[str, str] = Field(description='HTTP cookies')
+    # Cookie values can be strings or lists (e.g., GCLB includes [value, attrs])
+    cookies: Mapping[str, str | Sequence[str]] = Field(description='HTTP cookies')
     is_replay: bool | None = Field(description='mitmproxy replay flag')
     server_conn: ServerConnection = Field(description='Server connection info')
 
@@ -567,12 +569,11 @@ class DatadogResponseCapture(ResponseCapture):
     """
     Captured POST /api/v2/logs response (202 Accepted).
 
-    Datadog returns empty JSON on success. We don't use EmptyBody here because
-    that's for empty HTTP bodies, while this is an empty JSON object.
+    Datadog returns empty JSON on success.
     """
 
     host: Literal['http-intake.logs.us5.datadoghq.com']
-    # Body is always {} on 202 success - nothing to type beyond empty mapping
+    body: EmptyDict  # Always {} on 202 success
 
 
 class GCSVersionRequestCapture(RequestCapture):

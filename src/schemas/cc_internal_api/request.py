@@ -11,6 +11,7 @@ from collections.abc import Mapping, Sequence
 from typing import Annotated, Any, Literal
 
 import anthropic.types
+import pydantic
 
 from src.schemas.cc_internal_api.base import FromSdk, StrictModel
 from src.schemas.cc_internal_api.common import CacheControl
@@ -55,6 +56,8 @@ class ToolInputSchema(StrictModel):
     properties: Mapping[str, Any] | None = None
     required: Sequence[str] | None = None
     additionalProperties: bool | None = None
+    # JSON Schema version identifier (present in Claude Code tool definitions)
+    schema_: str | None = pydantic.Field(default=None, alias='$schema')
 
 
 class ToolDefinition(StrictModel):

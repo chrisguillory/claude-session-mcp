@@ -14,6 +14,8 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any, Literal
 
+import pydantic
+
 from src.schemas.cc_internal_api.base import EmptyBody, EmptyDict, StrictModel
 
 # ==============================================================================
@@ -82,6 +84,7 @@ class StatsigMetadata(StrictModel):
     sdkVersion: str  # e.g., "5.6.0"
     stableID: str  # Stable identifier
     sessionID: str  # SDK session ID
+    fallbackUrl: str | None = None  # Fallback URL for SDK
 
 
 # ==============================================================================
@@ -209,17 +212,48 @@ class StatsigInitializeFullBody(StrictModel):
     VALIDATION STATUS: VALIDATED
     Returned on initial request or when updates are available.
     The intercept script extracts this from body.data (json type wrapper).
-
-    Note: With strict validation (extra='forbid'), any additional fields from the API
-    (generator, time, derived_fields, evaluated_keys, company_lcut, hash_used, etc.)
-    will cause validation failure - these must be added if observed.
     """
 
+    # Core feature flag data
     feature_gates: Mapping[str, StatsigFeatureGate]
     dynamic_configs: Mapping[str, StatsigDynamicConfig]
-    # ALWAYS EMPTY in observed captures - strict typing for fail-fast validation
-    layer_configs: EmptyDict  # Always {} - will fail if API starts sending data
+    layer_configs: EmptyDict  # Always {} in observed captures
     has_updates: bool
+
+    # Metadata fields
+    generator: str  # e.g., "statsig-go-sdk"
+    time: int  # Unix timestamp
+    company_lcut: int  # Last config update timestamp
+    hash_used: str  # Hash algorithm, e.g., "djb2"
+    hashed_sdk_key_used: str | None = None  # Hashed SDK key
+
+    # SDK parameters
+    sdkParams: Mapping[str, Any]  # SDK-specific parameters
+    evaluated_keys: Mapping[str, Any]  # Evaluated user attributes
+
+    # Derived fields (user context detected by server)
+    derived_fields: DerivedFields
+
+    # Session recording settings
+    can_record_session: bool
+    recording_blocked: bool
+    session_recording_rate: float  # 0.0 to 1.0
+    auto_capture_settings: Mapping[str, Any]
+
+    # Target app
+    target_app_used: str | None = None
+
+    # Checksum for delta updates
+    full_checksum: str
+
+    # Delta update fields (present on subsequent requests)
+    deleted_configs: Sequence[str] | None = None
+    deleted_gates: Sequence[str] | None = None
+    deleted_layers: Sequence[str] | None = None
+    is_delta: bool | None = None
+    checksum: str | None = None
+    checksumV2: str | None = None
+    deltas_full_response: bool | None = None
 
 
 # Union type for discriminated dispatch in captures
@@ -237,22 +271,229 @@ class StatsigEventMetadata(StrictModel):
     Metadata for a Statsig event.
 
     VALIDATION STATUS: VALIDATED
-    Contains event-specific data including environment info.
+    Contains highly polymorphic event-specific data. All fields optional since
+    different event types include different subsets of fields.
     """
 
-    hookName: str | None = None  # e.g., "SessionEnd:prompt_input_exit"
-    numCommands: str | None = None
+    # Exposure/gate event fields
+    config: str | None = None
+    gate: str | None = None
+    gateValue: str | None = None
+    lcut: str | None = None
+    reason: str | None = None
+    receivedAt: str | None = None
+    ruleID: str | None = None
+    rulePassed: str | None = None
+
+    # Session/environment fields
+    betas: str | None = None
+    clientType: str | None = None
+    entrypoint: str | None = None
+    env: str | None = None
+    hookName: str | None = None
+    isInteractive: str | None = None
+    isNonInteractiveSession: str | None = None
+    isTTY: str | None = None
     model: str | None = None
     sessionId: str | None = None
     userType: str | None = None
-    betas: str | None = None  # Comma-separated beta features
-    env: str | None = None  # JSON-encoded environment info
-    entrypoint: str | None = None
-    isInteractive: str | None = None  # "true" or "false" as string
-    clientType: str | None = None
-    sweBenchRunId: str | None = None
+
+    # SWE bench fields
     sweBenchInstanceId: str | None = None
+    sweBenchRunId: str | None = None
     sweBenchTaskId: str | None = None
+
+    # Agent fields
+    agentId: str | None = None
+    agentType: str | None = None
+    agent_type: str | None = None
+    is_built_in_agent: str | None = None
+    is_keep_going: str | None = None
+
+    # Tool/command fields
+    commands_count: str | None = None
+    commands_metadata_length: str | None = None
+    numAllowedTools: str | None = None
+    numCommands: str | None = None
+    numDisallowedTools: str | None = None
+    tool: str | None = None
+    tools_count: str | None = None
+
+    # Token/cost metrics
+    cacheCreationEphemeral1hTokens: str | None = None
+    cacheCreationEphemeral5mTokens: str | None = None
+    cacheCreationInputTokens: str | None = None
+    cacheHitRate: str | None = None
+    cacheReadInputTokens: str | None = None
+    cachedInputTokens: str | None = None
+    cachingEnabled: str | None = None
+    costUSD: str | None = None
+    inputTokens: str | None = None
+    messageTokens: str | None = None
+    outputTokens: str | None = None
+    tokenCount: str | None = None
+    total_tokens: str | None = None
+    uncachedInputTokens: str | None = None
+
+    # Context/message metrics
+    assistant_message_count: str | None = None
+    claude_md_size: str | None = None
+    git_status_size: str | None = None
+    messageCount: str | None = None
+    messagesLength: str | None = None
+    postNormalizedMessageCount: str | None = None
+    preNormalizedMessageCount: str | None = None
+    prompt_char_count: str | None = None
+    response_char_count: str | None = None
+    totalMessageCount: str | None = None
+    total_context_size: str | None = None
+    total_tool_uses: str | None = None
+
+    # Duration/timing fields
+    durationMs: str | None = None
+    durationMsIncludingRetries: str | None = None
+    duration_ms: str | None = None
+    latency_ms: str | None = None
+    ttftMs: str | None = None
+
+    # MCP fields
+    mcpClientCount: str | None = None
+    mcp_servers_count: str | None = None
+    mcp_tools_count: str | None = None
+    mcp_tools_tokens: str | None = None
+    non_mcp_tools_count: str | None = None
+    non_mcp_tools_tokens: str | None = None
+
+    # File discovery fields
+    managedFilesFound: str | None = None
+    projectDirsSearched: str | None = None
+    projectFilesFound: str | None = None
+    project_file_count_rounded: str | None = None
+    userFilesFound: str | None = None
+
+    # Config source fields
+    claudeai: str | None = None
+    enterprise: str | None = None
+    project: str | None = None
+    user: str | None = None
+    plugin: str | None = None
+
+    # Permission/sandbox fields
+    allowDangerouslySkipPermissionsPassed: str | None = None
+    are_unsandboxed_commands_allowed: str | None = None
+    dangerouslySkipPermissionsPassed: str | None = None
+    is_auto_bash_allowed_if_sandbox_enabled: str | None = None
+    modeIsBypass: str | None = None
+    permissionMode: str | None = None
+    sandbox_enabled: str | None = None
+
+    # Session history fields
+    last_session_api_duration: str | None = None
+    last_session_cost: str | None = None
+    last_session_duration: str | None = None
+    last_session_id: str | None = None
+    last_session_lines_added: str | None = None
+    last_session_lines_removed: str | None = None
+    last_session_tool_duration: str | None = None
+    last_session_total_cache_creation_input_tokens: str | None = None
+    last_session_total_cache_read_input_tokens: str | None = None
+    last_session_total_input_tokens: str | None = None
+    last_session_total_output_tokens: str | None = None
+
+    # Build/version fields
+    auto_updater_disabled: str | None = None
+    buildAgeMins: str | None = None
+    configured_channel: str | None = None
+    forkLabel: str | None = None
+    serverVersion: str | None = None
+    source_gcs: str | None = None
+    was_already_running: str | None = None
+    was_force_reinstall: str | None = None
+    was_new_install: str | None = None
+
+    # Request/query fields
+    attempt: str | None = None
+    provider: str | None = None
+    queryChainId: str | None = None
+    queryDepth: str | None = None
+    querySource: str | None = None
+    requestId: str | None = None
+    serviceTier: str | None = None
+    temperature: str | None = None
+
+    # Status/result fields
+    didFallBackToNonStreaming: str | None = None
+    enabled: str | None = None
+    event: str | None = None
+    is_negative: str | None = None
+    numBlocking: str | None = None
+    numCancelled: str | None = None
+    numNonBlockingError: str | None = None
+    numSuccess: str | None = None
+    operation: str | None = None
+    status: str | None = None
+    stop_reason: str | None = None
+    success: str | None = None
+
+    # File operation fields
+    contentHash: str | None = None
+    filePathHash: str | None = None
+    hash: str | None = None
+    length: str | None = None
+    read_mtime: str | None = None
+    read_size: str | None = None
+    snippet: str | None = None
+    write_mtime: str | None = None
+    write_size: str | None = None
+
+    # CLI/input fields
+    attachment_types: str | None = None
+    copyVariant: str | None = None
+    debug: str | None = None
+    debugToStderr: str | None = None
+    hasInitialPrompt: str | None = None
+    hasStdin: str | None = None
+    inputFormat: str | None = None
+    outputFormat: str | None = None
+    pastedTextCount: str | None = None
+    print: str | None = None
+    verbose: str | None = None
+
+    # Workspace fields
+    context: str | None = None
+    folderType: str | None = None
+    hasApiKeyHelper: str | None = None
+    hasAwsCommands: str | None = None
+    hasBashExecution: str | None = None
+    hasHooks: str | None = None
+    hasMcpServers: str | None = None
+    hasOtelHeadersHelper: str | None = None
+    isHomeDir: str | None = None
+    is_git: str | None = None
+    is_lifetime_lock: str | None = None
+    is_pid_based: str | None = None
+    # markers can be stringified JSON or actual list of timing markers
+    markers: str | Sequence[Mapping[str, Any]] | None = None
+    method_used: str | None = None
+    rh: str | None = None
+    source: str | None = None
+    # statsigOptions can be stringified JSON or actual config object
+    statsigOptions: str | Mapping[str, Any] | None = None
+    subdir: str | None = None
+    subscriptionType: str | None = None
+    term: str | None = None
+    using_system: str | None = None
+    working: str | None = None
+    worktree: str | None = None
+    worktree_count: str | None = None
+
+    # Rate limit fields
+    hoursTillReset: str | None = None
+    legacy_env_var_set: str | None = None
+    unifiedRateLimitFallbackAvailable: str | None = None
+
+    # Python keyword fields (use alias)
+    global_: str | None = pydantic.Field(default=None, alias='global')
 
 
 class StatsigEvent(StrictModel):
@@ -266,6 +507,9 @@ class StatsigEvent(StrictModel):
     metadata: StatsigEventMetadata
     user: StatsigUser
     time: int  # Unix timestamp in milliseconds
+    # Optional fields for exposure events
+    value: str | None = None
+    secondaryExposures: Sequence[Mapping[str, str]] | None = None
 
 
 class StatsigRegisterRequest(StrictModel):
