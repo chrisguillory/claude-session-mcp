@@ -91,8 +91,6 @@ from src.schemas.captures.external import (
     OAuthTokenResponseCapture,
     PlatformClaudeComDocRequestCapture,
     PlatformClaudeComDocResponseCapture,
-    SegmentBatchRequestCapture,
-    SegmentBatchResponseCapture,
 )
 from src.schemas.captures.gcs import (
     GCSVersionRequestCapture,
@@ -112,6 +110,10 @@ from src.schemas.captures.registry import (
     extract_endpoint_from_filename,
     get_capture_type,
     normalize_path,
+)
+from src.schemas.captures.segment import (
+    SegmentBatchRequestCapture,
+    SegmentBatchResponseCapture,
 )
 from src.schemas.captures.statsig import (
     StatsigInitializeRequestCapture,

@@ -3,15 +3,15 @@ External service capture classes.
 
 This module contains capture wrappers for non-Anthropic API endpoints:
 - console.anthropic.com - OAuth token exchange
-- api.segment.io - Analytics batching
 - claude.ai - Domain info checks
 - code.claude.com, platform.claude.com - Documentation fetches
+
+Note: Segment analytics (api.segment.io) was extracted to segment.py.
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
-from typing import Any, Literal
+from typing import Literal
 
 from src.schemas.captures.base import RequestCapture, ResponseCapture
 from src.schemas.captures.gcs import RawTextBody
@@ -83,58 +83,6 @@ class OAuthTokenResponseCapture(ConsoleResponseCapture):
     """Captured POST /v1/oauth/token response."""
 
     body: OAuthTokenResponse
-
-
-# ==============================================================================
-# Segment Analytics (api.segment.io)
-# ==============================================================================
-
-
-class SegmentEvent(StrictModel):
-    """Individual event in Segment batch."""
-
-    # Segment events have varying structures - use relaxed typing
-    type: str  # e.g., "track", "identify"
-    # Allow any additional fields
-    model_config = {'extra': 'allow'}
-
-
-class SegmentBatchRequest(StrictModel):
-    """Segment batch request body."""
-
-    batch: Sequence[Mapping[str, Any]]  # noqa: loose-typing # Segment analytics events have varied structures
-    sentAt: str  # ISO timestamp
-
-
-class SegmentBatchResponse(StrictModel):
-    """Segment batch response body."""
-
-    success: bool
-
-
-class SegmentRequestCapture(RequestCapture):
-    """Base for api.segment.io requests."""
-
-    host: Literal['api.segment.io']
-
-
-class SegmentResponseCapture(ResponseCapture):
-    """Base for api.segment.io responses."""
-
-    host: Literal['api.segment.io']
-
-
-class SegmentBatchRequestCapture(SegmentRequestCapture):
-    """Captured POST /v1/batch request (analytics)."""
-
-    method: Literal['POST']
-    body: SegmentBatchRequest
-
-
-class SegmentBatchResponseCapture(SegmentResponseCapture):
-    """Captured POST /v1/batch response (analytics)."""
-
-    body: SegmentBatchResponse
 
 
 # ==============================================================================

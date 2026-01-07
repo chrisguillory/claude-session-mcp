@@ -78,7 +78,8 @@ properties: Mapping[str, Any]
 | `anthropic.py` | Anthropic API: Messages, Telemetry, CountTokens, Eval, internal endpoints |
 | `statsig.py`   | Statsig feature flags: Register, Initialize                               |
 | `datadog.py`   | Datadog telemetry: log ingestion                                          |
-| `external.py`  | Other services: OAuth, Segment analytics, domain checks, documentation    |
+| `segment.py`   | Segment analytics: discriminated union of 6 event types                   |
+| `external.py`  | Other services: OAuth, domain checks, documentation                       |
 | `gcs.py`       | GCS version check, fallback/unknown captures                              |
 | `registry.py`  | `CAPTURE_REGISTRY`, `get_capture_type()`, path normalization              |
 | `loader.py`    | `CapturedTraffic` union, `load_capture()`, preprocessing                  |
@@ -90,10 +91,10 @@ Modules are organized by **service host**, not by function:
 
 - **`anthropic.py`** - `api.anthropic.com` (~38 classes)
 - **`statsig.py`** - `statsig.anthropic.com` (~4 classes)
+- **`segment.py`** - `api.segment.io` (~18 classes) - discriminated union of event types
 - **`datadog.py`** - `http-intake.logs.*.datadoghq.com` (~7 classes)
-- **`external.py`** - Multiple low-volume services (~20 classes):
+- **`external.py`** - Multiple low-volume services (~15 classes):
   - `console.anthropic.com` - OAuth token exchange
-  - `api.segment.io` - Segment analytics batching
   - `claude.ai` - Domain info checks
   - `code.claude.com`, `platform.claude.com` - Documentation fetches
 
