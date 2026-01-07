@@ -8,13 +8,14 @@ Validated against mitmproxy captures of actual Claude Code traffic.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from typing import Annotated, Any, Literal
+from typing import Annotated, Literal
 
 import anthropic.types
 import pydantic
 
 from src.schemas.cc_internal_api.base import FromSdk, StrictModel
 from src.schemas.cc_internal_api.common import CacheControl
+from src.schemas.cc_internal_api.tool_input_schema import ToolInputProperty
 from src.schemas.types import ModelId
 
 # ==============================================================================
@@ -47,13 +48,13 @@ class ToolInputSchema(StrictModel):
 
     VALIDATION STATUS: VALIDATED
     Observed in tools[].input_schema.
+
+    Properties are typed via ToolInputProperty - 15 distinct models covering
+    all observed shapes (string, number, boolean, array, object variants).
     """
 
     type: Literal['object']
-    # GENUINELY POLYMORPHIC: JSON Schema properties define tool parameters.
-    # Each tool has its own schema structure - this is meta-schema by design.
-    # Cannot be typed more strictly (would require typing JSON Schema itself).
-    properties: Mapping[str, Any] | None = None
+    properties: Mapping[str, ToolInputProperty] | None = None
     required: Sequence[str] | None = None
     additionalProperties: bool | None = None
     # JSON Schema version identifier (present in Claude Code tool definitions)

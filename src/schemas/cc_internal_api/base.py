@@ -3,15 +3,17 @@ Base classes and type markers for Claude Code internal API schemas.
 
 This module provides:
 - StrictModel: Base class with strict validation (extra='forbid')
+- Empty JSON types: EmptyDict and EmptySequence for always-empty {} and []
 - Type correspondence markers: Link fields to session schemas and SDK types
 """
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 # ==============================================================================
 # Strict Base Model
@@ -37,7 +39,56 @@ class StrictModel(BaseModel):
 
 
 # ==============================================================================
-# Empty Body Type
+# Empty JSON Types
+# ==============================================================================
+#
+# These types represent always-empty JSON structures observed in API traffic.
+# Using explicit types rather than inline constraints because:
+# 1. Pydantic can't validate against Never
+# 2. Named types document semantic meaning clearly
+# 3. Validation fails immediately if the API starts sending data
+# 4. Union with populated types works naturally
+#
+# Usage:
+#     # Always empty dict - will fail if API sends {"key": "value"}
+#     sdk_params: EmptyDict
+#
+#     # Always empty array - will fail if API sends ["item"]
+#     applied_edits: EmptySequence
+#
+#     # Sometimes empty, sometimes populated - use union
+#     previous_fields: DerivedFields | EmptyDict
+# ==============================================================================
+
+
+class EmptyDict(StrictModel):
+    """
+    Marker type for empty JSON object {} in API traffic.
+
+    With extra='forbid', a model with no fields will only validate against
+    an empty dict. Used for fields that are always {} in observed captures.
+
+    Example:
+        sdk_params: EmptyDict  # Always {} in API traffic
+    """
+
+    pass
+
+
+EmptySequence = Annotated[Sequence[Any], Field(max_length=0)]
+"""
+Marker type for empty JSON array [] in API traffic.
+
+Used for fields that are always [] in observed captures.
+The element type (Any) doesn't matter since the sequence is always empty.
+
+Example:
+    applied_edits: EmptySequence  # Always [] in API traffic
+"""
+
+
+# ==============================================================================
+# Empty HTTP Body Type
 # ==============================================================================
 
 
@@ -57,23 +108,6 @@ class EmptyBody(StrictModel):
 
     empty: Literal[True]
     size: int
-
-
-class EmptyDict(StrictModel):
-    """
-    Marker type for empty JSON object {} in API traffic.
-
-    With extra='forbid', a model with no fields will only validate against
-    an empty dict. This is used for fields that are {} on first request and
-    populated on subsequent requests (e.g., Statsig previousDerivedFields).
-
-    Using a named model rather than bare Mapping[str, Never] because:
-    1. Pydantic can't validate against Never
-    2. This clearly documents the semantic meaning
-    3. Union with populated model works naturally
-    """
-
-    pass
 
 
 # ==============================================================================

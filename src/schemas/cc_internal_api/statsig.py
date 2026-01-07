@@ -92,6 +92,43 @@ class StatsigMetadata(StrictModel):
 # ==============================================================================
 
 
+class StatsigEvaluatedKeys(StrictModel):
+    """
+    Evaluated user keys in Statsig initialize response.
+
+    VALIDATION STATUS: VALIDATED
+    Observed structure is consistent across all captures.
+    """
+
+    userID: str  # Hashed device ID
+    stableID: str  # Stable identifier
+    customIDs: StatsigCustomIDs  # Reuses existing model
+
+
+class AutoCaptureDisabledEvents(StrictModel):
+    """
+    Disabled events configuration.
+
+    VALIDATION STATUS: VALIDATED
+    Always {} in observed captures.
+    """
+
+    # Note: This is always empty in captures. If events appear,
+    # we'll need to update the schema.
+    pass
+
+
+class AutoCaptureSettings(StrictModel):
+    """
+    Auto-capture settings for session recording.
+
+    VALIDATION STATUS: VALIDATED
+    Observed structure is consistent across all captures.
+    """
+
+    disabled_events: AutoCaptureDisabledEvents
+
+
 class DerivedFields(StrictModel):
     """
     Derived fields from Statsig server, echoed back in subsequent requests.
@@ -159,7 +196,7 @@ class StatsigBaseDynamicConfig(StrictModel):
     # GENUINELY POLYMORPHIC: Dynamic config payloads vary by config type.
     # Each config has different schema (e.g., experiment params, targeting rules).
     # Cannot be typed more strictly without per-config schema enumeration.
-    value: Mapping[str, Any]
+    value: Mapping[str, Any]  # noqa: loose-typing
     rule_id: str  # e.g., "default"
     group: str  # e.g., "default"
     is_device_based: bool
@@ -227,9 +264,9 @@ class StatsigInitializeFullBody(StrictModel):
     hash_used: str  # Hash algorithm, e.g., "djb2"
     hashed_sdk_key_used: str | None = None  # Hashed SDK key
 
-    # SDK parameters
-    sdkParams: Mapping[str, Any]  # SDK-specific parameters
-    evaluated_keys: Mapping[str, Any]  # Evaluated user attributes
+    # SDK parameters - always {} in observed captures
+    sdkParams: EmptyDict
+    evaluated_keys: StatsigEvaluatedKeys
 
     # Derived fields (user context detected by server)
     derived_fields: DerivedFields
@@ -238,7 +275,7 @@ class StatsigInitializeFullBody(StrictModel):
     can_record_session: bool
     recording_blocked: bool
     session_recording_rate: float  # 0.0 to 1.0
-    auto_capture_settings: Mapping[str, Any]
+    auto_capture_settings: AutoCaptureSettings
 
     # Target app
     target_app_used: str | None = None
@@ -264,6 +301,132 @@ StatsigInitializeResponse = EmptyBody | StatsigInitializeFullBody
 # ==============================================================================
 # Register/Log Endpoint (/v1/rgstr)
 # ==============================================================================
+
+
+# ==============================================================================
+# Statsig Diagnostics Metadata Types
+# ==============================================================================
+
+
+class StatsigMarkerEvaluationDetails(StrictModel):
+    """
+    Evaluation details in a diagnostics marker.
+
+    VALIDATION STATUS: VALIDATED
+    Observed in markers with action="end" for overall key.
+    """
+
+    reason: str  # e.g., "Network"
+    lcut: int  # Last config update timestamp
+    receivedAt: int  # When response was received
+
+
+class StatsigMarkerErrorWithCode(StrictModel):
+    """
+    Error details with error code in a diagnostics marker.
+
+    VALIDATION STATUS: VALIDATED
+    Observed in network/timeout errors.
+    """
+
+    name: str  # e.g., "TimeoutError"
+    message: str  # Error description
+    code: int  # Error code (e.g., 23 for timeout)
+
+
+class StatsigMarkerErrorWithoutCode(StrictModel):
+    """
+    Error details without error code in a diagnostics marker.
+
+    VALIDATION STATUS: VALIDATED
+    Observed in high-level errors like InitializeError.
+    """
+
+    name: str  # e.g., "InitializeError"
+    message: str  # Error description
+
+
+# Union - Pydantic tries more specific (with code) first
+StatsigMarkerError = StatsigMarkerErrorWithCode | StatsigMarkerErrorWithoutCode
+
+
+class StatsigMarker(StrictModel):
+    """
+    Timing marker in Statsig diagnostics events.
+
+    VALIDATION STATUS: VALIDATED
+    Observed in statsig::diagnostics event metadata.markers.
+    """
+
+    key: str  # e.g., "overall", "initialize"
+    action: str  # e.g., "start", "end"
+    timestamp: int  # Unix timestamp in milliseconds
+    # Optional fields vary by marker type
+    step: str | None = None  # e.g., "network_request", "process"
+    attempt: int | None = None
+    success: bool | None = None
+    statusCode: int | None = None
+    sdkRegion: str | None = None
+    isDelta: bool | None = None
+    error: StatsigMarkerError | None = None
+    evaluationDetails: StatsigMarkerEvaluationDetails | None = None
+
+
+class StatsigOptionsNetworkConfig(StrictModel):
+    """
+    Network config in Statsig options.
+
+    VALIDATION STATUS: VALIDATED
+    """
+
+    api: str  # e.g., "https://statsig.anthropic.com/v1/"
+
+
+class StatsigOptionsEnvironment(StrictModel):
+    """
+    Environment in Statsig options.
+
+    VALIDATION STATUS: VALIDATED
+    """
+
+    tier: str  # e.g., "production"
+
+
+class StatsigOptionsStorageProviderCache(StrictModel):
+    """
+    Storage provider cache in Statsig options.
+
+    VALIDATION STATUS: VALIDATED
+    Always {} in observed captures.
+    """
+
+    pass
+
+
+class StatsigOptionsStorageProvider(StrictModel):
+    """
+    Storage provider in Statsig options.
+
+    VALIDATION STATUS: VALIDATED
+    """
+
+    cache: StatsigOptionsStorageProviderCache
+    ready: bool
+
+
+class StatsigOptions(StrictModel):
+    """
+    Statsig SDK options in diagnostics events.
+
+    VALIDATION STATUS: VALIDATED
+    Observed in statsig::diagnostics event metadata.statsigOptions.
+    """
+
+    networkConfig: StatsigOptionsNetworkConfig
+    environment: StatsigOptionsEnvironment
+    includeCurrentPageUrlWithEvents: bool
+    logLevel: int
+    storageProvider: StatsigOptionsStorageProvider
 
 
 class StatsigEventMetadata(StrictModel):
@@ -472,13 +635,12 @@ class StatsigEventMetadata(StrictModel):
     is_git: str | None = None
     is_lifetime_lock: str | None = None
     is_pid_based: str | None = None
-    # markers can be stringified JSON or actual list of timing markers
-    markers: str | Sequence[Mapping[str, Any]] | None = None
+    # Diagnostics event fields (statsig::diagnostics events)
+    markers: Sequence[StatsigMarker] | None = None
     method_used: str | None = None
     rh: str | None = None
     source: str | None = None
-    # statsigOptions can be stringified JSON or actual config object
-    statsigOptions: str | Mapping[str, Any] | None = None
+    statsigOptions: StatsigOptions | None = None
     subdir: str | None = None
     subscriptionType: str | None = None
     term: str | None = None

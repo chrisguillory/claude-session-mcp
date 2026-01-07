@@ -80,6 +80,7 @@ from typing import Annotated, Any, Literal, TypeVar
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, TypeAdapter, ValidationInfo, field_validator
 
+from src.schemas.cc_internal_api.base import EmptySequence
 from src.schemas.session.markers import PathField, PathListField
 from src.schemas.types import ModelId
 
@@ -272,7 +273,7 @@ class ToolUseContent(StrictModel):
 
     @field_validator('input', mode='after')
     @classmethod
-    def validate_mcp_tool_fallback(cls, v: Any, info: ValidationInfo) -> Any:
+    def validate_mcp_tool_fallback(cls, v: ToolInput, info: ValidationInfo) -> ToolInput:
         """
         Enforce that only MCP tools (starting with 'mcp__') can use dict fallback.
         All Claude Code built-in tools must be explicitly modeled.
@@ -329,7 +330,7 @@ MessageContent = Annotated[
 class ContextManagement(StrictModel):
     """Context management metadata for message responses (Claude Code 2.0.51+)."""
 
-    applied_edits: Sequence[Any]  # List of applied edits (empty in observed data)
+    applied_edits: EmptySequence  # Always [] in observed data
 
 
 # ==============================================================================

@@ -100,6 +100,55 @@ class SpinnerWordsConfig(StrictModel):
     words: Sequence[str]  # e.g., ["Thinking", "Processing", "Clauding", ...]
 
 
+class OffSwitchConfig(StrictModel):
+    """
+    Config value for tengu-off-switch flag.
+
+    VALIDATION STATUS: VALIDATED (2026-01-06)
+    Controls whether a feature is activated.
+    """
+
+    activated: bool
+
+
+class SmConfig(StrictModel):
+    """
+    Config value for tengu_sm_config flag (session management).
+
+    VALIDATION STATUS: VALIDATED (2026-01-06)
+    Controls session/message token thresholds for updates.
+    """
+
+    minimumMessageTokensToInit: int
+    minimumTokensBetweenUpdate: int
+    toolCallsBetweenUpdates: int
+
+
+class EventBatchConfig(StrictModel):
+    """
+    Config value for tengu_1p_event_batch_config flag.
+
+    VALIDATION STATUS: VALIDATED (2026-01-06)
+    Controls event batching behavior (1p = first-party).
+    """
+
+    scheduledDelayMillis: int
+    maxExportBatchSize: int
+    maxQueueSize: int
+
+
+class TopOfFeedTipConfig(StrictModel):
+    """
+    Config value for tengu-top-of-feed-tip flag.
+
+    VALIDATION STATUS: VALIDATED (2026-01-06)
+    Displays a tip at the top of the feed UI.
+    """
+
+    tip: str
+    color: str
+
+
 # ==============================================================================
 # Per-Flag Feature Value Types
 # ==============================================================================
@@ -168,48 +217,115 @@ class SpinnerWordsFeatureValue(StrictModel):
     experimentResult: ExperimentResult | None = None
 
 
+class OffSwitchFeatureValue(StrictModel):
+    """Feature flag with off-switch config value."""
+
+    value: OffSwitchConfig
+    on: bool
+    off: bool
+    source: FeatureSource
+    experiment: ExperimentConfig | None = None
+    experimentResult: ExperimentResult | None = None
+
+
+class SmConfigFeatureValue(StrictModel):
+    """Feature flag with session management config value."""
+
+    value: SmConfig
+    on: bool
+    off: bool
+    source: FeatureSource
+    experiment: ExperimentConfig | None = None
+    experimentResult: ExperimentResult | None = None
+
+
+class EventSamplingFeatureValue(StrictModel):
+    """Feature flag with event sampling config (empty when disabled)."""
+
+    value: EmptyDict  # Always {} in observed captures
+    on: bool
+    off: bool
+    source: FeatureSource
+    experiment: ExperimentConfig | None = None
+    experimentResult: ExperimentResult | None = None
+
+
+class EventBatchFeatureValue(StrictModel):
+    """Feature flag with event batch config value."""
+
+    value: EventBatchConfig
+    on: bool
+    off: bool
+    source: FeatureSource
+    experiment: ExperimentConfig | None = None
+    experimentResult: ExperimentResult | None = None
+
+
+class TopOfFeedTipFeatureValue(StrictModel):
+    """Feature flag with top-of-feed tip config value."""
+
+    value: TopOfFeedTipConfig
+    on: bool
+    off: bool
+    source: FeatureSource
+    experiment: ExperimentConfig | None = None
+    experimentResult: ExperimentResult | None = None
+
+
 # ==============================================================================
 # Strictly Typed Features Dict
 # ==============================================================================
+#
+# All known feature flags with strict per-flag typing.
+#
+# Uses functional TypedDict syntax because some flag names contain hyphens
+# (e.g., 'tengu-off-switch') which are not valid Python identifiers.
+#
+# total=False since different users may see different subsets of flags.
+# New flags from the API will cause validation failure (fail-fast).
+# ==============================================================================
 
-
-class FeaturesDict(TypedDict, total=False):
-    """
-    All known feature flags with strict per-flag typing.
-
-    Using total=False since different users may see different subsets of flags.
-    New flags from the API will cause validation failure (fail-fast).
-    """
-
-    # --- Boolean flags (simple toggles) ---
-    auto_migrate_to_native: BoolFeatureValue
-    tengu_accept_with_feedback: BoolFeatureValue
-    tengu_ant_attribution_header_new: BoolFeatureValue
-    tengu_c4w_usage_limit_notifications_enabled: BoolFeatureValue
-    tengu_disable_bypass_permissions_mode: BoolFeatureValue
-    tengu_gha_plugin_code_review: BoolFeatureValue
-    tengu_mcp_tool_search: BoolFeatureValue
-    tengu_pid_based_version_locking: BoolFeatureValue
-    tengu_prompt_suggestion: BoolFeatureValue
-    tengu_react_vulnerability_warning: BoolFeatureValue
-    tengu_scratch: BoolFeatureValue
-    tengu_sumi: BoolFeatureValue
-    tengu_thinkback: BoolFeatureValue
-    tengu_tool_pear: BoolFeatureValue
-    tengu_tool_result_persistence: BoolFeatureValue
-    tengu_vscode_review_upsell: BoolFeatureValue
-    tengu_year_end_2025_campaign_promo: BoolFeatureValue
-
-    # --- String flags (experiment variations) ---
-    cc_test_experiment_deviceID_flag: StringFeatureValue
-    doorbell_bottle: StringFeatureValue
-    persimmon_marble_flag: StringFeatureValue
-    strawberry_granite_flag: StringFeatureValue
-
-    # --- Config flags (complex objects) ---
-    tengu_feedback_survey_config: FeedbackSurveyFeatureValue
-    tengu_spinner_words: SpinnerWordsFeatureValue
-    tengu_version_config: VersionConfigFeatureValue
+FeaturesDict = TypedDict(
+    'FeaturesDict',
+    {
+        # --- Boolean flags (simple toggles) ---
+        'auto_migrate_to_native': BoolFeatureValue,
+        'tengu_accept_with_feedback': BoolFeatureValue,
+        'tengu_ant_attribution_header_new': BoolFeatureValue,
+        'tengu_c4w_usage_limit_notifications_enabled': BoolFeatureValue,
+        'tengu_disable_bypass_permissions_mode': BoolFeatureValue,
+        'tengu_gha_plugin_code_review': BoolFeatureValue,
+        'tengu_mcp_tool_search': BoolFeatureValue,
+        'tengu_native_installation': BoolFeatureValue,
+        'tengu_pid_based_version_locking': BoolFeatureValue,
+        'tengu_prompt_suggestion': BoolFeatureValue,
+        'tengu_react_vulnerability_warning': BoolFeatureValue,
+        'tengu_scratch': BoolFeatureValue,
+        'tengu_session_memory': BoolFeatureValue,
+        'tengu_sumi': BoolFeatureValue,
+        'tengu_thinkback': BoolFeatureValue,
+        'tengu_tool_pear': BoolFeatureValue,
+        'tengu_tool_result_persistence': BoolFeatureValue,
+        'tengu_vscode_review_upsell': BoolFeatureValue,
+        'tengu_year_end_2025_campaign_promo': BoolFeatureValue,
+        # --- String flags (experiment variations) ---
+        'cc_test_experiment_deviceID_flag': StringFeatureValue,
+        'doorbell_bottle': StringFeatureValue,
+        'persimmon_marble_flag': StringFeatureValue,
+        'strawberry_granite_flag': StringFeatureValue,
+        # --- Config flags (complex objects) ---
+        'tengu_feedback_survey_config': FeedbackSurveyFeatureValue,
+        'tengu_spinner_words': SpinnerWordsFeatureValue,
+        'tengu_version_config': VersionConfigFeatureValue,
+        'tengu_sm_config': SmConfigFeatureValue,
+        'tengu_event_sampling_config': EventSamplingFeatureValue,
+        'tengu_1p_event_batch_config': EventBatchFeatureValue,
+        # --- Config flags with non-identifier names (hyphenated) ---
+        'tengu-off-switch': OffSwitchFeatureValue,
+        'tengu-top-of-feed-tip': TopOfFeedTipFeatureValue,
+    },
+    total=False,
+)
 
 
 # Union of all feature value types for generic handling
@@ -219,6 +335,11 @@ FeatureValue = (
     | FeedbackSurveyFeatureValue
     | VersionConfigFeatureValue
     | SpinnerWordsFeatureValue
+    | OffSwitchFeatureValue
+    | SmConfigFeatureValue
+    | EventSamplingFeatureValue
+    | EventBatchFeatureValue
+    | TopOfFeedTipFeatureValue
 )
 
 

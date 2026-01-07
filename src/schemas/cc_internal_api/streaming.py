@@ -13,12 +13,12 @@ With 'ping' events interspersed for keepalive.
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
-from typing import Annotated, Any, Literal
+from collections.abc import Sequence
+from typing import Annotated, Literal
 
 from pydantic import Discriminator
 
-from src.schemas.cc_internal_api.base import StrictModel
+from src.schemas.cc_internal_api.base import EmptyDict, EmptySequence, StrictModel
 from src.schemas.cc_internal_api.common import ApiCacheCreation
 from src.schemas.cc_internal_api.response import StopReason
 from src.schemas.types import ModelId
@@ -124,10 +124,9 @@ class ToolUseBlockStart(StrictModel):
     type: Literal['tool_use']
     id: str
     name: str
-    # STREAMING BEHAVIOR: Empty {} at block start, populated incrementally via deltas.
-    # Final accumulated input should match session.models.ToolInput union types.
-    # Cannot use EmptyDict here - value evolves during streaming.
-    input: Mapping[str, Any]
+    # STREAMING BEHAVIOR: Always {} at content_block_start event.
+    # Input is populated incrementally via content_block_delta events with InputJsonDelta.
+    input: EmptyDict
 
 
 # Union of content block start types
@@ -170,7 +169,7 @@ class InitialMessage(StrictModel):
     id: str  # e.g., "msg_01WsgytDj2C14cRxDGqz36ZF"
     type: Literal['message']
     role: Literal['assistant']
-    content: Sequence[Any]  # Usually empty at start
+    content: EmptySequence  # Always [] at message_start - content comes via content_block_* events
     stop_reason: None  # Always null at start
     stop_sequence: None  # Always null at start
     usage: InitialUsage
