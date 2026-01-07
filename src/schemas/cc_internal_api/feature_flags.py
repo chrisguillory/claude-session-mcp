@@ -159,117 +159,139 @@ class BoolFeatureValue(StrictModel):
     Feature flag with boolean value.
 
     Used for simple on/off toggle flags like tengu_sumi, tengu_scratch, etc.
+    Only observed with source='defaultValue' or 'force' - never 'experiment'.
     """
 
     value: bool
     on: bool
     off: bool
-    source: FeatureSource
-    experiment: ExperimentConfig | None = None
-    experimentResult: ExperimentResult | None = None
+    source: Literal['defaultValue', 'force']
+    experiment: None  # Always null for non-experiment sources
+    experimentResult: None  # Always null for non-experiment sources
 
 
-class StringFeatureValue(StrictModel):
+class StringFeatureValueExperiment(StrictModel):
     """
-    Feature flag with string value.
+    String feature flag with experiment data (source='experiment').
 
-    Used for experiment flags that return variation names like "OFF", "inherit".
+    When source='experiment', experiment and experimentResult are always present.
     """
 
     value: str
     on: bool
     off: bool
-    source: FeatureSource
-    experiment: ExperimentConfig | None = None
-    experimentResult: ExperimentResult | None = None
+    source: Literal['experiment']
+    experiment: ExperimentConfig  # Required when source='experiment'
+    experimentResult: ExperimentResult  # Required when source='experiment'
+
+
+class StringFeatureValueNonExperiment(StrictModel):
+    """
+    String feature flag without experiment data (source='defaultValue' or 'force').
+
+    When source is not 'experiment', experiment fields are always null.
+    """
+
+    value: str
+    on: bool
+    off: bool
+    source: Literal['defaultValue', 'force']
+    experiment: None  # Always null for non-experiment sources
+    experimentResult: None  # Always null for non-experiment sources
+
+
+StringFeatureValue = Annotated[
+    StringFeatureValueExperiment | StringFeatureValueNonExperiment,
+    pydantic.Field(discriminator='source'),
+]
 
 
 class FeedbackSurveyFeatureValue(StrictModel):
-    """Feature flag with feedback survey config value."""
+    """Feature flag with feedback survey config value. Only source='defaultValue' observed."""
 
     value: FeedbackSurveyConfig
     on: bool
     off: bool
-    source: FeatureSource
-    experiment: ExperimentConfig | None = None
-    experimentResult: ExperimentResult | None = None
+    source: Literal['defaultValue']
+    experiment: None  # Always null for defaultValue source
+    experimentResult: None  # Always null for defaultValue source
 
 
 class VersionConfigFeatureValue(StrictModel):
-    """Feature flag with version config value."""
+    """Feature flag with version config value. Only source='defaultValue' observed."""
 
     value: VersionConfig
     on: bool
     off: bool
-    source: FeatureSource
-    experiment: ExperimentConfig | None = None
-    experimentResult: ExperimentResult | None = None
+    source: Literal['defaultValue']
+    experiment: None  # Always null for defaultValue source
+    experimentResult: None  # Always null for defaultValue source
 
 
 class SpinnerWordsFeatureValue(StrictModel):
-    """Feature flag with spinner words config value."""
+    """Feature flag with spinner words config value. Only source='defaultValue' observed."""
 
     value: SpinnerWordsConfig
     on: bool
     off: bool
-    source: FeatureSource
-    experiment: ExperimentConfig | None = None
-    experimentResult: ExperimentResult | None = None
+    source: Literal['defaultValue']
+    experiment: None  # Always null for defaultValue source
+    experimentResult: None  # Always null for defaultValue source
 
 
 class OffSwitchFeatureValue(StrictModel):
-    """Feature flag with off-switch config value."""
+    """Feature flag with off-switch config value. Only source='defaultValue' observed."""
 
     value: OffSwitchConfig
     on: bool
     off: bool
-    source: FeatureSource
-    experiment: ExperimentConfig | None = None
-    experimentResult: ExperimentResult | None = None
+    source: Literal['defaultValue']
+    experiment: None  # Always null for defaultValue source
+    experimentResult: None  # Always null for defaultValue source
 
 
 class SmConfigFeatureValue(StrictModel):
-    """Feature flag with session management config value."""
+    """Feature flag with session management config value. Only source='defaultValue' observed."""
 
     value: SmConfig
     on: bool
     off: bool
-    source: FeatureSource
-    experiment: ExperimentConfig | None = None
-    experimentResult: ExperimentResult | None = None
+    source: Literal['defaultValue']
+    experiment: None  # Always null for defaultValue source
+    experimentResult: None  # Always null for defaultValue source
 
 
 class EventSamplingFeatureValue(StrictModel):
-    """Feature flag with event sampling config (empty when disabled)."""
+    """Feature flag with event sampling config (empty when disabled). Only source='defaultValue' observed."""
 
     value: EmptyDict  # Always {} in observed captures
     on: bool
     off: bool
-    source: FeatureSource
-    experiment: ExperimentConfig | None = None
-    experimentResult: ExperimentResult | None = None
+    source: Literal['defaultValue']
+    experiment: None  # Always null for defaultValue source
+    experimentResult: None  # Always null for defaultValue source
 
 
 class EventBatchFeatureValue(StrictModel):
-    """Feature flag with event batch config value."""
+    """Feature flag with event batch config value. Only source='defaultValue' observed."""
 
     value: EventBatchConfig
     on: bool
     off: bool
-    source: FeatureSource
-    experiment: ExperimentConfig | None = None
-    experimentResult: ExperimentResult | None = None
+    source: Literal['defaultValue']
+    experiment: None  # Always null for defaultValue source
+    experimentResult: None  # Always null for defaultValue source
 
 
 class TopOfFeedTipFeatureValue(StrictModel):
-    """Feature flag with top-of-feed tip config value."""
+    """Feature flag with top-of-feed tip config value. Only source='defaultValue' observed."""
 
     value: TopOfFeedTipConfig
     on: bool
     off: bool
-    source: FeatureSource
-    experiment: ExperimentConfig | None = None
-    experimentResult: ExperimentResult | None = None
+    source: Literal['defaultValue']
+    experiment: None  # Always null for defaultValue source
+    experimentResult: None  # Always null for defaultValue source
 
 
 # ==============================================================================
@@ -362,8 +384,8 @@ class EvalAttributes(StrictModel):
     organizationUUID: str  # Organization UUID
     accountUUID: str  # Account UUID
     userType: Literal['external', 'internal']
-    subscriptionType: Literal['free', 'pro', 'team', 'max', 'enterprise']
-    firstTokenTime: int  # Timestamp of first token
+    subscriptionType: Literal['free', 'pro', 'team', 'max', 'enterprise'] | None = None  # Missing during OAuth init
+    firstTokenTime: int | None = None  # Missing during OAuth init
     appVersion: str  # Claude Code version
 
 

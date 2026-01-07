@@ -94,13 +94,49 @@ class StringSchemaEnumNoDesc(StrictModel):
     enum: Sequence[str]
 
 
+class StringSchemaWithTitle(StrictModel):
+    """String property with title but no description (MCP tools)."""
+
+    type: Literal['string']
+    title: str
+
+
+class StringSchemaWithDefault(StrictModel):
+    """String property with default value."""
+
+    type: Literal['string']
+    description: str
+    default: str
+
+
+class StringSchemaWithTitleDefault(StrictModel):
+    """String property with title and default but no description (MCP tools)."""
+
+    type: Literal['string']
+    title: str
+    default: str
+
+
+class StringSchemaWithTitleEnumDefault(StrictModel):
+    """String property with title, enum, and default but no description (MCP tools)."""
+
+    type: Literal['string']
+    title: str
+    enum: Sequence[str]
+    default: str
+
+
 # Union ordered: most specific first (more fields → less ambiguity)
 StringSchema = (
     StringSchemaWithEnum
     | StringSchemaWithMinLength
     | StringSchemaWithFormat
+    | StringSchemaWithDefault
+    | StringSchemaWithTitleEnumDefault  # More specific than TitleDefault (has enum)
+    | StringSchemaWithTitleDefault
     | StringSchemaMinLengthNoDesc
     | StringSchemaEnumNoDesc
+    | StringSchemaWithTitle
     | StringSchemaDescriptionOnly
     | StringSchemaTypeOnly
 )
@@ -131,7 +167,54 @@ class NumberSchemaWithBounds(StrictModel):
     maximum: int
 
 
-NumberSchema = NumberSchemaWithBounds | NumberSchemaDescriptionOnly
+class NumberSchemaWithBoundsNoDefault(StrictModel):
+    """Number property with min/max bounds but no default (MCP tools)."""
+
+    type: Literal['number', 'integer']
+    description: str
+    minimum: int
+    maximum: int
+
+
+class NumberSchemaWithDefaultOnly(StrictModel):
+    """Number property with default but no bounds."""
+
+    type: Literal['number', 'integer']
+    description: str
+    default: int
+
+
+class NumberSchemaWithTitleDefault(StrictModel):
+    """Number property with title and default but no description (MCP tools)."""
+
+    type: Literal['number', 'integer']
+    title: str
+    default: int
+
+
+class NumberSchemaTypeOnly(StrictModel):
+    """Number property with type only, no description (used in anyOf)."""
+
+    type: Literal['number', 'integer']
+
+
+class NumberSchemaWithTitle(StrictModel):
+    """Number property with title only, no default (MCP tools)."""
+
+    type: Literal['number', 'integer']
+    title: str
+
+
+# Order: most specific first (more fields → less ambiguity)
+NumberSchema = (
+    NumberSchemaWithBounds
+    | NumberSchemaWithBoundsNoDefault
+    | NumberSchemaWithDefaultOnly
+    | NumberSchemaWithTitleDefault
+    | NumberSchemaWithTitle
+    | NumberSchemaDescriptionOnly
+    | NumberSchemaTypeOnly
+)
 
 
 # ==============================================================================
@@ -157,7 +240,24 @@ class BooleanSchemaWithDefault(StrictModel):
     default: bool
 
 
-BooleanSchema = BooleanSchemaWithDefault | BooleanSchemaDescriptionOnly
+class BooleanSchemaWithTitleDefault(StrictModel):
+    """Boolean property with title and default but no description (MCP tools)."""
+
+    type: Literal['boolean']
+    title: str
+    default: bool
+
+
+class BooleanSchemaWithTitle(StrictModel):
+    """Boolean property with title only, no default (MCP tools)."""
+
+    type: Literal['boolean']
+    title: str
+
+
+BooleanSchema = (
+    BooleanSchemaWithDefault | BooleanSchemaWithTitleDefault | BooleanSchemaWithTitle | BooleanSchemaDescriptionOnly
+)
 
 
 # ==============================================================================
@@ -188,7 +288,25 @@ class ArraySchemaWithBounds(StrictModel):
     maxItems: int
 
 
-ArraySchema = ArraySchemaWithBounds | ArraySchemaBase
+class ArraySchemaItemsOnly(StrictModel):
+    """Array property with items but no description (used in anyOf)."""
+
+    type: Literal['array']
+    items: ToolInputProperty
+
+
+ArraySchema = ArraySchemaWithBounds | ArraySchemaBase | ArraySchemaItemsOnly
+
+
+# ==============================================================================
+# Null Schema (type="null")
+# ==============================================================================
+
+
+class NullSchema(StrictModel):
+    """Null type for nullable unions in anyOf."""
+
+    type: Literal['null']
 
 
 # ==============================================================================
@@ -239,8 +357,50 @@ class ObjectSchemaWithNestedAdditionalProps(StrictModel):
     additionalProperties: ToolInputProperty  # Nested schema, not bool!
 
 
-# Order matters: try nested schema variant before bool variant
-ObjectSchema = ObjectSchemaFull | ObjectSchemaWithNestedAdditionalProps | ObjectSchemaSimple
+class ObjectSchemaPropertiesOnly(StrictModel):
+    """Object property with properties/required but no additionalProperties (MCP tools).
+
+    This shape appears in MCP tool array items where the schema defines
+    structure but doesn't explicitly forbid/allow additional properties.
+    """
+
+    type: Literal['object']
+    properties: Mapping[str, ToolInputProperty]
+    required: Sequence[str]
+
+
+# Order matters: most specific first (more fields → less ambiguity)
+ObjectSchema = (
+    ObjectSchemaFull | ObjectSchemaWithNestedAdditionalProps | ObjectSchemaPropertiesOnly | ObjectSchemaSimple
+)
+
+
+# ==============================================================================
+# AnyOf Schema (nullable unions)
+# ==============================================================================
+# Observed shape: {"anyOf": [...], "default": null, "title": "..."}
+# Used for nullable arrays/objects in MCP tools
+
+
+class AnyOfSchema(StrictModel):
+    """Schema with anyOf union type (MCP tools with nullable arrays).
+
+    Example: {"anyOf": [{"type": "array", "items": {...}}, {"type": "null"}], "default": null, "title": "..."}
+    """
+
+    anyOf: Sequence[ToolInputProperty]
+    default: None  # Always null for nullable unions
+    title: str
+
+
+class AnyOfSchemaNoDefault(StrictModel):
+    """Schema with anyOf union type but no default (some MCP tools).
+
+    Example: {"anyOf": [{"type": "integer"}, {"type": "null"}], "title": "..."}
+    """
+
+    anyOf: Sequence[ToolInputProperty]
+    title: str
 
 
 # ==============================================================================
@@ -250,7 +410,16 @@ ObjectSchema = ObjectSchemaFull | ObjectSchemaWithNestedAdditionalProps | Object
 # With extra='forbid' on each model, only exact shape matches validate.
 
 
-ToolInputProperty = StringSchema | NumberSchema | BooleanSchema | ArraySchema | ObjectSchema
+ToolInputProperty = (
+    StringSchema
+    | NumberSchema
+    | BooleanSchema
+    | ArraySchema
+    | ObjectSchema
+    | NullSchema
+    | AnyOfSchema
+    | AnyOfSchemaNoDefault
+)
 """
 A single property in tool.input_schema.properties.
 
@@ -260,10 +429,15 @@ shape matches validate - no discriminator needed.
 This is recursive:
 - ArraySchema.items -> ToolInputProperty
 - ObjectSchemaFull.properties -> Mapping[str, ToolInputProperty]
+- AnyOfSchema.anyOf -> Sequence[ToolInputProperty]
 """
 
 # Pydantic needs model_rebuild() for recursive forward references
 ArraySchemaBase.model_rebuild()
 ArraySchemaWithBounds.model_rebuild()
+ArraySchemaItemsOnly.model_rebuild()
 ObjectSchemaFull.model_rebuild()
 ObjectSchemaWithNestedAdditionalProps.model_rebuild()
+ObjectSchemaPropertiesOnly.model_rebuild()
+AnyOfSchema.model_rebuild()
+AnyOfSchemaNoDefault.model_rebuild()

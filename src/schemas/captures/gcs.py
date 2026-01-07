@@ -11,7 +11,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any, Literal
 
-from pydantic import Field
+import pydantic
 
 from src.schemas.captures.base import RequestCapture, ResponseCapture
 from src.schemas.cc_internal_api import EmptyBody
@@ -62,7 +62,7 @@ class UnknownRequestCapture(RequestCapture):
 
     # Body can be dict OR list (Datadog sends list of log entries).
     # Fallback for unmodeled endpoints; should shrink as coverage increases.
-    body: Mapping[str, Any] | Sequence[Any] = Field(default_factory=dict)  # noqa: loose-typing
+    body: Mapping[str, Any] | Sequence[Any] = pydantic.Field(default_factory=dict)  # noqa: loose-typing
 
 
 class UnknownResponseCapture(ResponseCapture):
@@ -74,6 +74,43 @@ class UnknownResponseCapture(ResponseCapture):
 
     # Body can be dict OR list.
     # Fallback for unmodeled endpoints; should shrink as coverage increases.
-    body: Mapping[str, Any] | Sequence[Any] = Field(default_factory=dict)  # noqa: loose-typing
+    body: Mapping[str, Any] | Sequence[Any] = pydantic.Field(default_factory=dict)  # noqa: loose-typing
     # Fallback for unmodeled SSE events.
-    events: Sequence[Mapping[str, Any]] = Field(default_factory=list)  # noqa: loose-typing
+    events: Sequence[Mapping[str, Any]] = pydantic.Field(default_factory=list)  # noqa: loose-typing
+
+
+# ==============================================================================
+# Proxy Error (direction="error")
+# ==============================================================================
+
+
+class ProxyErrorRequest(StrictModel):
+    """Nested request info in a proxy error capture."""
+
+    host: str
+    url: str  # Full URL
+    method: str
+
+
+class ProxyErrorDetail(StrictModel):
+    """Error detail in a proxy error capture."""
+
+    message: str  # e.g., "Client disconnected."
+    timestamp: float  # Unix timestamp
+
+
+class ProxyErrorCapture(StrictModel):
+    """
+    Capture of a proxy error (e.g., client disconnected).
+
+    These are mitmproxy errors, not actual Claude Code API traffic.
+    Has direction="error" and contains error message + original request.
+    """
+
+    direction: Literal['error']
+    error: ProxyErrorDetail  # Nested error info
+    request: ProxyErrorRequest  # Original request that failed
+    flow_id: str  # Flow identifier from mitmproxy
+    sequence: int  # Sequence number in capture session
+    session_id: str  # Claude Code session ID
+    timestamp_iso: str  # ISO timestamp

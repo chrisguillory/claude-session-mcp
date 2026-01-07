@@ -8,7 +8,7 @@ Validated against mitmproxy captures of actual Claude Code traffic.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 import anthropic.types
 import pydantic
@@ -59,6 +59,8 @@ class ToolInputSchema(StrictModel):
     additionalProperties: bool | None = None
     # JSON Schema version identifier (present in Claude Code tool definitions)
     schema_: str | None = pydantic.Field(default=None, alias='$schema')
+    # MCP tools include title field for input schema name
+    title: str | None = None
 
 
 class ToolDefinition(StrictModel):
@@ -72,7 +74,7 @@ class ToolDefinition(StrictModel):
     """
 
     name: str
-    description: str | None = None
+    description: str  # All Claude Code tools have descriptions
     input_schema: Annotated[
         ToolInputSchema,
         FromSdk(anthropic.types.ToolParam, 'input_schema'),
@@ -101,17 +103,71 @@ class RequestThinkingBlock(StrictModel):
     """
     Thinking content block in assistant messages (multi-turn conversations).
 
+    VALIDATION STATUS: VALIDATED (2737 cases)
+    - signature: ALWAYS present (2737/2737 = 100%)
+
     When conversation history is sent back to the API, previous assistant
     thinking blocks are included with their cryptographic signatures.
     """
 
     type: Literal['thinking']
     thinking: str
-    signature: str | None = None
+    signature: str  # Always present - cryptographic signature for verification
+
+
+class RequestToolUseBlock(StrictModel):
+    """
+    Tool use block in assistant messages (conversation history).
+
+    VALIDATION STATUS: VALIDATED (3462 cases)
+    - cache_control: Optional (31/3462 = 0.9%)
+
+    When conversation history is sent back to the API, previous assistant
+    tool calls are included.
+    """
+
+    type: Literal['tool_use']
+    id: str
+    name: str
+    input: Mapping[str, Any]
+    cache_control: CacheControl | None = None
+
+
+class ToolResultTextItem(StrictModel):
+    """
+    Text item in tool_result list content.
+
+    VALIDATION STATUS: VALIDATED (204 list items)
+    All list items observed are this shape. Source: MCP tools (perplexity_research,
+    perplexity_ask) and Task tool.
+    """
+
+    type: Literal['text']
+    text: str
+
+
+class RequestToolResultBlock(StrictModel):
+    """
+    Tool result block in user messages (conversation history).
+
+    VALIDATION STATUS: VALIDATED (3462 cases)
+    - content: Always present. String (3260/3462 = 94.2%) or list (202/3462 = 5.8%)
+    - is_error: Optional (absent 2180, false 1042, true 240)
+    - cache_control: Optional (30/3462 = 0.9%)
+
+    Note: List content observed only from MCP tools and Task tool.
+    When content is list, is_error is always absent (202/202 cases).
+    """
+
+    type: Literal['tool_result']
+    tool_use_id: str
+    content: str | Sequence[ToolResultTextItem]  # Never None (3462/3462)
+    is_error: bool | None = None  # Absent=implicit success (genuinely optional)
+    cache_control: CacheControl | None = None
 
 
 # Union of all request content block types
-RequestContentBlock = TextContentBlock | RequestThinkingBlock
+RequestContentBlock = TextContentBlock | RequestThinkingBlock | RequestToolUseBlock | RequestToolResultBlock
 
 
 # ==============================================================================
@@ -136,16 +192,23 @@ class RequestMessage(StrictModel):
 # ==============================================================================
 
 
-class ThinkingConfig(StrictModel):
-    """
-    Extended thinking configuration.
+class EnabledThinkingConfig(StrictModel):
+    """Extended thinking enabled - budget_tokens is required."""
 
-    VALIDATION STATUS: VALIDATED
-    Observed: {"budget_tokens": 31999, "type": "enabled"}
-    """
+    type: Literal['enabled']
+    budget_tokens: int
 
-    type: Literal['enabled', 'disabled']
-    budget_tokens: int | None = None
+
+class DisabledThinkingConfig(StrictModel):
+    """Extended thinking disabled - no budget_tokens field."""
+
+    type: Literal['disabled']
+
+
+ThinkingConfig = Annotated[
+    EnabledThinkingConfig | DisabledThinkingConfig,
+    pydantic.Field(discriminator='type'),
+]
 
 
 # ==============================================================================
@@ -162,7 +225,7 @@ class ContextManagementEdit(StrictModel):
     """
 
     type: str  # e.g., "clear_thinking_20251015"
-    keep: str | None = None  # e.g., "all"
+    keep: str  # e.g., "all" - always present when context_management is used
 
 
 class RequestContextManagement(StrictModel):
@@ -189,7 +252,7 @@ class RequestMetadata(StrictModel):
     Observed: {"user_id": "..."}
     """
 
-    user_id: str | None = None
+    user_id: str  # Always present in Claude Code requests
 
 
 # ==============================================================================
@@ -215,4 +278,5 @@ class MessagesRequest(StrictModel):
     tools: Sequence[ToolDefinition] | None = None
     thinking: ThinkingConfig | None = None
     context_management: RequestContextManagement | None = None
-    metadata: RequestMetadata | None = None
+    metadata: RequestMetadata  # Always present in Claude Code requests
+    temperature: float | None = None  # Temperature for sampling

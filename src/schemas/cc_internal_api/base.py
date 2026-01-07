@@ -2,93 +2,44 @@
 Base classes and type markers for Claude Code internal API schemas.
 
 This module provides:
-- StrictModel: Base class with strict validation (extra='forbid')
-- Empty JSON types: EmptyDict and EmptySequence for always-empty {} and []
+- StrictModel: API-layer strict model (inherits from BaseStrictModel)
+- EmptyBody: Capture-layer empty HTTP body marker
 - Type correspondence markers: Link fields to session schemas and SDK types
+
+Note: EmptyDict and EmptySequence are now in src.schemas.types and re-exported
+here for backwards compatibility.
 """
 
 from __future__ import annotations
 
-from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Annotated, Any, Literal
+from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+# Import foundation types and re-export for backwards compatibility
+from src.schemas.types import BaseStrictModel, EmptyDict, EmptySequence
+
+# Re-export for backwards compatibility (other modules import from here)
+__all__ = ['StrictModel', 'EmptyDict', 'EmptySequence', 'EmptyBody', 'FromSession', 'FromSdk', 'ValidationStatus']
+
 
 # ==============================================================================
 # Strict Base Model
 # ==============================================================================
 
 
-class StrictModel(BaseModel):
+class StrictModel(BaseStrictModel):
     """
-    Base model for API schemas with strict validation.
+    API-layer strict model.
 
-    Uses extra='forbid' to reject unknown fields - any field not modeled
-    causes immediate validation failure (fail-fast).
-
-    This was previously 'ignore' during the observation phase. Now that
-    schemas are complete, we enforce strict field coverage.
-    """
-
-    model_config = ConfigDict(
-        extra='forbid',  # Reject unknown fields (fail-fast)
-        strict=True,  # Strict type coercion
-        frozen=True,  # Immutable after creation
-    )
-
-
-# ==============================================================================
-# Empty JSON Types
-# ==============================================================================
-#
-# These types represent always-empty JSON structures observed in API traffic.
-# Using explicit types rather than inline constraints because:
-# 1. Pydantic can't validate against Never
-# 2. Named types document semantic meaning clearly
-# 3. Validation fails immediately if the API starts sending data
-# 4. Union with populated types works naturally
-#
-# Usage:
-#     # Always empty dict - will fail if API sends {"key": "value"}
-#     sdk_params: EmptyDict
-#
-#     # Always empty array - will fail if API sends ["item"]
-#     applied_edits: EmptySequence
-#
-#     # Sometimes empty, sometimes populated - use union
-#     previous_fields: DerivedFields | EmptyDict
-# ==============================================================================
-
-
-class EmptyDict(StrictModel):
-    """
-    Marker type for empty JSON object {} in API traffic.
-
-    With extra='forbid', a model with no fields will only validate against
-    an empty dict. Used for fields that are always {} in observed captures.
-
-    Example:
-        sdk_params: EmptyDict  # Always {} in API traffic
+    Inherits from BaseStrictModel (extra='forbid', strict=True, frozen=True).
+    Domain-specific customization can be added here if needed.
     """
 
     pass
 
 
-EmptySequence = Annotated[Sequence[Any], Field(max_length=0)]
-"""
-Marker type for empty JSON array [] in API traffic.
-
-Used for fields that are always [] in observed captures.
-The element type (Any) doesn't matter since the sequence is always empty.
-
-Example:
-    applied_edits: EmptySequence  # Always [] in API traffic
-"""
-
-
 # ==============================================================================
-# Empty HTTP Body Type
+# Empty HTTP Body Type (Capture-layer specific)
 # ==============================================================================
 
 

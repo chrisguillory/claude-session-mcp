@@ -16,7 +16,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Annotated, Literal
 
-from pydantic import Discriminator
+import pydantic
 
 from src.schemas.cc_internal_api.base import EmptyDict, EmptySequence, StrictModel
 from src.schemas.cc_internal_api.common import ApiCacheCreation
@@ -79,7 +79,7 @@ class InputJsonDelta(StrictModel):
 # Union of all delta types
 DeltaContent = Annotated[
     TextDelta | ThinkingDelta | SignatureDelta | InputJsonDelta,
-    Discriminator('type'),
+    pydantic.Discriminator('type'),
 ]
 
 
@@ -132,7 +132,7 @@ class ToolUseBlockStart(StrictModel):
 # Union of content block start types
 ContentBlockStart = Annotated[
     TextBlockStart | ThinkingBlockStart | ToolUseBlockStart,
-    Discriminator('type'),
+    pydantic.Discriminator('type'),
 ]
 
 
@@ -360,5 +360,5 @@ SSEEvent = Annotated[
     | MessageStopEvent
     | PingEvent
     | ErrorEvent,
-    Discriminator('type'),
+    pydantic.Discriminator('type'),
 ]

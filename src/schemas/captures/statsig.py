@@ -12,9 +12,8 @@ from typing import Literal
 
 from src.schemas.captures.base import StatsigRequestCapture, StatsigResponseCapture
 from src.schemas.cc_internal_api import (
-    EmptyBody,
-    StatsigInitializeFullBody,
     StatsigInitializeRequest,
+    StatsigInitializeResponse,
     StatsigRegisterRequest,
     StatsigRegisterResponse,
 )
@@ -53,9 +52,10 @@ class StatsigInitializeResponseCapture(StatsigResponseCapture):
     """
     Captured POST /v1/initialize response.
 
-    Two response types:
-    - 200 OK: Full feature flags (StatsigInitializeFullBody)
+    Three response types (discriminated union):
     - 204 No Content: Empty response when no updates (EmptyBody)
+    - 200 OK: Full feature flags (StatsigInitializeFullResponse)
+    - 200 OK: Delta updates (StatsigInitializeDeltaResponse)
     """
 
-    body: EmptyBody | StatsigInitializeFullBody
+    body: StatsigInitializeResponse

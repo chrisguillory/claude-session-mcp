@@ -18,10 +18,10 @@ FUTURE CONSIDERATION:
 
 USAGE:
     from src.schemas.workspace import Session, SessionDatabase
-    from pydantic import TypeAdapter
+    import pydantic
     import json
 
-    adapter = TypeAdapter(SessionDatabase)
+    adapter = pydantic.TypeAdapter(SessionDatabase)
     with open("~/.claude-workspace/sessions.json") as f:
         db = adapter.validate_python(json.load(f))
 
@@ -35,7 +35,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+import pydantic
 
 from src.schemas.types import JsonDatetime
 
@@ -44,7 +44,7 @@ SessionState = Literal['active', 'exited', 'completed', 'crashed']
 SessionSource = Literal['startup', 'resume', 'compact', 'clear']
 
 
-class SessionMetadata(BaseModel):
+class SessionMetadata(pydantic.BaseModel):
     """Derived session information from claude-workspace hooks.
 
     This metadata is populated when the SessionStart hook fires:
@@ -55,7 +55,7 @@ class SessionMetadata(BaseModel):
     - crash_detected_at: When crash detection identified an orphaned session
     """
 
-    model_config = ConfigDict(extra='forbid', strict=True)
+    model_config = pydantic.ConfigDict(extra='forbid', strict=True)
 
     claude_pid: int
     started_at: JsonDatetime
@@ -64,14 +64,14 @@ class SessionMetadata(BaseModel):
     crash_detected_at: JsonDatetime | None = None
 
 
-class Session(BaseModel):
+class Session(pydantic.BaseModel):
     """A Claude Code session tracked by claude-workspace.
 
     Represents a single Claude Code session from ~/.claude-workspace/sessions.json.
     Sessions are created by the SessionStart hook and updated by SessionEnd hook.
     """
 
-    model_config = ConfigDict(extra='forbid', strict=True)
+    model_config = pydantic.ConfigDict(extra='forbid', strict=True)
 
     # Identity
     session_id: str
@@ -90,13 +90,13 @@ class Session(BaseModel):
     metadata: SessionMetadata
 
 
-class SessionDatabase(BaseModel):
+class SessionDatabase(pydantic.BaseModel):
     """Container for all tracked sessions in sessions.json.
 
     The sessions.json file contains a single SessionDatabase object
     with a list of all known sessions (active, exited, crashed).
     """
 
-    model_config = ConfigDict(extra='forbid', strict=True)
+    model_config = pydantic.ConfigDict(extra='forbid', strict=True)
 
     sessions: Sequence[Session] = ()

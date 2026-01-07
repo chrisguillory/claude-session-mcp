@@ -23,7 +23,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Annotated, Any, Literal
 
-from pydantic import BeforeValidator, Field
+import pydantic
 
 from src.schemas.cc_internal_api.base import StrictModel
 
@@ -40,10 +40,10 @@ def _coerce_to_tuple(v: Any) -> Any:
 
 
 # IPv4 address: (host, port)
-IPv4Address = Annotated[tuple[str, int], BeforeValidator(_coerce_to_tuple)]
+IPv4Address = Annotated[tuple[str, int], pydantic.BeforeValidator(_coerce_to_tuple)]
 
 # IPv6 address: (host, port, flowinfo, scope_id)
-IPv6Address = Annotated[tuple[str, int, int, int], BeforeValidator(_coerce_to_tuple)]
+IPv6Address = Annotated[tuple[str, int, int, int], pydantic.BeforeValidator(_coerce_to_tuple)]
 
 # Network address can be either IPv4 or IPv6
 NetworkAddress = IPv4Address | IPv6Address
@@ -53,37 +53,44 @@ NetworkAddress = IPv4Address | IPv6Address
 # ==============================================================================
 
 
-class ConnectionTiming(StrictModel):
-    """Timing information for connection establishment."""
+class ClientConnectionTiming(StrictModel):
+    """Timing for client connection (no TCP setup - local proxy connection)."""
 
-    start: float = Field(description='Connection start timestamp')
-    tcp_setup: float | None = None
-    tls_setup: float | None = None
+    start: float = pydantic.Field(description='Connection start timestamp')
+    tls_setup: float = pydantic.Field(description='TLS handshake completion timestamp')
+
+
+class ServerConnectionTiming(StrictModel):
+    """Timing for server connection (includes TCP setup to remote server)."""
+
+    start: float = pydantic.Field(description='Connection start timestamp')
+    tcp_setup: float = pydantic.Field(description='TCP connection established timestamp')
+    tls_setup: float = pydantic.Field(description='TLS handshake completion timestamp')
 
 
 class ClientConnection(StrictModel):
     """Client connection metadata from mitmproxy."""
 
-    id: str = Field(description='Connection UUID')
-    address: NetworkAddress = Field(
+    id: str = pydantic.Field(description='Connection UUID')
+    address: NetworkAddress = pydantic.Field(
         description='Client address: IPv4 (host, port) or IPv6 (host, port, flowinfo, scope_id)'
     )
-    tls_version: str | None = None
-    timing: ConnectionTiming
+    tls_version: str = pydantic.Field(description='TLS protocol version')
+    timing: ClientConnectionTiming
 
 
 class ServerConnection(StrictModel):
     """Server connection metadata from mitmproxy."""
 
-    id: str = Field(description='Connection UUID')
-    address: NetworkAddress = Field(
+    id: str = pydantic.Field(description='Connection UUID')
+    address: NetworkAddress = pydantic.Field(
         description='Server address: IPv4 (host, port) or IPv6 (host, port, flowinfo, scope_id)'
     )
-    tls_established: bool | None = None
-    tls_version: str | None = None
-    alpn: str | None = None
-    sni: str | None = None
-    timing: ConnectionTiming
+    tls_established: bool = pydantic.Field(description='Whether TLS was established')
+    tls_version: str = pydantic.Field(description='TLS protocol version')
+    alpn: str = pydantic.Field(description='ALPN protocol negotiated')
+    sni: str = pydantic.Field(description='Server Name Indication')
+    timing: ServerConnectionTiming
 
 
 # ==============================================================================
@@ -104,33 +111,33 @@ class RequestCapture(StrictModel):
     """
 
     # --- Identity (common to requests and responses) ---
-    flow_id: str = Field(description='mitmproxy flow ID for correlation')
-    sequence: int = Field(description='Sequence number in capture session')
-    timestamp: float = Field(description='Unix timestamp')
-    timestamp_iso: str = Field(description='ISO 8601 timestamp')
+    flow_id: str = pydantic.Field(description='mitmproxy flow ID for correlation')
+    sequence: int = pydantic.Field(description='Sequence number in capture session')
+    timestamp: float = pydantic.Field(description='Unix timestamp')
+    timestamp_iso: str = pydantic.Field(description='ISO 8601 timestamp')
 
     # --- Direction (discriminator field, no default - fail-fast) ---
-    direction: Literal['request'] = Field(description='HTTP direction')
+    direction: Literal['request'] = pydantic.Field(description='HTTP direction')
 
     # --- HTTP request context ---
-    host: str = Field(description='Request host')
-    path: str = Field(description='Request path')
-    method: str = Field(description='HTTP method')
-    scheme: str = Field(description='URL scheme')
-    port: int = Field(description='Port number')
-    query: Mapping[str, str] = Field(description='Query parameters')
-    headers: Mapping[str, str] = Field(description='HTTP headers')
-    http_version: str = Field(description='HTTP version')
+    host: str = pydantic.Field(description='Request host')
+    path: str = pydantic.Field(description='Request path')
+    method: str = pydantic.Field(description='HTTP method')
+    scheme: str = pydantic.Field(description='URL scheme')
+    port: int = pydantic.Field(description='Port number')
+    query: Mapping[str, str] = pydantic.Field(description='Query parameters')
+    headers: Mapping[str, str] = pydantic.Field(description='HTTP headers')
+    http_version: str = pydantic.Field(description='HTTP version')
 
     # --- mitmproxy metadata ---
-    url: str = Field(description='Full URL')
+    url: str = pydantic.Field(description='Full URL')
     # Cookie values can be strings or lists (e.g., GCLB includes [value, attrs])
-    cookies: Mapping[str, str | Sequence[str]] = Field(description='HTTP cookies')
-    is_replay: bool | None = Field(description='mitmproxy replay flag')
-    client_conn: ClientConnection = Field(description='Client connection info')
+    cookies: Mapping[str, str | Sequence[str]] = pydantic.Field(description='HTTP cookies')
+    is_replay: bool | None = pydantic.Field(description='mitmproxy replay flag')
+    client_conn: ClientConnection = pydantic.Field(description='Client connection info')
 
     # --- Claude session correlation (added by intercept script) ---
-    session_id: str | None = Field(description='Claude Code session ID')
+    session_id: str | None = pydantic.Field(description='Claude Code session ID')
 
 
 class ResponseCapture(StrictModel):
@@ -145,40 +152,40 @@ class ResponseCapture(StrictModel):
     """
 
     # --- Identity (common to requests and responses) ---
-    flow_id: str = Field(description='mitmproxy flow ID for correlation')
-    sequence: int = Field(description='Sequence number in capture session')
-    timestamp: float = Field(description='Unix timestamp')
-    timestamp_iso: str = Field(description='ISO 8601 timestamp')
+    flow_id: str = pydantic.Field(description='mitmproxy flow ID for correlation')
+    sequence: int = pydantic.Field(description='Sequence number in capture session')
+    timestamp: float = pydantic.Field(description='Unix timestamp')
+    timestamp_iso: str = pydantic.Field(description='ISO 8601 timestamp')
 
     # --- Direction (discriminator field, no default - fail-fast) ---
-    direction: Literal['response'] = Field(description='HTTP direction')
+    direction: Literal['response'] = pydantic.Field(description='HTTP direction')
 
     # --- Correlation fields (copied from request for correlation) ---
-    host: str = Field(description='Request host (for correlation)')
-    path: str = Field(description='Request path (for correlation)')
-    method: str = Field(description='HTTP method (echoed from request)')
+    host: str = pydantic.Field(description='Request host (for correlation)')
+    path: str = pydantic.Field(description='Request path (for correlation)')
+    method: str = pydantic.Field(description='HTTP method (echoed from request)')
 
     # --- HTTP response context ---
-    status_code: int = Field(description='HTTP status code')
-    reason: str = Field(description='HTTP status reason')
-    headers: Mapping[str, str] = Field(description='HTTP headers')
-    http_version: str = Field(description='HTTP version')
-    duration_seconds: float = Field(description='Request duration')
+    status_code: int = pydantic.Field(description='HTTP status code')
+    reason: str = pydantic.Field(description='HTTP status reason')
+    headers: Mapping[str, str] = pydantic.Field(description='HTTP headers')
+    http_version: str = pydantic.Field(description='HTTP version')
+    duration_seconds: float = pydantic.Field(description='Request duration')
 
     # --- Echoed from request (present in JSON, included for completeness) ---
-    scheme: str = Field(description='URL scheme (echoed from request)')
-    port: int = Field(description='Port number (echoed from request)')
-    query: Mapping[str, str] = Field(description='Query parameters (echoed)')
+    scheme: str = pydantic.Field(description='URL scheme (echoed from request)')
+    port: int = pydantic.Field(description='Port number (echoed from request)')
+    query: Mapping[str, str] = pydantic.Field(description='Query parameters (echoed)')
 
     # --- mitmproxy metadata ---
-    url: str = Field(description='Full URL')
+    url: str = pydantic.Field(description='Full URL')
     # Cookie values can be strings or lists (e.g., GCLB includes [value, attrs])
-    cookies: Mapping[str, str | Sequence[str]] = Field(description='HTTP cookies')
-    is_replay: bool | None = Field(description='mitmproxy replay flag')
-    server_conn: ServerConnection = Field(description='Server connection info')
+    cookies: Mapping[str, str | Sequence[str]] = pydantic.Field(description='HTTP cookies')
+    is_replay: bool | None = pydantic.Field(description='mitmproxy replay flag')
+    server_conn: ServerConnection = pydantic.Field(description='Server connection info')
 
     # --- Claude session correlation (added by intercept script) ---
-    session_id: str | None = Field(description='Claude Code session ID')
+    session_id: str | None = pydantic.Field(description='Claude Code session ID')
 
 
 # ==============================================================================

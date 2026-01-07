@@ -49,13 +49,36 @@ CAPTURE_REGISTRY: dict[tuple[str, str, str], str] = {
     # Anthropic API - Metrics
     ('api.anthropic.com', '/api/claude_code/metrics', 'request'): 'metrics_request',
     ('api.anthropic.com', '/api/claude_code/metrics', 'response'): 'metrics_response',
+    ('api.anthropic.com', '/api/claude_code/organizations/metrics_enabled', 'request'): 'metrics_enabled_request',
     ('api.anthropic.com', '/api/claude_code/organizations/metrics_enabled', 'response'): 'metrics_enabled_response',
-    # Anthropic API - Health/OAuth (GET)
+    # Anthropic API - Health
     ('api.anthropic.com', '/api/hello', 'request'): 'hello_request',
     ('api.anthropic.com', '/api/hello', 'response'): 'hello_response',
+    # Anthropic API - Grove
+    ('api.anthropic.com', '/api/claude_code_grove', 'request'): 'grove_request',
+    ('api.anthropic.com', '/api/claude_code_grove', 'response'): 'grove_response',
+    # Anthropic API - Settings
+    ('api.anthropic.com', '/api/claude_code/settings', 'request'): 'settings_request',
+    ('api.anthropic.com', '/api/claude_code/settings', 'response'): 'settings_response',
+    # Anthropic API - OAuth endpoints
     ('api.anthropic.com', '/api/oauth/claude_cli/client_data', 'request'): 'client_data_request',
     ('api.anthropic.com', '/api/oauth/claude_cli/client_data', 'response'): 'client_data_response',
-    ('api.anthropic.com', '/api/claude_code/organizations/metrics_enabled', 'request'): 'metrics_enabled_request',
+    ('api.anthropic.com', '/api/oauth/profile', 'request'): 'profile_request',
+    ('api.anthropic.com', '/api/oauth/profile', 'response'): 'profile_response',
+    ('api.anthropic.com', '/api/oauth/claude_cli/roles', 'request'): 'roles_request',
+    ('api.anthropic.com', '/api/oauth/claude_cli/roles', 'response'): 'roles_response',
+    ('api.anthropic.com', '/api/oauth/account/settings', 'request'): 'account_settings_request',
+    ('api.anthropic.com', '/api/oauth/account/settings', 'response'): 'account_settings_response',
+    ('api.anthropic.com', '/api/oauth/claude_cli/create_api_key', 'request'): 'create_api_key_request',
+    ('api.anthropic.com', '/api/oauth/claude_cli/create_api_key', 'response'): 'create_api_key_response',
+    # Anthropic API - Referral endpoints (path normalized to remove UUID)
+    ('api.anthropic.com', '/api/oauth/organizations/referral/eligibility', 'request'): 'referral_eligibility_request',
+    ('api.anthropic.com', '/api/oauth/organizations/referral/eligibility', 'response'): 'referral_eligibility_response',
+    ('api.anthropic.com', '/api/oauth/organizations/referral/redemptions', 'request'): 'referral_redemptions_request',
+    ('api.anthropic.com', '/api/oauth/organizations/referral/redemptions', 'response'): 'referral_redemptions_response',
+    # Anthropic API - Model access (path normalized to remove UUID)
+    ('api.anthropic.com', '/api/organization/claude_code_sonnet_1m_access', 'request'): 'model_access_request',
+    ('api.anthropic.com', '/api/organization/claude_code_sonnet_1m_access', 'response'): 'model_access_response',
     # Statsig - Register
     ('statsig.anthropic.com', '/v1/rgstr', 'request'): 'statsig_register_request',
     ('statsig.anthropic.com', '/v1/rgstr', 'response'): 'statsig_register_response',
@@ -68,6 +91,22 @@ CAPTURE_REGISTRY: dict[tuple[str, str, str], str] = {
     # External - GCS (version check)
     ('storage.googleapis.com', '/claude-code-dist/latest', 'request'): 'gcs_version_request',
     ('storage.googleapis.com', '/claude-code-dist/latest', 'response'): 'gcs_version_response',
+    # External - Console OAuth
+    ('console.anthropic.com', '/v1/oauth/token', 'request'): 'oauth_token_request',
+    ('console.anthropic.com', '/v1/oauth/token', 'response'): 'oauth_token_response',
+    # External - Segment Analytics
+    ('api.segment.io', '/v1/batch', 'request'): 'segment_batch_request',
+    ('api.segment.io', '/v1/batch', 'response'): 'segment_batch_response',
+    # External - Claude.ai Domain Info
+    ('claude.ai', '/api/web/domain_info', 'request'): 'domain_info_request',
+    ('claude.ai', '/api/web/domain_info', 'response'): 'domain_info_response',
+    # External - Documentation Fetches
+    ('code.claude.com', '/docs', 'request'): 'code_claude_doc_request',
+    ('code.claude.com', '/docs', 'response'): 'code_claude_doc_response',
+    ('platform.claude.com', '/docs', 'request'): 'platform_claude_doc_request',
+    ('platform.claude.com', '/docs', 'response'): 'platform_claude_doc_response',
+    ('platform.claude.com', '/llms.txt', 'request'): 'platform_claude_doc_request',
+    ('platform.claude.com', '/llms.txt', 'response'): 'platform_claude_doc_response',
 }
 
 
@@ -79,6 +118,8 @@ def normalize_path(path: str) -> str:
     - Query string removal: /path?query=value -> /path
     - SDK variant normalization: /api/eval/sdk-ABC123 -> /api/eval/sdk
     - GCS path normalization: /claude-code-dist-UUID/claude-code-releases/latest -> /claude-code-dist/latest
+    - Organization UUID normalization: /api/oauth/organizations/{uuid}/... -> /api/oauth/organizations/...
+    - Model access UUID normalization: /api/organization/{uuid}/... -> /api/organization/...
     """
     # Remove query string
     path = path.split('?')[0]
@@ -92,6 +133,27 @@ def normalize_path(path: str) -> str:
         '/claude-code-dist/latest',
         path,
     )
+
+    # Normalize organization UUIDs in OAuth paths
+    # /api/oauth/organizations/{uuid}/referral/... -> /api/oauth/organizations/referral/...
+    path = re.sub(
+        r'/api/oauth/organizations/[a-f0-9-]+/',
+        '/api/oauth/organizations/',
+        path,
+    )
+
+    # Normalize organization UUIDs in model access paths
+    # /api/organization/{uuid}/claude_code_sonnet_1m_access -> /api/organization/claude_code_sonnet_1m_access
+    path = re.sub(
+        r'/api/organization/[a-f0-9-]+/',
+        '/api/organization/',
+        path,
+    )
+
+    # Normalize doc fetch paths
+    # /docs/en/whatever.md -> /docs
+    if path.startswith('/docs/'):
+        path = '/docs'
 
     return path
 
@@ -180,10 +242,9 @@ def get_capture_type(v: Any) -> str:
         return CAPTURE_REGISTRY[key]
 
     # Fallback for unknown endpoints - dispatch based on direction
-    if direction == 'request':
-        return 'unknown_request'
-    elif direction == 'response':
-        return 'unknown_response'
-
-    # Ultimate fallback
-    return 'unknown_request'
+    direction_to_tag = {
+        'request': 'unknown_request',
+        'response': 'unknown_response',
+        'error': 'proxy_error',
+    }
+    return direction_to_tag.get(direction, 'unknown_request')

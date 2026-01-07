@@ -14,16 +14,22 @@ import json
 from pathlib import Path
 from typing import Annotated, Any
 
-from pydantic import Discriminator, Tag, TypeAdapter, ValidationError
+import pydantic
 
 # Import all capture types for the discriminated union
 from src.schemas.captures.anthropic import (
+    AccountSettingsRequestCapture,
+    AccountSettingsResponseCapture,
     ClientDataRequestCapture,
     ClientDataResponseCapture,
     CountTokensRequestCapture,
     CountTokensResponseCapture,
+    CreateApiKeyRequestCapture,
+    CreateApiKeyResponseCapture,
     EvalRequestCapture,
     EvalResponseCapture,
+    GroveRequestCapture,
+    GroveResponseCapture,
     HelloRequestCapture,
     HelloResponseCapture,
     MessagesJsonResponseCapture,
@@ -33,13 +39,38 @@ from src.schemas.captures.anthropic import (
     MetricsEnabledResponseCapture,
     MetricsRequestCapture,
     MetricsResponseCapture,
+    ModelAccessRequestCapture,
+    ModelAccessResponseCapture,
+    ProfileRequestCapture,
+    ProfileResponseCapture,
+    ReferralEligibilityRequestCapture,
+    ReferralEligibilityResponseCapture,
+    ReferralRedemptionsRequestCapture,
+    ReferralRedemptionsResponseCapture,
+    RolesRequestCapture,
+    RolesResponseCapture,
+    SettingsRequestCapture,
+    SettingsResponseCapture,
     TelemetryRequestCapture,
     TelemetryResponseCapture,
 )
 from src.schemas.captures.datadog import DatadogRequestCapture, DatadogResponseCapture
+from src.schemas.captures.external import (
+    CodeClaudeComDocRequestCapture,
+    CodeClaudeComDocResponseCapture,
+    DomainInfoRequestCapture,
+    DomainInfoResponseCapture,
+    OAuthTokenRequestCapture,
+    OAuthTokenResponseCapture,
+    PlatformClaudeComDocRequestCapture,
+    PlatformClaudeComDocResponseCapture,
+    SegmentBatchRequestCapture,
+    SegmentBatchResponseCapture,
+)
 from src.schemas.captures.gcs import (
     GCSVersionRequestCapture,
     GCSVersionResponseCapture,
+    ProxyErrorCapture,
     UnknownRequestCapture,
     UnknownResponseCapture,
 )
@@ -57,44 +88,83 @@ from src.schemas.captures.statsig import (
 
 CapturedTraffic = Annotated[
     # Anthropic API - Messages
-    Annotated[MessagesRequestCapture, Tag('messages_request')]
-    | Annotated[MessagesStreamResponseCapture, Tag('messages_stream_response')]
-    | Annotated[MessagesJsonResponseCapture, Tag('messages_json_response')]
+    Annotated[MessagesRequestCapture, pydantic.Tag('messages_request')]
+    | Annotated[MessagesStreamResponseCapture, pydantic.Tag('messages_stream_response')]
+    | Annotated[MessagesJsonResponseCapture, pydantic.Tag('messages_json_response')]
     # Anthropic API - Telemetry
-    | Annotated[TelemetryRequestCapture, Tag('telemetry_request')]
-    | Annotated[TelemetryResponseCapture, Tag('telemetry_response')]
+    | Annotated[TelemetryRequestCapture, pydantic.Tag('telemetry_request')]
+    | Annotated[TelemetryResponseCapture, pydantic.Tag('telemetry_response')]
     # Anthropic API - Count Tokens
-    | Annotated[CountTokensRequestCapture, Tag('count_tokens_request')]
-    | Annotated[CountTokensResponseCapture, Tag('count_tokens_response')]
+    | Annotated[CountTokensRequestCapture, pydantic.Tag('count_tokens_request')]
+    | Annotated[CountTokensResponseCapture, pydantic.Tag('count_tokens_response')]
     # Anthropic API - Feature Flags (Eval)
-    | Annotated[EvalRequestCapture, Tag('eval_request')]
-    | Annotated[EvalResponseCapture, Tag('eval_response')]
+    | Annotated[EvalRequestCapture, pydantic.Tag('eval_request')]
+    | Annotated[EvalResponseCapture, pydantic.Tag('eval_response')]
     # Anthropic API - Metrics
-    | Annotated[MetricsRequestCapture, Tag('metrics_request')]
-    | Annotated[MetricsResponseCapture, Tag('metrics_response')]
-    | Annotated[MetricsEnabledResponseCapture, Tag('metrics_enabled_response')]
-    # Anthropic API - Health/OAuth (GET)
-    | Annotated[HelloRequestCapture, Tag('hello_request')]
-    | Annotated[HelloResponseCapture, Tag('hello_response')]
-    | Annotated[ClientDataRequestCapture, Tag('client_data_request')]
-    | Annotated[ClientDataResponseCapture, Tag('client_data_response')]
-    | Annotated[MetricsEnabledRequestCapture, Tag('metrics_enabled_request')]
+    | Annotated[MetricsRequestCapture, pydantic.Tag('metrics_request')]
+    | Annotated[MetricsResponseCapture, pydantic.Tag('metrics_response')]
+    | Annotated[MetricsEnabledRequestCapture, pydantic.Tag('metrics_enabled_request')]
+    | Annotated[MetricsEnabledResponseCapture, pydantic.Tag('metrics_enabled_response')]
+    # Anthropic API - Health
+    | Annotated[HelloRequestCapture, pydantic.Tag('hello_request')]
+    | Annotated[HelloResponseCapture, pydantic.Tag('hello_response')]
+    # Anthropic API - Grove
+    | Annotated[GroveRequestCapture, pydantic.Tag('grove_request')]
+    | Annotated[GroveResponseCapture, pydantic.Tag('grove_response')]
+    # Anthropic API - Settings
+    | Annotated[SettingsRequestCapture, pydantic.Tag('settings_request')]
+    | Annotated[SettingsResponseCapture, pydantic.Tag('settings_response')]
+    # Anthropic API - OAuth
+    | Annotated[ClientDataRequestCapture, pydantic.Tag('client_data_request')]
+    | Annotated[ClientDataResponseCapture, pydantic.Tag('client_data_response')]
+    | Annotated[ProfileRequestCapture, pydantic.Tag('profile_request')]
+    | Annotated[ProfileResponseCapture, pydantic.Tag('profile_response')]
+    | Annotated[RolesRequestCapture, pydantic.Tag('roles_request')]
+    | Annotated[RolesResponseCapture, pydantic.Tag('roles_response')]
+    | Annotated[AccountSettingsRequestCapture, pydantic.Tag('account_settings_request')]
+    | Annotated[AccountSettingsResponseCapture, pydantic.Tag('account_settings_response')]
+    | Annotated[CreateApiKeyRequestCapture, pydantic.Tag('create_api_key_request')]
+    | Annotated[CreateApiKeyResponseCapture, pydantic.Tag('create_api_key_response')]
+    # Anthropic API - Referral
+    | Annotated[ReferralEligibilityRequestCapture, pydantic.Tag('referral_eligibility_request')]
+    | Annotated[ReferralEligibilityResponseCapture, pydantic.Tag('referral_eligibility_response')]
+    | Annotated[ReferralRedemptionsRequestCapture, pydantic.Tag('referral_redemptions_request')]
+    | Annotated[ReferralRedemptionsResponseCapture, pydantic.Tag('referral_redemptions_response')]
+    # Anthropic API - Model Access
+    | Annotated[ModelAccessRequestCapture, pydantic.Tag('model_access_request')]
+    | Annotated[ModelAccessResponseCapture, pydantic.Tag('model_access_response')]
     # Statsig - Register
-    | Annotated[StatsigRegisterRequestCapture, Tag('statsig_register_request')]
-    | Annotated[StatsigRegisterResponseCapture, Tag('statsig_register_response')]
+    | Annotated[StatsigRegisterRequestCapture, pydantic.Tag('statsig_register_request')]
+    | Annotated[StatsigRegisterResponseCapture, pydantic.Tag('statsig_register_response')]
     # Statsig - Initialize
-    | Annotated[StatsigInitializeRequestCapture, Tag('statsig_initialize_request')]
-    | Annotated[StatsigInitializeResponseCapture, Tag('statsig_initialize_response')]
+    | Annotated[StatsigInitializeRequestCapture, pydantic.Tag('statsig_initialize_request')]
+    | Annotated[StatsigInitializeResponseCapture, pydantic.Tag('statsig_initialize_response')]
     # External - Datadog
-    | Annotated[DatadogRequestCapture, Tag('datadog_request')]
-    | Annotated[DatadogResponseCapture, Tag('datadog_response')]
+    | Annotated[DatadogRequestCapture, pydantic.Tag('datadog_request')]
+    | Annotated[DatadogResponseCapture, pydantic.Tag('datadog_response')]
     # External - GCS
-    | Annotated[GCSVersionRequestCapture, Tag('gcs_version_request')]
-    | Annotated[GCSVersionResponseCapture, Tag('gcs_version_response')]
+    | Annotated[GCSVersionRequestCapture, pydantic.Tag('gcs_version_request')]
+    | Annotated[GCSVersionResponseCapture, pydantic.Tag('gcs_version_response')]
+    # External - Console OAuth
+    | Annotated[OAuthTokenRequestCapture, pydantic.Tag('oauth_token_request')]
+    | Annotated[OAuthTokenResponseCapture, pydantic.Tag('oauth_token_response')]
+    # External - Segment
+    | Annotated[SegmentBatchRequestCapture, pydantic.Tag('segment_batch_request')]
+    | Annotated[SegmentBatchResponseCapture, pydantic.Tag('segment_batch_response')]
+    # External - Claude.ai
+    | Annotated[DomainInfoRequestCapture, pydantic.Tag('domain_info_request')]
+    | Annotated[DomainInfoResponseCapture, pydantic.Tag('domain_info_response')]
+    # External - Doc Fetches
+    | Annotated[CodeClaudeComDocRequestCapture, pydantic.Tag('code_claude_doc_request')]
+    | Annotated[CodeClaudeComDocResponseCapture, pydantic.Tag('code_claude_doc_response')]
+    | Annotated[PlatformClaudeComDocRequestCapture, pydantic.Tag('platform_claude_doc_request')]
+    | Annotated[PlatformClaudeComDocResponseCapture, pydantic.Tag('platform_claude_doc_response')]
     # Fallback
-    | Annotated[UnknownRequestCapture, Tag('unknown_request')]
-    | Annotated[UnknownResponseCapture, Tag('unknown_response')],
-    Discriminator(get_capture_type),
+    | Annotated[UnknownRequestCapture, pydantic.Tag('unknown_request')]
+    | Annotated[UnknownResponseCapture, pydantic.Tag('unknown_response')]
+    # Proxy errors
+    | Annotated[ProxyErrorCapture, pydantic.Tag('proxy_error')],
+    pydantic.Discriminator(get_capture_type),
 ]
 
 
@@ -103,7 +173,7 @@ CapturedTraffic = Annotated[
 # ==============================================================================
 
 # Cached adapter for performance
-_CAPTURE_ADAPTER: TypeAdapter[CapturedTraffic] = TypeAdapter(CapturedTraffic)
+_CAPTURE_ADAPTER: pydantic.TypeAdapter[CapturedTraffic] = pydantic.TypeAdapter(CapturedTraffic)
 
 
 def _preprocess_capture(data: dict[str, Any], filepath: Path | None = None) -> dict[str, Any]:
@@ -134,6 +204,10 @@ def _preprocess_capture(data: dict[str, Any], filepath: Path | None = None) -> d
                 data['host'] = host
             if path:
                 data['path'] = path
+
+    # Skip body processing for error captures (they don't have body field)
+    if data.get('direction') == 'error':
+        return data
 
     # Process body wrapper
     body_wrapper = data.get('body', {})
@@ -222,7 +296,7 @@ def load_captures_batch(
     for filepath in sorted(directory.glob(pattern)):
         try:
             captures.append(load_capture(filepath))
-        except (ValidationError, json.JSONDecodeError, OSError) as e:
+        except (pydantic.ValidationError, json.JSONDecodeError, OSError) as e:
             errors[filepath] = e
 
     return captures, errors

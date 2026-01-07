@@ -15,22 +15,30 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Literal
 
-from pydantic import Field
+import pydantic
 
 from src.schemas.captures.base import AnthropicRequestCapture, AnthropicResponseCapture
 from src.schemas.cc_internal_api import (
+    AccountSettingsResponse,
     ClientDataResponse,
+    CliRolesResponse,
     CountTokensRequest,
     CountTokensResponse,
+    CreateApiKeyResponse,
     EmptyBody,
     EvalRequest,
     EvalResponse,
+    GroveResponse,
     HelloResponse,
     MessagesRequest,
     MessagesResponse,
     MetricsEnabledResponse,
     MetricsRequest,
     MetricsResponse,
+    ModelAccessResponse,
+    ProfileResponse,
+    ReferralEligibilityResponse,
+    ReferralRedemptionsResponse,
     SSEEvent,
     TelemetryBatchRequest,
     TelemetryBatchResponse,
@@ -57,14 +65,21 @@ class MessagesStreamResponseCapture(AnthropicResponseCapture):
     The events field contains parsed SSE events from the stream.
     """
 
-    events: Sequence[SSEEvent] = Field(description='Parsed SSE events')
+    events: Sequence[SSEEvent] = pydantic.Field(description='Parsed SSE events')
+
+
+class ApiErrorDetailInfo(StrictModel):
+    """Additional error details (e.g., visibility info)."""
+
+    error_visibility: str  # e.g., "user_facing"
 
 
 class ApiErrorDetail(StrictModel):
     """Error detail in API error response."""
 
-    type: str  # e.g., "invalid_request_error", "overloaded_error"
+    type: str  # e.g., "invalid_request_error", "overloaded_error", "not_found_error"
     message: str
+    details: ApiErrorDetailInfo | None = None  # Optional detailed error info
 
 
 class ApiError(StrictModel):
@@ -76,6 +91,7 @@ class ApiError(StrictModel):
 
     type: Literal['error']
     error: ApiErrorDetail
+    request_id: str | None = None  # Present on some error responses
 
 
 class MessagesJsonResponseCapture(AnthropicResponseCapture):
@@ -203,3 +219,165 @@ class ClientDataResponseCapture(AnthropicResponseCapture):
     """Captured GET /api/oauth/claude_cli/client_data response."""
 
     body: ClientDataResponse
+
+
+# ==============================================================================
+# Grove (/api/claude_code_grove)
+# ==============================================================================
+
+
+class GroveRequestCapture(AnthropicRequestCapture):
+    """Captured GET /api/claude_code_grove request (feature gating)."""
+
+    method: Literal['GET']
+    body: EmptyBody
+
+
+class GroveResponseCapture(AnthropicResponseCapture):
+    """Captured GET /api/claude_code_grove response (feature gating)."""
+
+    body: GroveResponse
+
+
+# ==============================================================================
+# Settings (/api/claude_code/settings)
+# ==============================================================================
+
+
+class SettingsRequestCapture(AnthropicRequestCapture):
+    """Captured GET /api/claude_code/settings request."""
+
+    method: Literal['GET']
+    body: EmptyBody
+
+
+class SettingsResponseCapture(AnthropicResponseCapture):
+    """Captured GET /api/claude_code/settings response (may be error)."""
+
+    body: ApiError  # Observed as error response in captures
+
+
+# ==============================================================================
+# Profile (/api/oauth/profile)
+# ==============================================================================
+
+
+class ProfileRequestCapture(AnthropicRequestCapture):
+    """Captured GET /api/oauth/profile request."""
+
+    method: Literal['GET']
+    body: EmptyBody
+
+
+class ProfileResponseCapture(AnthropicResponseCapture):
+    """Captured GET /api/oauth/profile response."""
+
+    body: ProfileResponse
+
+
+# ==============================================================================
+# Roles (/api/oauth/claude_cli/roles)
+# ==============================================================================
+
+
+class RolesRequestCapture(AnthropicRequestCapture):
+    """Captured GET /api/oauth/claude_cli/roles request."""
+
+    method: Literal['GET']
+    body: EmptyBody
+
+
+class RolesResponseCapture(AnthropicResponseCapture):
+    """Captured GET /api/oauth/claude_cli/roles response."""
+
+    body: CliRolesResponse
+
+
+# ==============================================================================
+# Account Settings (/api/oauth/account/settings)
+# ==============================================================================
+
+
+class AccountSettingsRequestCapture(AnthropicRequestCapture):
+    """Captured GET /api/oauth/account/settings request."""
+
+    method: Literal['GET']
+    body: EmptyBody
+
+
+class AccountSettingsResponseCapture(AnthropicResponseCapture):
+    """Captured GET /api/oauth/account/settings response."""
+
+    body: AccountSettingsResponse
+
+
+# ==============================================================================
+# Create API Key (/api/oauth/claude_cli/create_api_key)
+# ==============================================================================
+
+
+class CreateApiKeyRequestCapture(AnthropicRequestCapture):
+    """Captured POST /api/oauth/claude_cli/create_api_key request."""
+
+    method: Literal['POST']
+    body: EmptyBody  # POST with empty body, auth in headers
+
+
+class CreateApiKeyResponseCapture(AnthropicResponseCapture):
+    """Captured POST /api/oauth/claude_cli/create_api_key response."""
+
+    body: CreateApiKeyResponse
+
+
+# ==============================================================================
+# Referral Eligibility (/api/oauth/organizations/{uuid}/referral/eligibility)
+# ==============================================================================
+
+
+class ReferralEligibilityRequestCapture(AnthropicRequestCapture):
+    """Captured GET /api/oauth/organizations/{uuid}/referral/eligibility request."""
+
+    method: Literal['GET']
+    body: EmptyBody
+
+
+class ReferralEligibilityResponseCapture(AnthropicResponseCapture):
+    """Captured GET /api/oauth/organizations/{uuid}/referral/eligibility response."""
+
+    body: ReferralEligibilityResponse
+
+
+# ==============================================================================
+# Referral Redemptions (/api/oauth/organizations/{uuid}/referral/redemptions)
+# ==============================================================================
+
+
+class ReferralRedemptionsRequestCapture(AnthropicRequestCapture):
+    """Captured GET /api/oauth/organizations/{uuid}/referral/redemptions request."""
+
+    method: Literal['GET']
+    body: EmptyBody
+
+
+class ReferralRedemptionsResponseCapture(AnthropicResponseCapture):
+    """Captured GET /api/oauth/organizations/{uuid}/referral/redemptions response."""
+
+    body: ReferralRedemptionsResponse
+
+
+# ==============================================================================
+# Model Access (/api/organization/{uuid}/claude_code_sonnet_1m_access)
+# ==============================================================================
+
+
+class ModelAccessRequestCapture(AnthropicRequestCapture):
+    """Captured GET /api/organization/{uuid}/claude_code_sonnet_1m_access request."""
+
+    method: Literal['GET']
+    body: EmptyBody
+
+
+class ModelAccessResponseCapture(AnthropicResponseCapture):
+    """Captured GET /api/organization/{uuid}/claude_code_sonnet_1m_access response."""
+
+    body: ModelAccessResponse
