@@ -155,7 +155,7 @@ class StatsigBaseDynamicConfig(StrictModel):
     """Base fields for all Statsig dynamic configs."""
 
     name: str
-    value: Mapping[str, Any]  # noqa: loose-typing - genuinely polymorphic config payloads
+    value: Mapping[str, Any]  # noqa: loose-typing # genuinely polymorphic config payloads
     rule_id: str
     group: str
     is_device_based: bool

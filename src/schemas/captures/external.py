@@ -102,7 +102,7 @@ class SegmentEvent(StrictModel):
 class SegmentBatchRequest(StrictModel):
     """Segment batch request body."""
 
-    batch: Sequence[Mapping[str, Any]]  # Relaxed: varied event structures
+    batch: Sequence[Mapping[str, Any]]  # noqa: loose-typing # Segment analytics events have varied structures
     sentAt: str  # ISO timestamp
 
 

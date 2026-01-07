@@ -8,7 +8,7 @@ Validated against mitmproxy captures of actual Claude Code traffic.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from typing import Annotated, Any, Literal
+from typing import Annotated, Literal
 
 import anthropic.types
 import pydantic
@@ -16,6 +16,7 @@ import pydantic
 from src.schemas.cc_internal_api.base import FromSdk, StrictModel
 from src.schemas.cc_internal_api.common import CacheControl
 from src.schemas.cc_internal_api.tool_input_schema import ToolInputProperty
+from src.schemas.session.models import ToolInput
 from src.schemas.types import ModelId
 
 # ==============================================================================
@@ -129,7 +130,7 @@ class RequestToolUseBlock(StrictModel):
     type: Literal['tool_use']
     id: str
     name: str
-    input: Mapping[str, Any]
+    input: ToolInput  # Reuse session schema's typed union with MCP fallback
     cache_control: CacheControl | None = None
 
 

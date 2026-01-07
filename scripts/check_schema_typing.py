@@ -451,8 +451,15 @@ class SchemaTypeChecker(ast.NodeVisitor):
                 return True
 
             # Check for specific codes after the colon
+            # Handle: "# noqa: CODE # explanation" or "# noqa: CODE1, CODE2"
             codes_part = noqa_part[1:].strip()
-            codes = [c.strip().lower() for c in codes_part.split(',')]
+
+            # Strip trailing comment (# explanation)
+            if ' #' in codes_part:
+                codes_part = codes_part.split(' #')[0].strip()
+
+            # Split by comma and extract just the code (strip any trailing text)
+            codes = [c.strip().lower().split()[0] for c in codes_part.split(',') if c.strip()]
 
             # Look up the noqa code for this violation kind
             expected_code = self._NOQA_CODES.get(violation_kind)
