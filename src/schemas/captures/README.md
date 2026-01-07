@@ -72,16 +72,34 @@ properties: Mapping[str, Any]
 
 ## Module Structure
 
-| Module | Contents |
-|--------|----------|
-| `base.py` | `RequestCapture`, `ResponseCapture`, service bases, connection metadata |
-| `anthropic.py` | Messages, Telemetry, CountTokens, Eval, Metrics, Health/OAuth captures |
-| `statsig.py` | Statsig Register, Initialize captures |
-| `datadog.py` | Datadog telemetry captures |
-| `gcs.py` | GCS version check, fallback captures |
-| `registry.py` | `CAPTURE_REGISTRY`, `get_capture_type()`, path normalization |
-| `loader.py` | `CapturedTraffic` union, `load_capture()`, preprocessing |
-| `__init__.py` | Public API exports |
+| Module         | Contents                                                                  |
+|----------------|---------------------------------------------------------------------------|
+| `base.py`      | `RequestCapture`, `ResponseCapture`, service bases, connection metadata   |
+| `anthropic.py` | Anthropic API: Messages, Telemetry, CountTokens, Eval, internal endpoints |
+| `statsig.py`   | Statsig feature flags: Register, Initialize                               |
+| `datadog.py`   | Datadog telemetry: log ingestion                                          |
+| `external.py`  | Other services: OAuth, Segment analytics, domain checks, documentation    |
+| `gcs.py`       | GCS version check, fallback/unknown captures                              |
+| `registry.py`  | `CAPTURE_REGISTRY`, `get_capture_type()`, path normalization              |
+| `loader.py`    | `CapturedTraffic` union, `load_capture()`, preprocessing                  |
+| `__init__.py`  | Public API exports                                                        |
+
+### Module Organization Rationale
+
+Modules are organized by **service host**, not by function:
+
+- **`anthropic.py`** - `api.anthropic.com` (~38 classes)
+- **`statsig.py`** - `statsig.anthropic.com` (~4 classes)
+- **`datadog.py`** - `http-intake.logs.*.datadoghq.com` (~7 classes)
+- **`external.py`** - Multiple low-volume services (~20 classes):
+  - `console.anthropic.com` - OAuth token exchange
+  - `api.segment.io` - Segment analytics batching
+  - `claude.ai` - Domain info checks
+  - `code.claude.com`, `platform.claude.com` - Documentation fetches
+
+Services get their own module when they have sufficient volume and complexity.
+`external.py` aggregates services with few endpoints (1-2 each) that don't
+warrant dedicated files. If a service grows, it can be extracted to its own module.
 
 ## Architecture
 
