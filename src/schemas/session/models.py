@@ -50,7 +50,7 @@ document content type:
 
 Skill tool:
   New tool for invoking Agent Skills - auto-discovered capabilities.
-  Input: {"command": "canvas-design"} or {"skill": "..."}
+  Input: {"skill": "handoff", "args": "..."}
   - Skills differ from slash commands: auto-discovered vs explicit invocation
   - Skills are folders with SKILL.md + resources (templates, scripts, examples)
   - Claude examines available skills and uses them when relevant to task
@@ -77,22 +77,22 @@ Round-trip serialization:
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from typing import Annotated, Any, Literal, TypeVar
+from typing import Annotated, Any, Literal
 
 import pydantic
 
 from src.schemas.session.markers import PathField, PathListField
-from src.schemas.types import BaseStrictModel, ModelId
+from src.schemas.types import BaseStrictModel, ModelId, PermissiveModel
 
 # ==============================================================================
 # Schema Version
 # ==============================================================================
 
-SCHEMA_VERSION = '0.2.0'
+SCHEMA_VERSION = '0.2.1'  # Phase 3: Complete tool INPUT modeling
 CLAUDE_CODE_MIN_VERSION = '2.0.35'
 CLAUDE_CODE_MAX_VERSION = '2.1.1'
-LAST_VALIDATED = '2026-01-07'
-VALIDATION_RECORD_COUNT = 377_833
+LAST_VALIDATED = '2026-01-08'
+VALIDATION_RECORD_COUNT = 402_997
 
 
 # ==============================================================================
@@ -110,10 +110,7 @@ class StrictModel(BaseStrictModel):
     pass
 
 
-# Type variable for validated_copy function
-T = TypeVar('T', bound=pydantic.BaseModel)
-
-
+# noinspection PyNewStyleGenericSyntax
 def validated_copy[T: pydantic.BaseModel](model: T, update: Mapping[str, Any]) -> T:
     """
     Create a validated copy of a model with updates.
@@ -163,9 +160,17 @@ class TextContent(StrictModel):
 
 
 class ReadToolInput(StrictModel):
-    """Input for Read tool."""
+    """Input for Read tool.
+
+    Fields:
+        file_path: Absolute path to the file to read
+        limit: Maximum number of lines to read (for large files)
+        offset: Line number to start reading from (1-indexed)
+    """
 
     file_path: PathField
+    limit: int | None = None  # Max lines to read
+    offset: int | str | None = None  # Start line (1-indexed), can be malformed string like "\\248"
 
 
 class WriteToolInput(StrictModel):
@@ -185,9 +190,15 @@ class EditToolInput(StrictModel):
 
 
 class SkillToolInput(StrictModel):
-    """Input for Skill tool."""
+    """Input for Skill tool.
 
-    command: str  # Skill name to invoke (e.g., 'canvas-design')
+    Fields:
+        skill: Skill name to invoke (e.g., 'handoff', 'commit')
+        args: Optional arguments for the skill
+    """
+
+    skill: str
+    args: str | None = None
 
 
 class EnterPlanModeToolInput(StrictModel):
@@ -212,18 +223,342 @@ class TaskOutputToolInput(StrictModel):
     timeout: int | None = None  # Optional timeout in milliseconds
 
 
-# Union of tool inputs (typed models first, dict fallback for MCP tools)
+# ==============================================================================
+# Bash Tool Input (23,236x occurrences)
+# ==============================================================================
+
+
+class BashToolInput(StrictModel):
+    """Input for Bash tool - executes shell commands.
+
+    Fields:
+        command: The shell command to execute (required)
+        description: Human-readable description in 5-10 words (usually present, but optional)
+        timeout: Timeout in milliseconds (max 600000, default 120000)
+        run_in_background: Run command asynchronously
+        dangerouslyDisableSandbox: Bypass sandbox protection (requires policy permission)
+    """
+
+    command: str
+    description: str | None = None  # Usually present (1078/1080) but some old records lack it
+    timeout: int | None = None
+    run_in_background: bool | None = None
+    dangerouslyDisableSandbox: bool | None = None
+
+
+# ==============================================================================
+# Grep Tool Input (2,909x occurrences)
+# ==============================================================================
+
+
+class GrepToolInput(StrictModel):
+    """Input for Grep tool - searches file contents using ripgrep.
+
+    Fields:
+        pattern: Regex pattern to search for (required)
+        path: Directory or file to search in (defaults to cwd)
+        output_mode: content | files_with_matches | count
+        glob: Glob pattern to filter files (e.g., "*.py")
+        type: File type filter (e.g., "py", "js")
+        multiline: Enable multiline regex mode
+        head_limit: Limit output to first N results
+        offset: Skip first N results
+        Hyphenated flags: -n (line numbers), -A/-B/-C (context), -i (case insensitive)
+    """
+
+    model_config = pydantic.ConfigDict(
+        extra='forbid',
+        strict=True,
+        frozen=True,
+        populate_by_name=True,  # Allow both alias and field name
+    )
+
+    pattern: str
+    path: PathField | None = None
+    output_mode: Literal['content', 'files_with_matches', 'count'] | None = None
+    glob: str | None = None
+    type: str | None = None  # noqa: A003 - matches ripgrep's --type flag
+    multiline: bool | None = None
+    head_limit: int | None = None
+    offset: int | None = None
+    context: int | str | None = None  # Context lines - can be int or flag reference string like "-A"
+    # Hyphenated ripgrep flags (use Field alias for JSON compatibility)
+    dash_n: bool | None = pydantic.Field(None, alias='-n')
+    dash_A: int | None = pydantic.Field(None, alias='-A')
+    dash_B: int | None = pydantic.Field(None, alias='-B')
+    dash_C: int | None = pydantic.Field(None, alias='-C')
+    dash_i: bool | None = pydantic.Field(None, alias='-i')
+
+
+# ==============================================================================
+# Glob Tool Input (2,507x occurrences)
+# ==============================================================================
+
+
+class GlobToolInput(StrictModel):
+    """Input for Glob tool - file pattern matching.
+
+    Fields:
+        pattern: Glob pattern to match files (e.g., "**/*.py")
+        path: Directory to search in (defaults to cwd)
+    """
+
+    pattern: str
+    path: PathField | None = None
+
+
+# ==============================================================================
+# Task Tool Input (872x occurrences)
+# ==============================================================================
+
+
+class TaskToolInput(StrictModel):
+    """Input for Task tool - launches subagent for autonomous tasks.
+
+    Fields:
+        prompt: Task instructions for the subagent (required)
+        subagent_type: Agent type - "Explore", "general-purpose", etc. (required)
+        description: Human-readable task description for UI (usually present but optional)
+        run_in_background: Run asynchronously, check with TaskOutput
+        model: Override model (e.g., "haiku", "sonnet")
+        resume: Agent ID to resume from previous execution
+    """
+
+    prompt: str
+    subagent_type: str
+    description: str | None = None  # Usually present but some early records lack it
+    run_in_background: bool | None = None
+    model: str | None = None
+    resume: str | None = None
+
+
+# ==============================================================================
+# TodoWrite Tool Input (3,186x occurrences)
+# ==============================================================================
+
+
+class TodoWriteToolInput(StrictModel):
+    """Input for TodoWrite tool - tracks task progress.
+
+    Fields:
+        todos: List of todo items, each with content/status/activeForm
+    """
+
+    todos: Sequence[TodoItem]
+
+
+# ==============================================================================
+# WebSearch Tool Input (284x occurrences)
+# ==============================================================================
+
+
+class WebSearchToolInput(StrictModel):
+    """Input for WebSearch tool - web search.
+
+    Fields:
+        query: Search query string (required)
+        allowed_domains: Only include results from these domains
+        blocked_domains: Exclude results from these domains
+    """
+
+    query: str
+    allowed_domains: Sequence[str] | None = None
+    blocked_domains: Sequence[str] | None = None
+
+
+# ==============================================================================
+# WebFetch Tool Input (177x occurrences)
+# ==============================================================================
+
+
+class WebFetchToolInput(StrictModel):
+    """Input for WebFetch tool - fetches URL content.
+
+    Fields:
+        url: URL to fetch (required)
+        prompt: Prompt to run on fetched content (required)
+    """
+
+    url: str
+    prompt: str
+
+
+# ==============================================================================
+# BashOutput Tool Input (192x occurrences)
+# ==============================================================================
+
+
+class BashOutputToolInput(StrictModel):
+    """Input for BashOutput tool - retrieves background bash output.
+
+    Fields:
+        bash_id: Background task ID (required)
+        block: Whether to wait for completion
+        filter: Regex pattern to filter output
+        wait_up_to: Max seconds to wait (for blocking mode)
+    """
+
+    bash_id: str
+    block: bool | None = None
+    filter: str | None = None  # noqa: A003 - matches tool's field name
+    wait_up_to: int | None = None
+
+
+# ==============================================================================
+# AskUserQuestion Tool Input (159x occurrences)
+# ==============================================================================
+
+
+class AskUserQuestionToolInput(StrictModel):
+    """Input for AskUserQuestion tool - asks user multiple choice questions.
+
+    Fields:
+        questions: List of questions (1-4), each with question/header/options/multiSelect
+        answers: User answers (populated by permission component)
+    """
+
+    questions: Sequence[UserQuestion]
+    answers: Mapping[str, str] | None = None
+
+
+# ==============================================================================
+# ExitPlanMode Tool Input (150x occurrences)
+# ==============================================================================
+
+
+class ExitPlanModeToolInput(StrictModel):
+    """Input for ExitPlanMode tool - exits planning mode.
+
+    Note: This tool can be invoked with empty input {} or with plan/launchSwarm.
+    The empty variant signals plan approval request.
+
+    Fields:
+        plan: Plan content in markdown (optional)
+        launchSwarm: Whether to launch swarm agents (optional)
+    """
+
+    plan: str | None = None
+    launchSwarm: bool | None = None
+
+
+# ==============================================================================
+# KillShell Tool Input (58x occurrences)
+# ==============================================================================
+
+
+class KillShellToolInput(StrictModel):
+    """Input for KillShell tool - terminates a running shell.
+
+    Fields:
+        shell_id: ID of the shell to kill (required)
+    """
+
+    shell_id: str
+
+
+# ==============================================================================
+# ListMcpResourcesTool Input (5x occurrences)
+# ==============================================================================
+
+
+class ListMcpResourcesToolInput(StrictModel):
+    """Input for ListMcpResourcesTool - lists available MCP resources.
+
+    Fields:
+        server: Filter by specific MCP server name (optional)
+    """
+
+    server: str | None = None
+
+
+# ==============================================================================
+# NotebookEdit Tool Input
+# ==============================================================================
+
+
+class NotebookEditToolInput(StrictModel):
+    """Input for NotebookEdit tool - edits Jupyter notebook cells.
+
+    Fields:
+        notebook_path: Absolute path to the .ipynb file (required)
+        new_source: New source content for the cell (required)
+        cell_id: ID of cell to edit (optional)
+        cell_type: Type of cell - code or markdown
+        edit_mode: replace | insert | delete
+    """
+
+    notebook_path: PathField
+    new_source: str
+    cell_id: str | None = None
+    cell_type: Literal['code', 'markdown'] | None = None
+    edit_mode: Literal['replace', 'insert', 'delete'] | None = None
+
+
+# ==============================================================================
+# ReadMcpResource Tool Input
+# ==============================================================================
+
+
+class ReadMcpResourceToolInput(StrictModel):
+    """Input for ReadMcpResourceTool - reads a specific MCP resource.
+
+    Fields:
+        server: MCP server name (required)
+        uri: Resource URI to read (required)
+    """
+
+    server: str
+    uri: str
+
+
+# ==============================================================================
+# Unknown Tool Input (Fallback for MCP Tools)
+# ==============================================================================
+
+
+class UnknownToolInput(PermissiveModel):
+    """Fallback for unmodeled MCP tool inputs.
+
+    Uses PermissiveModel to accept any fields while remaining a proper type.
+    Allows detection via isinstance(x, UnknownToolInput) for observability.
+
+    MCP tools (64+ different tools) use this fallback. Claude Code built-in
+    tools must have typed models in the ToolInput/ToolResult.
+    """
+
+    pass
+
+
+# Union of tool inputs (typed models first, PermissiveModel fallback for MCP tools)
 # NOTE: Order matters! More specific (more required fields) should come first.
-# EnterPlanModeToolInput is empty (no fields), so it must come last before dict fallback.
+# Models with no required fields must come last before fallback.
 ToolInput = Annotated[
-    ReadToolInput  # file_path required
-    | WriteToolInput  # file_path, content required
+    # Path-based tools (most specific - file_path + other required fields)
+    WriteToolInput  # file_path, content required
     | EditToolInput  # file_path, old_string, new_string required
+    | NotebookEditToolInput  # notebook_path, new_source required
+    | ReadToolInput  # file_path required
+    # Multi-field tools
+    | TaskToolInput  # prompt, description, subagent_type required
+    | BashToolInput  # command required (description optional since some old records lack it)
+    | GrepToolInput  # pattern required, has custom model_config
+    | GlobToolInput  # pattern required
+    | WebFetchToolInput  # url, prompt required
+    | ReadMcpResourceToolInput  # server, uri required
+    | AskUserQuestionToolInput  # questions required
+    | TodoWriteToolInput  # todos required
+    | WebSearchToolInput  # query required
+    # Single-field tools
     | AgentOutputToolInput  # agentId required
     | TaskOutputToolInput  # task_id required
-    | SkillToolInput  # command required
-    | EnterPlanModeToolInput  # No required fields - must be last before dict!
-    | dict[str, Any],  # Fallback for MCP tools
+    | BashOutputToolInput  # bash_id required
+    | KillShellToolInput  # shell_id required
+    | SkillToolInput  # skill required
+    # Optional-only fields (must be near end)
+    | ExitPlanModeToolInput  # plan optional, launchSwarm optional
+    | ListMcpResourcesToolInput  # server optional
+    | EnterPlanModeToolInput  # No fields - must be last before fallback!
+    | UnknownToolInput,  # Fallback for MCP tools (PermissiveModel for observability)
     pydantic.Field(union_mode='left_to_right'),
 ]
 
@@ -269,33 +604,35 @@ class ToolUseContent(StrictModel):
     type: Literal['tool_use']
     id: str
     name: str
-    input: ToolInput  # Typed for Read/Write/Edit, dict for MCP tools only
+    input: ToolInput  # Typed for Claude Code tools, UnknownToolInput for MCP tools
 
     @pydantic.field_validator('input', mode='after')
     @classmethod
     def validate_mcp_tool_fallback(cls, v: ToolInput, info: pydantic.ValidationInfo) -> ToolInput:
         """
-        Enforce that only MCP tools (starting with 'mcp__') can use dict fallback.
-        All Claude Code built-in tools must be explicitly modeled.
+        Enforce that only MCP tools (starting with 'mcp__') can use UnknownToolInput fallback.
+        All Claude Code built-in tools must have typed models that successfully validate.
 
-        Uses ALLOWED_CLAUDE_TOOL_NAMES which is derived from MODELED_CLAUDE_TOOLS,
-        keeping this validator coupled to the actual model classes.
+        This catches both:
+        1. New Claude Code tools we haven't modeled yet
+        2. Bugs in existing models (missing/wrong fields causing fallthrough)
         """
-        # Only validate if input is a plain dict (not one of our typed model instances)
-        if isinstance(v, dict):
-            # Check if it's a typed model (Read/Write/Edit have file_path)
-            is_typed_model = 'file_path' in v or 'old_string' in v
+        if isinstance(v, UnknownToolInput):
+            tool_name = info.data.get('name', '')
 
-            if not is_typed_model:
-                # It's using the dict fallback - get tool name from validation context
-                tool_name = info.data.get('name', '')
+            # MCP tools are expected to use the fallback - they're third-party
+            if tool_name.startswith('mcp__'):
+                return v
 
-                if tool_name not in ALLOWED_CLAUDE_TOOL_NAMES and not tool_name.startswith('mcp__'):
-                    raise ValueError(
-                        f"Unmodeled Claude Code built-in tool: '{tool_name}'. "
-                        f'All Claude Code tools must be explicitly modeled (see MODELED_CLAUDE_TOOLS). '
-                        f"Only MCP tools (starting with 'mcp__') may use the dict fallback."
-                    )
+            # ANY Claude Code tool using fallback is a bug - either:
+            # - New tool needs a model, OR
+            # - Existing model has missing/wrong fields
+            raise ValueError(
+                f"Claude Code tool '{tool_name}' fell through to UnknownToolInput. "
+                f'This means either: (1) no typed model exists for this tool, or '
+                f'(2) the typed model has missing/incorrect fields. '
+                f'Extra fields captured: {list(v.get_extra_fields().keys())}'
+            )
 
         return v
 
@@ -495,6 +832,7 @@ class ApiError(StrictModel):
     error: ApiErrorResponse | None = None  # Can be missing for some errors (e.g., 503)
 
 
+# noinspection PyShadowingBuiltins
 class ConnectionError(StrictModel):
     """Connection error details for network failures."""
 
@@ -586,12 +924,13 @@ class GlobToolResult(StrictModel):
     numFiles: int
     durationMs: int | None = None
     truncated: bool | None = None
+    appliedLimit: int | None = None  # Limit that was applied to results
 
 
 class GrepToolResult(StrictModel):
     """Result from Grep/content search tool execution."""
 
-    mode: Literal['content', 'count']
+    mode: Literal['content', 'count', 'files_with_matches']
     numFiles: int
     filenames: Sequence[str]
     content: str | None = None
@@ -619,6 +958,7 @@ class WriteToolResult(StrictModel):
     filePath: PathField
     content: str
     structuredPatch: Sequence[PatchHunk] | None = None
+    originalFile: str | None = None  # Present but always None for 'create' type
 
 
 class TodoToolResult(StrictModel):
@@ -666,7 +1006,7 @@ class AskUserQuestionToolResult(StrictModel):
     """Result from AskUserQuestion tool execution."""
 
     questions: Sequence[UserQuestion]
-    answers: Sequence[str]  # List of question text that was answered
+    answers: Mapping[str, str]  # Mapping of question text to user's answer
 
 
 # ==============================================================================
@@ -686,7 +1026,7 @@ class WebSearchToolResult(StrictModel):
 
     query: str
     results: Sequence[WebSearchResult] | str  # Can be list of results or string explanation
-    durationSeconds: int
+    durationSeconds: int | float  # Can be int or float depending on timing
 
 
 class WebFetchToolResult(StrictModel):
@@ -705,6 +1045,7 @@ class ExitPlanModeToolResult(StrictModel):
 
     plan: str
     isAgent: bool
+    filePath: PathField | None = None  # Plan file path (present in newer versions)
 
 
 class McpResource(StrictModel):
@@ -731,8 +1072,149 @@ class KillShellToolResult(StrictModel):
 
 # NOTE: BashOutput tool uses BashToolResult (same structure)
 
+
+# ==============================================================================
+# TaskOutput Polling Results
+# ==============================================================================
+
+
+class BackgroundTask(StrictModel):
+    """Background task state from TaskOutput tool polling."""
+
+    task_id: str
+    task_type: Literal['local_bash', 'local_agent']
+    status: Literal['running', 'completed', 'failed']
+    description: str
+    output: str
+    exitCode: int | None = None  # Null when running
+
+
+class TaskOutputPollingResult(StrictModel):
+    """Result from TaskOutput tool - polling background task state."""
+
+    retrieval_status: Literal['not_ready', 'success']
+    task: BackgroundTask
+
+
+# ==============================================================================
+# Async Task Launch Results
+# ==============================================================================
+
+
+class AsyncTaskLaunchResult(StrictModel):
+    """Result from launching async Task (with or without output file tracking)."""
+
+    isAsync: Literal[True]
+    status: Literal['async_launched']
+    agentId: str
+    description: str
+    prompt: str
+    outputFile: str | None = None  # Path to output file (sometimes missing)
+
+
+# ==============================================================================
+# Multi-Agent Retrieval Results
+# ==============================================================================
+
+
+class AgentCompletedState(StrictModel):
+    """State of a completed background agent."""
+
+    status: Literal['completed']
+    description: str
+    prompt: str
+    result: str
+
+
+class AgentsRetrievalResult(StrictModel):
+    """Result from retrieving multiple agent states."""
+
+    retrieval_status: Literal['not_ready', 'success']
+    agents: Mapping[str, AgentCompletedState]  # Empty dict when not_ready
+
+
+# ==============================================================================
+# KillShell Message Variant
+# ==============================================================================
+
+
+class KillShellMessageResult(StrictModel):
+    """Alternative KillShell result with message format (snake_case shell_id)."""
+
+    message: str  # e.g., "Successfully killed shell: b18fae0 (...)"
+    shell_id: str  # Note: uses snake_case, not camelCase
+
+
+# ==============================================================================
+# WebSearch Nested Structure Variant
+# ==============================================================================
+
+
+class WebSearchResultWrapper(StrictModel):
+    """Wrapper for web search results with tool use ID (nested structure variant)."""
+
+    tool_use_id: str
+    content: Sequence[WebSearchResult]
+
+
+class WebSearchNestedResult(StrictModel):
+    """Result from WebSearch tool with nested structure variant."""
+
+    query: str
+    results: Sequence[WebSearchResultWrapper | str]  # Can be wrapper or text
+    durationSeconds: float
+
+
+# ==============================================================================
+# Handoff Command Result
+# ==============================================================================
+
+
+class HandoffCommandResult(StrictModel):
+    """Result from handoff command execution."""
+
+    success: Literal[True]
+    commandName: Literal['handoff']
+    allowedTools: Sequence[str]
+
+
+# ==============================================================================
+# EnterPlanMode Tool Result
+# ==============================================================================
+
+
+class EnterPlanModeToolResult(StrictModel):
+    """Result from EnterPlanMode tool execution."""
+
+    message: str  # Plan mode entry confirmation
+
+
+# ==============================================================================
+# Unknown Tool Result (Fallback for MCP Tools)
+# ==============================================================================
+
+
+class UnknownToolResult(PermissiveModel):
+    """Fallback for unmodeled MCP tool results.
+
+    Uses PermissiveModel to accept any fields while remaining a proper type.
+    Allows detection via isinstance(x, UnknownToolResult) for observability.
+
+    MCP tools (64+ different tools) use this fallback. Claude Code built-in
+    tools must have typed models in the ToolInput/ToolResult.
+    """
+
+    pass
+
+
 # Union of all tool result types (validated left-to-right, most specific first)
-ToolUseResultUnion = (
+# NOTE: Order matters! More specific models (more required fields) should come first.
+# NOTE: Unlike ToolInput, there's no validator enforcing MCP-only fallback here.
+# This is intentional: tool results don't carry the tool name (it's in the previous
+# assistant message's ToolUseContent), so we can't easily distinguish MCP vs Claude Code.
+# Observability is provided by find_fallbacks() in validate_models.py instead.
+ToolResult = Annotated[
+    # Core tool results (most specific first)
     BashToolResult  # Also handles BashOutput
     | ReadToolResult
     | EditToolResult
@@ -740,14 +1222,22 @@ ToolUseResultUnion = (
     | GrepToolResult
     | GlobToolResult
     | TodoToolResult
-    | TaskToolResult
+    | TaskToolResult  # Completed sync task
+    | TaskOutputPollingResult  # Polling async task
+    | AsyncTaskLaunchResult  # Launched async task
+    | AgentsRetrievalResult  # Multi-agent polling
     | AskUserQuestionToolResult
-    | WebSearchToolResult
+    | WebSearchNestedResult  # Nested structure variant (more specific - has tool_use_id in results)
+    | WebSearchToolResult  # Simple structure
     | WebFetchToolResult
     | ExitPlanModeToolResult
-    | KillShellToolResult
-    | dict[str, Any]  # Fallback for MCP tools (64 different tools)
-)
+    | EnterPlanModeToolResult  # Plan mode entry
+    | KillShellMessageResult  # Message variant (has message + shell_id)
+    | KillShellToolResult  # Original variant (has success + shellId)
+    | HandoffCommandResult  # Handoff command
+    | UnknownToolResult,  # Fallback for MCP tools (PermissiveModel for observability)
+    pydantic.Field(union_mode='left_to_right'),
+]
 
 # ==============================================================================
 # Base Record
@@ -799,7 +1289,7 @@ class UserRecord(BaseRecord):
     toolUseResult: Annotated[
         Sequence[ToolResultContentBlock]  # TextContent/ImageContent with 'type' discriminator - must come first
         | Sequence[McpResource]  # MCP resources (no 'type' field, has 'name', 'uri', etc.)
-        | ToolUseResultUnion
+        | ToolResult
         | str
         | None,
         pydantic.Field(union_mode='left_to_right'),
@@ -1119,36 +1609,3 @@ class SessionAnalysis(StrictModel):
     summary_text: str | None = None
     cost_estimate_usd: float | None = None
     duration_seconds: float | None = None
-
-
-# ==============================================================================
-# Allowed Claude Tool Names (defined after all classes)
-# ==============================================================================
-
-# Mapping of modeled tool result classes to their tool names
-# This keeps the validator coupled to the actual model classes
-# NOTE: Using list of tuples because some classes map to multiple tool names
-MODELED_CLAUDE_TOOLS = [
-    (BashToolResult, 'Bash'),
-    (BashToolResult, 'BashOutput'),  # Same result structure as Bash
-    (ReadToolResult, 'Read'),
-    (EditToolResult, 'Edit'),
-    (WriteToolResult, 'Write'),
-    (GrepToolResult, 'Grep'),
-    (GlobToolResult, 'Glob'),
-    (TodoToolResult, 'TodoWrite'),
-    (TaskToolResult, 'Task'),
-    (AskUserQuestionToolResult, 'AskUserQuestion'),
-    (WebSearchToolResult, 'WebSearch'),
-    (WebFetchToolResult, 'WebFetch'),
-    (ExitPlanModeToolResult, 'ExitPlanMode'),
-    (EnterPlanModeToolInput, 'EnterPlanMode'),  # No-param tool input
-    (KillShellToolResult, 'KillShell'),
-    (McpResource, 'ListMcpResourcesTool'),  # Returns list[McpResource], not dict result
-    (SkillToolInput, 'Skill'),  # Input typed
-    (AgentOutputToolInput, 'AgentOutputTool'),  # Input typed
-    (TaskOutputToolInput, 'TaskOutput'),  # Input typed - uses task_id, timeout (ms)
-]
-
-# Allowed tool names (extracted from mapping)
-ALLOWED_CLAUDE_TOOL_NAMES = {tool_name for _, tool_name in MODELED_CLAUDE_TOOLS}

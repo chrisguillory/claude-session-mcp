@@ -31,13 +31,14 @@ from typing import Any, TypedDict
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from pydantic import ValidationError
+import pydantic
 
 from src.schemas.captures import (
     UnknownRequestCapture,
     UnknownResponseCapture,
     load_capture,
 )
+from src.schemas.types import PermissiveModel
 
 # ==============================================================================
 # Terminal Color Support
@@ -105,6 +106,15 @@ class ErrorGroup(TypedDict):
     errors: list[EnrichedFieldError]
 
 
+class FallbackUsage(TypedDict):
+    """Information about a PermissiveModel fallback being used."""
+
+    file: str  # Filename
+    path: str  # Dot-separated path to the fallback
+    fallback_type: str  # Class name (e.g., UnknownConfigValue)
+    extra_fields: dict[str, str]  # Field name -> type name
+
+
 class CaptureValidationResult(TypedDict):
     """Result of validating captures in a session directory."""
 
@@ -116,6 +126,7 @@ class CaptureValidationResult(TypedDict):
     capture_types: Counter[str]
     errors: list[str]  # Simple error messages for summary mode
     enriched_errors: list[EnrichedFieldError]  # Detailed errors for --errors mode
+    fallbacks: list[FallbackUsage]  # PermissiveModel instances found in captures
 
 
 class TotalStats(TypedDict):
@@ -127,6 +138,7 @@ class TotalStats(TypedDict):
     unknown_captures: int
     error_captures: int
     capture_types: Counter[str]
+    fallbacks: list[FallbackUsage]  # All PermissiveModel fallbacks found
 
 
 # ==============================================================================
@@ -418,6 +430,62 @@ def group_errors(errors: list[EnrichedFieldError]) -> list[ErrorGroup]:
 
 
 # ==============================================================================
+# Fallback Detection
+# ==============================================================================
+
+
+def find_fallbacks(obj: Any, path: str = '') -> list[FallbackUsage]:
+    """
+    Recursively find all PermissiveModel instances in a validated capture.
+
+    This detects where typed unions fell back to permissive fallback types
+    (e.g., UnknownConfigValue, UnknownSegmentTraits).
+
+    Args:
+        obj: The object to search (typically a validated capture)
+        path: Current dot-separated path for reporting
+
+    Returns:
+        List of FallbackUsage dicts describing each fallback found
+    """
+    fallbacks: list[FallbackUsage] = []
+
+    if isinstance(obj, PermissiveModel):
+        # Found a fallback! Record it with its extra fields
+        extra = obj.get_extra_fields()
+        fallbacks.append(
+            {
+                'file': '',  # Will be filled in by caller
+                'path': path or '(root)',
+                'fallback_type': type(obj).__name__,
+                'extra_fields': {k: type(v).__name__ for k, v in extra.items()},
+            }
+        )
+
+    if isinstance(obj, pydantic.BaseModel):
+        # Recurse into Pydantic model fields
+        for field_name in type(obj).model_fields:
+            value = getattr(obj, field_name, None)
+            if value is not None:
+                child_path = f'{path}.{field_name}' if path else field_name
+                fallbacks.extend(find_fallbacks(value, child_path))
+
+    elif isinstance(obj, dict):
+        # Recurse into dict values
+        for key, value in obj.items():
+            child_path = f'{path}.{key}' if path else str(key)
+            fallbacks.extend(find_fallbacks(value, child_path))
+
+    elif isinstance(obj, (list, tuple)):
+        # Recurse into sequence elements
+        for i, item in enumerate(obj):
+            child_path = f'{path}[{i}]' if path else f'[{i}]'
+            fallbacks.extend(find_fallbacks(item, child_path))
+
+    return fallbacks
+
+
+# ==============================================================================
 # Validation with Value Extraction
 # ==============================================================================
 
@@ -445,7 +513,7 @@ def validate_capture_with_values(
             return ('unknown', capture, [])
         return ('success', capture, [])
 
-    except ValidationError as e:
+    except pydantic.ValidationError as e:
         enriched_errors: list[EnrichedFieldError] = []
 
         for err in e.errors():
@@ -500,6 +568,7 @@ def validate_session_captures(session_dir: Path) -> CaptureValidationResult:
         'capture_types': Counter(),
         'errors': [],
         'enriched_errors': [],
+        'fallbacks': [],
     }
 
     for capture_file in sorted(session_dir.glob('*.json')):
@@ -514,6 +583,12 @@ def validate_session_captures(session_dir: Path) -> CaptureValidationResult:
         if status == 'success':
             results['typed_captures'] += 1
             results['capture_types'][type(result).__name__] += 1
+
+            # Check for PermissiveModel fallbacks in the validated capture
+            fallbacks = find_fallbacks(result)
+            for fb in fallbacks:
+                fb['file'] = capture_file.name
+            results['fallbacks'].extend(fallbacks)
 
         elif status == 'unknown':
             results['unknown_captures'] += 1
@@ -691,6 +766,37 @@ def print_summary_mode(
         print()
         print(f'{Colors.DIM}Tip: Use --errors for detailed error information{Colors.RESET}')
 
+    # Print PermissiveModel fallback usage
+    if total_stats['fallbacks']:
+        print()
+        print('PERMISSIVE MODEL FALLBACKS')
+        print('-' * 80)
+        print(f'{Colors.YELLOW}⚠ {len(total_stats["fallbacks"])} captures used fallback typing:{Colors.RESET}')
+
+        # Group fallbacks by type
+        fallback_by_type: dict[str, list[FallbackUsage]] = defaultdict(list)
+        for fb in total_stats['fallbacks']:
+            fallback_by_type[fb['fallback_type']].append(fb)
+
+        for fb_type, usages in sorted(fallback_by_type.items(), key=lambda x: -len(x[1])):
+            print(f'\n  {Colors.CYAN}{fb_type}{Colors.RESET}: {len(usages)} instance(s)')
+
+            # Show unique field patterns
+            field_patterns: Counter[str] = Counter()
+            for usage in usages:
+                if usage['extra_fields']:
+                    pattern = ', '.join(f'{k}: {v}' for k, v in sorted(usage['extra_fields'].items()))
+                    field_patterns[pattern] += 1
+
+            if field_patterns:
+                print(f'    {Colors.DIM}Field patterns:{Colors.RESET}')
+                for pattern, count in field_patterns.most_common(5):
+                    print(f'      {{{pattern}}} ({count}x)')
+                if len(field_patterns) > 5:
+                    print(f'      ... and {len(field_patterns) - 5} more patterns')
+            else:
+                print(f'    {Colors.DIM}(empty fallbacks - no extra fields){Colors.RESET}')
+
 
 # ==============================================================================
 # Main
@@ -766,6 +872,7 @@ def main() -> None:
         'unknown_captures': 0,
         'error_captures': 0,
         'capture_types': Counter(),
+        'fallbacks': [],
     }
 
     for session_dir in session_dirs:
@@ -778,6 +885,7 @@ def main() -> None:
         total_stats['unknown_captures'] += results['unknown_captures']
         total_stats['error_captures'] += results['error_captures']
         total_stats['capture_types'].update(results['capture_types'])
+        total_stats['fallbacks'].extend(results['fallbacks'])
 
     # Output based on mode
     if args.errors:

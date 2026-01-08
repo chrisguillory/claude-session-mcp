@@ -1,17 +1,13 @@
 """
-GCS and fallback capture classes.
+GCS (Google Cloud Storage) capture classes.
 
-This module contains:
-- GCS version check captures (storage.googleapis.com)
-- Unknown/fallback captures for unmapped endpoints
+This module contains captures for storage.googleapis.com traffic,
+specifically the version check endpoint used by Claude Code.
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
-from typing import Any, Literal
-
-import pydantic
+from typing import Literal
 
 from src.schemas.captures.base import RequestCapture, ResponseCapture
 from src.schemas.cc_internal_api import EmptyBody
@@ -46,71 +42,3 @@ class GCSVersionResponseCapture(ResponseCapture):
 
     host: Literal['storage.googleapis.com']
     body: RawTextBody
-
-
-# ==============================================================================
-# Fallback for unknown endpoints
-# ==============================================================================
-
-
-class UnknownRequestCapture(RequestCapture):
-    """
-    Fallback capture for unmapped request endpoints.
-
-    Allows the system to gracefully handle new APIs without breaking validation.
-    """
-
-    # Body can be dict OR list (Datadog sends list of log entries).
-    # Fallback for unmodeled endpoints; should shrink as coverage increases.
-    body: Mapping[str, Any] | Sequence[Any] = pydantic.Field(default_factory=dict)  # noqa: loose-typing
-
-
-class UnknownResponseCapture(ResponseCapture):
-    """
-    Fallback capture for unmapped response endpoints.
-
-    Allows the system to gracefully handle new APIs without breaking validation.
-    """
-
-    # Body can be dict OR list.
-    # Fallback for unmodeled endpoints; should shrink as coverage increases.
-    body: Mapping[str, Any] | Sequence[Any] = pydantic.Field(default_factory=dict)  # noqa: loose-typing
-    # Fallback for unmodeled SSE events.
-    events: Sequence[Mapping[str, Any]] = pydantic.Field(default_factory=list)  # noqa: loose-typing
-
-
-# ==============================================================================
-# Proxy Error (direction="error")
-# ==============================================================================
-
-
-class ProxyErrorRequest(StrictModel):
-    """Nested request info in a proxy error capture."""
-
-    host: str
-    url: str  # Full URL
-    method: str
-
-
-class ProxyErrorDetail(StrictModel):
-    """Error detail in a proxy error capture."""
-
-    message: str  # e.g., "Client disconnected."
-    timestamp: float  # Unix timestamp
-
-
-class ProxyErrorCapture(StrictModel):
-    """
-    Capture of a proxy error (e.g., client disconnected).
-
-    These are mitmproxy errors, not actual Claude Code API traffic.
-    Has direction="error" and contains error message + original request.
-    """
-
-    direction: Literal['error']
-    error: ProxyErrorDetail  # Nested error info
-    request: ProxyErrorRequest  # Original request that failed
-    flow_id: str  # Flow identifier from mitmproxy
-    sequence: int  # Sequence number in capture session
-    session_id: str  # Claude Code session ID
-    timestamp_iso: str  # ISO timestamp

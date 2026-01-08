@@ -98,4 +98,4 @@ class LineageFile(StrictModel):
 
     schema_version: str = '1.0'
     # Intentionally mutable - this model is frozen=False to allow dict mutation
-    sessions: dict[str, LineageEntry] = pydantic.Field(default_factory=dict)  # noqa: mutable-type
+    sessions: dict[str, LineageEntry] = pydantic.Field(default_factory=dict)  # check_schema_typing.py: mutable-type
