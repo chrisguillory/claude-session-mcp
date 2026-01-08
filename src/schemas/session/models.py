@@ -114,6 +114,7 @@ class StrictModel(BaseStrictModel):
 T = TypeVar('T', bound=pydantic.BaseModel)
 
 
+# noinspection PyNewStyleGenericSyntax
 def validated_copy[T: pydantic.BaseModel](model: T, update: Mapping[str, Any]) -> T:
     """
     Create a validated copy of a model with updates.
@@ -835,6 +836,7 @@ class ApiError(StrictModel):
     error: ApiErrorResponse | None = None  # Can be missing for some errors (e.g., 503)
 
 
+# noinspection PyShadowingBuiltins
 class ConnectionError(StrictModel):
     """Connection error details for network failures."""
 
