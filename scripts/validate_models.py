@@ -8,10 +8,25 @@ Validate Pydantic models against all Claude Code session files.
 
 This script finds all .jsonl session files in ~/.claude/projects/*/ and validates
 them against the Pydantic models to ensure complete schema coverage.
+
+Usage:
+    ./scripts/validate_models.py [OPTIONS] [file]
+
+Options:
+    --errors, -e     Show detailed error information with grouping and actual values
+    --full, -f       Show complete values without truncation (implies --errors)
+    --help, -h       Show this help message
+
+Examples:
+    ./scripts/validate_models.py                    # Summary mode (default)
+    ./scripts/validate_models.py --errors           # Debugging mode with grouped errors
+    ./scripts/validate_models.py --errors --full    # Full values for AI/detailed analysis
+    ./scripts/validate_models.py -e path/to/file.jsonl  # Investigate specific file
 """
 
 from __future__ import annotations
 
+import argparse
 import json
 import math
 import sys
@@ -27,6 +42,73 @@ from pydantic import ValidationError
 
 from src.schemas.session import SessionRecordAdapter
 from src.schemas.types import PermissiveModel
+
+# ==============================================================================
+# Terminal Color Support
+# ==============================================================================
+
+
+class Colors:
+    """ANSI color codes for terminal output."""
+
+    RED = '\033[91m'
+    YELLOW = '\033[93m'
+    BLUE = '\033[94m'
+    CYAN = '\033[96m'
+    GREEN = '\033[92m'
+    BOLD = '\033[1m'
+    DIM = '\033[2m'
+    RESET = '\033[0m'
+
+    @classmethod
+    def disable(cls) -> None:
+        """Disable all colors (for non-TTY output)."""
+        cls.RED = ''
+        cls.YELLOW = ''
+        cls.BLUE = ''
+        cls.CYAN = ''
+        cls.GREEN = ''
+        cls.BOLD = ''
+        cls.DIM = ''
+        cls.RESET = ''
+
+
+# Disable colors if not a TTY
+if not sys.stdout.isatty():
+    Colors.disable()
+
+
+# ==============================================================================
+# Type Definitions
+# ==============================================================================
+
+
+class EnrichedFieldError(TypedDict):
+    """Detailed error info including the actual value at the error path."""
+
+    file: str  # Filename (not full path)
+    file_path: Path  # Full path for reference
+    line: int  # Line number in JSONL
+    record_type: str  # Record type (user, assistant, etc.)
+    loc: tuple[str | int, ...]  # Original location tuple
+    loc_str: str  # Dot-separated path
+    normalized_loc: str  # Path with Union[X,Y] patterns stripped
+    generalized_loc: str  # Path with numeric indices replaced by *
+    msg: str  # Error message
+    error_type: str  # Error type like "extra_forbidden"
+    value: Any  # The actual value at that path
+    value_keys: list[str] | None  # Keys if value is a dict
+    value_type: str  # Type name of the value
+
+
+class ErrorGroup(TypedDict):
+    """A group of related errors with the same pattern."""
+
+    error_type: str
+    generalized_path: str
+    value_shape: str  # "object with keys [a, b, c]" or "string" etc.
+    count: int
+    errors: list[EnrichedFieldError]
 
 
 class FallbackUsage(TypedDict):
@@ -49,6 +131,7 @@ class FileValidationResult(TypedDict):
     invalid_records: int
     record_types: Counter[str]
     errors: list[str]
+    enriched_errors: list[EnrichedFieldError]
     unknown_types: set[str]
     unknown_content_types: set[str]
     missing_fields: defaultdict[str, list[str]]
@@ -68,18 +151,273 @@ class TotalStats(TypedDict):
     fallbacks: list[FallbackUsage]
 
 
-def find_all_session_files() -> list[Path]:
-    """Find all .jsonl session files in ~/.claude/projects/*/"""
-    claude_dir = Path.home() / '.claude' / 'projects'
-    if not claude_dir.exists():
-        return []
+# ==============================================================================
+# Path Manipulation Utilities
+# ==============================================================================
 
-    session_files: list[Path] = []
-    for project_dir in claude_dir.iterdir():
-        if project_dir.is_dir():
-            session_files.extend(project_dir.glob('*.jsonl'))
 
-    return sorted(session_files)
+def normalize_path(loc: tuple[str | int, ...]) -> str:
+    """
+    Normalize a Pydantic error location path.
+
+    Strips out Union[X, Y] and model name annotations that Pydantic adds
+    for discriminated unions, producing a cleaner path for display.
+
+    Example:
+        ('message', 'content', 'Union[ThinkingContent, TextContent]', 'ToolUseContent', 'input')
+        -> 'message.content.input'
+    """
+    parts = []
+    skip_next = False
+
+    for part in loc:
+        part_str = str(part)
+
+        # Skip Union[...] annotations
+        if part_str.startswith('Union['):
+            skip_next = True  # Skip the following model name too
+            continue
+
+        # Skip model names that follow Union[...]
+        if skip_next:
+            skip_next = False
+            continue
+
+        # Skip function/validation wrapper names
+        if part_str.startswith('function-'):
+            continue
+
+        parts.append(part_str)
+
+    return '.'.join(parts)
+
+
+def generalize_path(loc: tuple[str | int, ...]) -> str:
+    """
+    Generalize a path by replacing numeric indices with *.
+
+    Used for grouping errors that occur at different array positions.
+
+    Example:
+        ('message', 'content', 2, 'input', 'pattern')
+        -> 'message.content.*.input.pattern'
+    """
+    normalized = normalize_path(loc)
+    # Replace numeric path segments with *
+    parts = normalized.split('.')
+    generalized_parts = ['*' if part.isdigit() else part for part in parts]
+    return '.'.join(generalized_parts)
+
+
+# ==============================================================================
+# Value Extraction and Formatting
+# ==============================================================================
+
+
+def extract_value_at_path(data: dict[str, Any], loc: tuple[str | int, ...]) -> Any:
+    """
+    Extract the value at a given path in a nested structure.
+
+    Handles Pydantic's path annotations gracefully:
+    - Skips Union[...] annotations
+    - Skips type/model names that don't exist as keys
+    - Skips function- prefixed validation wrappers
+
+    Returns the value at the path, or a dict with __missing__ info if not found.
+    """
+    current = data
+
+    for part in loc:
+        part_str = str(part)
+
+        # Skip Union[...] annotations
+        if part_str.startswith('Union['):
+            continue
+
+        # Skip function/validation wrapper names
+        if part_str.startswith('function-'):
+            continue
+
+        try:
+            if isinstance(current, dict):
+                if part_str in current:
+                    current = current[part_str]
+                elif isinstance(part, int):
+                    # Numeric key in a dict - unusual but handle it
+                    if str(part) in current:
+                        current = current[str(part)]
+                    else:
+                        return {'__missing__': part, '__parent_keys__': list(current.keys())}
+                else:
+                    # Key doesn't exist - might be a Pydantic type annotation
+                    if (
+                        part_str
+                        and part_str[0].isupper()
+                        or part_str.endswith('Record')
+                        or part_str.endswith('Content')
+                        or 'Tool' in part_str
+                    ):
+                        # Skip this - it's likely a type annotation
+                        continue
+                    # Path truly doesn't exist - return parent info
+                    return {'__missing__': part_str, '__parent_keys__': list(current.keys())}
+
+            elif isinstance(current, list):
+                if isinstance(part, int) and 0 <= part < len(current):
+                    current = current[part]
+                else:
+                    return {'__missing__': part, '__parent_length__': len(current)}
+            else:
+                # Can't traverse further
+                return current
+
+        except (KeyError, IndexError, TypeError):
+            return None
+
+    return current
+
+
+def format_value_shape(value: Any) -> str:
+    """
+    Describe the shape of a value for grouping and display.
+
+    Returns strings like:
+        "object with keys [a, b, c]"
+        "array with 5 elements"
+        "string"
+        "null"
+    """
+    if value is None:
+        return 'null'
+    elif isinstance(value, dict):
+        if '__missing__' in value:
+            return f'missing (parent has keys {sorted(value.get("__parent_keys__", []))})'
+        keys = sorted(value.keys())
+        if len(keys) <= 7:
+            return f'object with keys {keys}'
+        else:
+            return f'object with {len(keys)} keys [{", ".join(keys[:5])}, ...]'
+    elif isinstance(value, list):
+        return f'array with {len(value)} elements'
+    elif isinstance(value, bool):
+        return f'boolean ({value})'
+    elif isinstance(value, int):
+        return 'integer'
+    elif isinstance(value, float):
+        return 'float'
+    elif isinstance(value, str):
+        if len(value) > 50:
+            return f'string ({len(value)} chars)'
+        return 'string'
+    else:
+        return type(value).__name__
+
+
+def truncate_value(value: Any, full: bool = False) -> str:
+    """
+    Format a value for display, with optional truncation.
+
+    Args:
+        value: The value to format
+        full: If True, don't truncate
+    """
+    if full:
+        return json.dumps(value, indent=2, ensure_ascii=False)
+
+    if value is None:
+        return 'null'
+    elif isinstance(value, dict):
+        if '__missing__' in value:
+            parent_keys = value.get('__parent_keys__', [])
+            return f'<missing field - parent has keys: {parent_keys}>'
+
+        keys = list(value.keys())
+        if len(keys) <= 5:
+            # Show all keys with truncated values
+            items = []
+            for k in keys:
+                v = value[k]
+                v_str = json.dumps(v, ensure_ascii=False)
+                if len(v_str) > 50:
+                    v_str = v_str[:47] + '...'
+                items.append(f'"{k}": {v_str}')
+            return '{' + ', '.join(items) + '}'
+        else:
+            # Show first 5 keys
+            items = []
+            for k in keys[:5]:
+                v = value[k]
+                v_str = json.dumps(v, ensure_ascii=False)
+                if len(v_str) > 30:
+                    v_str = v_str[:27] + '...'
+                items.append(f'"{k}": {v_str}')
+            return '{' + ', '.join(items) + f', ... (+{len(keys) - 5} more keys)' + '}'
+
+    elif isinstance(value, list):
+        if len(value) <= 3:
+            items = [json.dumps(v, ensure_ascii=False)[:50] for v in value]
+            return '[' + ', '.join(items) + ']'
+        else:
+            items = [json.dumps(v, ensure_ascii=False)[:30] for v in value[:3]]
+            return '[' + ', '.join(items) + f', ... (+{len(value) - 3} more)]'
+
+    elif isinstance(value, str):
+        if len(value) <= 200:
+            return json.dumps(value, ensure_ascii=False)
+        return json.dumps(value[:197] + '...', ensure_ascii=False)
+
+    else:
+        result = json.dumps(value, ensure_ascii=False)
+        if len(result) > 200:
+            return result[:197] + '...'
+        return result
+
+
+# ==============================================================================
+# Error Grouping
+# ==============================================================================
+
+
+def compute_grouping_key(error: EnrichedFieldError) -> tuple[str, str, str]:
+    """
+    Compute the grouping key for an error.
+
+    Groups by: (error_type, generalized_path, value_shape)
+    """
+    return (
+        error['error_type'],
+        error['generalized_loc'],
+        format_value_shape(error['value']),
+    )
+
+
+def group_errors(errors: list[EnrichedFieldError]) -> list[ErrorGroup]:
+    """
+    Group errors by their pattern.
+
+    Returns groups sorted by count (most frequent first).
+    """
+    groups: dict[tuple[str, str, str], list[EnrichedFieldError]] = defaultdict(list)
+
+    for error in errors:
+        key = compute_grouping_key(error)
+        groups[key].append(error)
+
+    result: list[ErrorGroup] = []
+    for (error_type, gen_path, value_shape), group_errors_list in groups.items():
+        result.append(
+            {
+                'error_type': error_type,
+                'generalized_path': gen_path,
+                'value_shape': value_shape,
+                'count': len(group_errors_list),
+                'errors': group_errors_list,
+            }
+        )
+
+    # Sort by count descending
+    result.sort(key=lambda g: -g['count'])
+    return result
 
 
 # ==============================================================================
@@ -147,6 +485,25 @@ def find_fallbacks(
     return fallbacks
 
 
+# ==============================================================================
+# File Validation
+# ==============================================================================
+
+
+def find_all_session_files() -> list[Path]:
+    """Find all .jsonl session files in ~/.claude/projects/*/"""
+    claude_dir = Path.home() / '.claude' / 'projects'
+    if not claude_dir.exists():
+        return []
+
+    session_files: list[Path] = []
+    for project_dir in claude_dir.iterdir():
+        if project_dir.is_dir():
+            session_files.extend(project_dir.glob('*.jsonl'))
+
+    return sorted(session_files)
+
+
 def validate_session_file(session_file: Path) -> FileValidationResult:
     """Validate a single session file and return statistics."""
     results: FileValidationResult = {
@@ -156,6 +513,7 @@ def validate_session_file(session_file: Path) -> FileValidationResult:
         'invalid_records': 0,
         'record_types': Counter(),
         'errors': [],
+        'enriched_errors': [],
         'unknown_types': set(),
         'unknown_content_types': set(),
         'missing_fields': defaultdict(list),
@@ -195,23 +553,46 @@ def validate_session_file(session_file: Path) -> FileValidationResult:
                     )
 
             except ValidationError as e:
+                results['invalid_records'] += 1
+
                 # Check if this is a validator error about unmodeled tools
                 is_validator_error = False
                 for error in e.errors():
                     error_msg_str = str(error.get('ctx', {}).get('error', ''))
-                    if 'Unmodeled Claude Code' in error_msg_str:
+                    if 'fell through to UnknownToolInput' in error_msg_str:
                         is_validator_error = True
-                        # Surface this error clearly!
-                        results['invalid_records'] += 1
                         error_msg = f'Line {line_num} ({record_type}): ⚠️  VALIDATOR ERROR: {error_msg_str}'
                         results['errors'].append(error_msg)
                         break
 
                 if not is_validator_error:
-                    # Regular validation error
-                    results['invalid_records'] += 1
-                    error_msg = f'Line {line_num} ({record_type}): {str(e)[:500]}'
+                    # Regular validation error - extract enriched info
+                    error_msg = f'Line {line_num} ({record_type}): {len(e.errors())} validation errors'
                     results['errors'].append(error_msg)
+
+                    for err in e.errors():
+                        loc = err['loc']
+                        value = extract_value_at_path(record_data, loc)
+
+                        results['enriched_errors'].append(
+                            {
+                                'file': session_filename,
+                                'file_path': session_file,
+                                'line': line_num,
+                                'record_type': record_type,
+                                'loc': loc,
+                                'loc_str': '.'.join(str(x) for x in loc),
+                                'normalized_loc': normalize_path(loc),
+                                'generalized_loc': generalize_path(loc),
+                                'msg': err['msg'],
+                                'error_type': err['type'],
+                                'value': value,
+                                'value_keys': list(value.keys())
+                                if isinstance(value, dict) and '__missing__' not in value
+                                else None,
+                                'value_type': type(value).__name__ if value is not None else 'null',
+                            }
+                        )
 
             except Exception as e:
                 results['invalid_records'] += 1
@@ -228,6 +609,7 @@ def validate_session_file(session_file: Path) -> FileValidationResult:
                             'system',
                             'file-history-snapshot',
                             'queue-operation',
+                            'custom-title',
                         ]
                         if record_data['type'] not in known_types:
                             results['unknown_types'].add(record_data['type'])
@@ -246,6 +628,7 @@ def validate_session_file(session_file: Path) -> FileValidationResult:
                                         'tool_use',
                                         'tool_result',
                                         'image',
+                                        'document',
                                     ]
                                     if item_type not in known_content_types:
                                         results['unknown_content_types'].add(item_type)
@@ -259,51 +642,113 @@ def validate_session_file(session_file: Path) -> FileValidationResult:
     return results
 
 
-def main() -> None:
-    print('=' * 80)
-    print('Claude Code Session Model Validation')
-    print('=' * 80)
-    print()
+# ==============================================================================
+# Output Formatting
+# ==============================================================================
 
-    session_files = find_all_session_files()
 
-    if not session_files:
-        print('No session files found in ~/.claude/projects/*/')
+def format_error_group(group: ErrorGroup, full: bool = False) -> str:
+    """Format an error group for display."""
+    lines = []
+
+    # Header with count, type, and path
+    error_type = group['error_type']
+    color = Colors.RED if 'forbidden' in error_type else Colors.YELLOW if 'missing' in error_type else Colors.BLUE
+
+    lines.append(
+        f'{Colors.BOLD}{group["count"]} error(s):{Colors.RESET} '
+        f'{color}{error_type}{Colors.RESET} at '
+        f'{Colors.CYAN}{group["generalized_path"]}{Colors.RESET}'
+    )
+
+    # Value shape
+    lines.append(f'  {Colors.DIM}Shape:{Colors.RESET} {group["value_shape"]}')
+
+    # Example
+    example = group['errors'][0]
+    lines.append(f'  {Colors.DIM}Example file:{Colors.RESET} {example["file"]}:{example["line"]}')
+    lines.append(f'  {Colors.DIM}Record type:{Colors.RESET} {example["record_type"]}')
+    lines.append(f'  {Colors.DIM}Example path:{Colors.RESET} {example["normalized_loc"]}')
+    lines.append(f'  {Colors.DIM}Error message:{Colors.RESET} {example["msg"]}')
+    lines.append(f'  {Colors.DIM}Example value:{Colors.RESET}')
+
+    # Format value with indentation
+    value_str = truncate_value(example['value'], full=full)
+    lines.extend(f'    {line}' for line in value_str.split('\n'))
+
+    # Affected files
+    all_files = sorted({f'{e["file"]}:{e["line"]}' for e in group['errors']})
+    if len(all_files) == 1:
+        pass  # Already shown as example
+    elif len(all_files) <= 10 or full:
+        lines.append(f'  {Colors.DIM}Affected locations ({len(all_files)}):{Colors.RESET}')
+        lines.extend(f'    - {f}' for f in all_files)
+    else:
+        lines.append(f'  {Colors.DIM}Affected locations ({len(all_files)}):{Colors.RESET}')
+        lines.extend(f'    - {f}' for f in all_files[:10])
+        lines.append(f'    ... and {len(all_files) - 10} more')
+
+    return '\n'.join(lines)
+
+
+def print_errors_mode(all_results: list[FileValidationResult], full: bool = False) -> None:
+    """Print output in --errors mode: grouped errors first, summary at end."""
+
+    # Collect all enriched errors
+    all_errors: list[EnrichedFieldError] = []
+    for result in all_results:
+        all_errors.extend(result['enriched_errors'])
+
+    if not all_errors:
+        print(f'{Colors.GREEN}✓ No validation errors found!{Colors.RESET}')
         return
 
-    print(f'Found {len(session_files)} session files')
+    # Group errors
+    groups = group_errors(all_errors)
+
+    # Print each group
+    print(f'{Colors.BOLD}VALIDATION ERRORS{Colors.RESET}')
+    print('=' * 80)
     print()
 
-    all_results: list[FileValidationResult] = []
-    total_stats: TotalStats = {
-        'files': 0,
-        'total_records': 0,
-        'valid_records': 0,
-        'invalid_records': 0,
-        'record_types': Counter(),
-        'unknown_types': set(),
-        'unknown_content_types': set(),
-        'fallbacks': [],
-    }
+    for i, group in enumerate(groups):
+        if i > 0:
+            print()
+            print('-' * 40)
+            print()
+        print(format_error_group(group, full=full))
 
-    for session_file in session_files:
-        results = validate_session_file(session_file)
-        all_results.append(results)
+    # Summary at end
+    print()
+    print('=' * 80)
+    print(f'{Colors.BOLD}SUMMARY{Colors.RESET}')
+    print('-' * 80)
 
-        total_stats['files'] += 1
-        total_stats['total_records'] += results['total_records']
-        total_stats['valid_records'] += results['valid_records']
-        total_stats['invalid_records'] += results['invalid_records']
-        total_stats['record_types'].update(results['record_types'])
-        total_stats['unknown_types'].update(results['unknown_types'])
-        total_stats['unknown_content_types'].update(results['unknown_content_types'])
-        total_stats['fallbacks'].extend(results['fallbacks'])
+    total_errors = sum(g['count'] for g in groups)
+    affected_files = len({e['file'] for e in all_errors})
 
-    # Print summary
+    print(f'Total errors: {Colors.RED}{total_errors}{Colors.RESET}')
+    print(f'Unique patterns: {Colors.YELLOW}{len(groups)}{Colors.RESET}')
+    print(f'Affected files: {Colors.CYAN}{affected_files}{Colors.RESET}')
+
+    # Action summary
+    if len(groups) == 1:
+        print(f'\n{Colors.DIM}→ Fix 1 schema issue to resolve all {total_errors} errors{Colors.RESET}')
+    else:
+        print(f'\n{Colors.DIM}→ Fix {len(groups)} distinct schema issues{Colors.RESET}')
+
+
+def print_summary_mode(
+    all_results: list[FileValidationResult],
+    total_stats: TotalStats,
+) -> None:
+    """Print output in summary mode (default): stats first, brief error list."""
+
     print('SUMMARY')
     print('-' * 80)
     print(f'Total files processed: {total_stats["files"]}')
     print(f'Total records: {total_stats["total_records"]}')
+
     # Use floor for valid% (never overstate) and ceil for invalid% (never understate)
     valid_pct = math.floor(total_stats['valid_records'] / total_stats['total_records'] * 10000) / 100
     invalid_pct = math.ceil(total_stats['invalid_records'] / total_stats['total_records'] * 10000) / 100
@@ -346,12 +791,16 @@ def main() -> None:
                 for error in result['errors'][:3]:
                     print(f'    - {error}')
 
+        if total_stats['invalid_records'] > 0:
+            print()
+            print(f'{Colors.DIM}Tip: Use --errors for detailed error information{Colors.RESET}')
+
     # Print PermissiveModel fallback usage (MCP tools)
     if total_stats['fallbacks']:
         print()
         print('PERMISSIVE MODEL FALLBACKS')
         print('-' * 80)
-        print(f'⚠ {len(total_stats["fallbacks"])} records used fallback typing:')
+        print(f'{Colors.YELLOW}⚠ {len(total_stats["fallbacks"])} records used fallback typing:{Colors.RESET}')
 
         # Group fallbacks by type
         fallback_by_type: dict[str, list[FallbackUsage]] = defaultdict(list)
@@ -359,7 +808,7 @@ def main() -> None:
             fallback_by_type[fb['fallback_type']].append(fb)
 
         for fb_type, usages in sorted(fallback_by_type.items(), key=lambda x: -len(x[1])):
-            print(f'\n  {fb_type}: {len(usages)} instance(s)')
+            print(f'\n  {Colors.CYAN}{fb_type}{Colors.RESET}: {len(usages)} instance(s)')
 
             # Count tool name patterns (for MCP tools)
             tool_patterns: Counter[str] = Counter()
@@ -374,14 +823,142 @@ def main() -> None:
                 if len(tool_patterns) > 10:
                     print(f'      ... and {len(tool_patterns) - 10} more tools')
 
+
+# ==============================================================================
+# Main
+# ==============================================================================
+
+
+def parse_args() -> argparse.Namespace:
+    """Parse command line arguments."""
+    parser = argparse.ArgumentParser(
+        description='Validate session schemas against Claude Code session files.',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  %(prog)s                      Summary mode (default)
+  %(prog)s --errors             Debugging mode with grouped errors
+  %(prog)s --errors --full      Full values for AI/detailed analysis
+  %(prog)s -ef                  Short form of --errors --full
+  %(prog)s -e path/to/file.jsonl   Investigate specific file
+        """,
+    )
+
+    parser.add_argument(
+        'file',
+        nargs='?',
+        type=Path,
+        default=None,
+        help='Specific .jsonl file to validate (default: all files in ~/.claude/projects/)',
+    )
+
+    parser.add_argument(
+        '-e',
+        '--errors',
+        action='store_true',
+        help='Show detailed error information with grouping and actual values',
+    )
+
+    parser.add_argument(
+        '-f',
+        '--full',
+        action='store_true',
+        help='Show complete values without truncation (implies --errors)',
+    )
+
+    return parser.parse_args()
+
+
+def main() -> None:
+    args = parse_args()
+
+    # --full implies --errors
+    if args.full:
+        args.errors = True
+
+    print('=' * 80)
+    print('Claude Code Session Model Validation')
+    print('=' * 80)
+    print()
+
+    # Find session files
+    if args.file:
+        if not args.file.exists():
+            print(f'Error: File not found: {args.file}')
+            sys.exit(1)
+        session_files = [args.file]
+        print(f'Validating single file: {args.file}')
+    else:
+        session_files = find_all_session_files()
+        if not session_files:
+            print('No session files found in ~/.claude/projects/*/')
+            return
+        print(f'Found {len(session_files)} session files')
+    print()
+
+    # Validate all files
+    all_results: list[FileValidationResult] = []
+    total_stats: TotalStats = {
+        'files': 0,
+        'total_records': 0,
+        'valid_records': 0,
+        'invalid_records': 0,
+        'record_types': Counter(),
+        'unknown_types': set(),
+        'unknown_content_types': set(),
+        'fallbacks': [],
+    }
+
+    for session_file in session_files:
+        results = validate_session_file(session_file)
+        all_results.append(results)
+
+        total_stats['files'] += 1
+        total_stats['total_records'] += results['total_records']
+        total_stats['valid_records'] += results['valid_records']
+        total_stats['invalid_records'] += results['invalid_records']
+        total_stats['record_types'].update(results['record_types'])
+        total_stats['unknown_types'].update(results['unknown_types'])
+        total_stats['unknown_content_types'].update(results['unknown_content_types'])
+        total_stats['fallbacks'].extend(results['fallbacks'])
+
+    # Output based on mode
+    if args.errors:
+        print_errors_mode(all_results, full=args.full)
+        print()
+        # Also print fallback info in errors mode
+        if total_stats['fallbacks']:
+            print('PERMISSIVE MODEL FALLBACKS')
+            print('-' * 80)
+            print(f'{Colors.YELLOW}⚠ {len(total_stats["fallbacks"])} records used fallback typing:{Colors.RESET}')
+
+            fallback_by_type: dict[str, list[FallbackUsage]] = defaultdict(list)
+            for fb in total_stats['fallbacks']:
+                fallback_by_type[fb['fallback_type']].append(fb)
+
+            for fb_type, usages in sorted(fallback_by_type.items(), key=lambda x: -len(x[1])):
+                print(f'\n  {Colors.CYAN}{fb_type}{Colors.RESET}: {len(usages)} instance(s)')
+                tool_patterns: Counter[str] = Counter()
+                for usage in usages:
+                    if usage['tool_name']:
+                        tool_patterns[usage['tool_name']] += 1
+                if tool_patterns:
+                    print('    Tool patterns:')
+                    for tool_name, count in tool_patterns.most_common(10):
+                        print(f'      {tool_name} ({count}x)')
+                    if len(tool_patterns) > 10:
+                        print(f'      ... and {len(tool_patterns) - 10} more tools')
+    else:
+        print_summary_mode(all_results, total_stats)
+
     # Exit code based on validation success
     if total_stats['invalid_records'] == 0:
         print()
-        print('✓ All records validated successfully!')
+        print(f'{Colors.GREEN}✓ All records validated successfully!{Colors.RESET}')
         sys.exit(0)
     else:
         print()
-        print(f'✗ Validation failed for {total_stats["invalid_records"]} records')
+        print(f'{Colors.RED}✗ Validation failed for {total_stats["invalid_records"]} records{Colors.RESET}')
         sys.exit(1)
 
 
