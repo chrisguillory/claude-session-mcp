@@ -77,7 +77,7 @@ Round-trip serialization:
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from typing import Annotated, Any, Literal, TypeVar
+from typing import Annotated, Any, Literal
 
 import pydantic
 
@@ -92,7 +92,7 @@ SCHEMA_VERSION = '0.2.1'  # Phase 3: Complete tool INPUT modeling
 CLAUDE_CODE_MIN_VERSION = '2.0.35'
 CLAUDE_CODE_MAX_VERSION = '2.1.1'
 LAST_VALIDATED = '2026-01-08'
-VALIDATION_RECORD_COUNT = 384_354
+VALIDATION_RECORD_COUNT = 402_997
 
 
 # ==============================================================================
@@ -108,10 +108,6 @@ class StrictModel(BaseStrictModel):
     """
 
     pass
-
-
-# Type variable for validated_copy function
-T = TypeVar('T', bound=pydantic.BaseModel)
 
 
 # noinspection PyNewStyleGenericSyntax
