@@ -82,7 +82,7 @@ from typing import Annotated, Any, Literal, TypeVar
 import pydantic
 
 from src.schemas.session.markers import PathField, PathListField
-from src.schemas.types import BaseStrictModel, ModelId
+from src.schemas.types import BaseStrictModel, ModelId, PermissiveModel
 
 # ==============================================================================
 # Schema Version
@@ -212,9 +212,27 @@ class TaskOutputToolInput(StrictModel):
     timeout: int | None = None  # Optional timeout in milliseconds
 
 
-# Union of tool inputs (typed models first, dict fallback for MCP tools)
+# ==============================================================================
+# Unknown Tool Input (Fallback for MCP Tools)
+# ==============================================================================
+
+
+class UnknownToolInput(PermissiveModel):
+    """Fallback for unmodeled MCP tool inputs.
+
+    Uses PermissiveModel to accept any fields while remaining a proper type.
+    Allows detection via isinstance(x, UnknownToolInput) for observability.
+
+    MCP tools (64+ different tools) use this fallback. Claude Code built-in
+    tools must be explicitly modeled (see MODELED_CLAUDE_TOOLS).
+    """
+
+    pass
+
+
+# Union of tool inputs (typed models first, PermissiveModel fallback for MCP tools)
 # NOTE: Order matters! More specific (more required fields) should come first.
-# EnterPlanModeToolInput is empty (no fields), so it must come last before dict fallback.
+# EnterPlanModeToolInput is empty (no fields), so it must come last before fallback.
 ToolInput = Annotated[
     ReadToolInput  # file_path required
     | WriteToolInput  # file_path, content required
@@ -222,8 +240,8 @@ ToolInput = Annotated[
     | AgentOutputToolInput  # agentId required
     | TaskOutputToolInput  # task_id required
     | SkillToolInput  # command required
-    | EnterPlanModeToolInput  # No required fields - must be last before dict!
-    | dict[str, Any],  # Fallback for MCP tools
+    | EnterPlanModeToolInput  # No required fields - must be last before fallback!
+    | UnknownToolInput,  # Fallback for MCP tools (PermissiveModel for observability)
     pydantic.Field(union_mode='left_to_right'),
 ]
 
@@ -269,33 +287,29 @@ class ToolUseContent(StrictModel):
     type: Literal['tool_use']
     id: str
     name: str
-    input: ToolInput  # Typed for Read/Write/Edit, dict for MCP tools only
+    input: ToolInput  # Typed for Claude Code tools, UnknownToolInput for MCP tools
 
     @pydantic.field_validator('input', mode='after')
     @classmethod
     def validate_mcp_tool_fallback(cls, v: ToolInput, info: pydantic.ValidationInfo) -> ToolInput:
         """
-        Enforce that only MCP tools (starting with 'mcp__') can use dict fallback.
+        Enforce that only MCP tools (starting with 'mcp__') can use UnknownToolInput fallback.
         All Claude Code built-in tools must be explicitly modeled.
 
         Uses ALLOWED_CLAUDE_TOOL_NAMES which is derived from MODELED_CLAUDE_TOOLS,
         keeping this validator coupled to the actual model classes.
         """
-        # Only validate if input is a plain dict (not one of our typed model instances)
-        if isinstance(v, dict):
-            # Check if it's a typed model (Read/Write/Edit have file_path)
-            is_typed_model = 'file_path' in v or 'old_string' in v
+        # Only validate if input is using the PermissiveModel fallback
+        if isinstance(v, UnknownToolInput):
+            # It's using the fallback - get tool name from validation context
+            tool_name = info.data.get('name', '')
 
-            if not is_typed_model:
-                # It's using the dict fallback - get tool name from validation context
-                tool_name = info.data.get('name', '')
-
-                if tool_name not in ALLOWED_CLAUDE_TOOL_NAMES and not tool_name.startswith('mcp__'):
-                    raise ValueError(
-                        f"Unmodeled Claude Code built-in tool: '{tool_name}'. "
-                        f'All Claude Code tools must be explicitly modeled (see MODELED_CLAUDE_TOOLS). '
-                        f"Only MCP tools (starting with 'mcp__') may use the dict fallback."
-                    )
+            if tool_name not in ALLOWED_CLAUDE_TOOL_NAMES and not tool_name.startswith('mcp__'):
+                raise ValueError(
+                    f"Unmodeled Claude Code built-in tool: '{tool_name}'. "
+                    f'All Claude Code tools must be explicitly modeled (see MODELED_CLAUDE_TOOLS). '
+                    f"Only MCP tools (starting with 'mcp__') may use the UnknownToolInput fallback."
+                )
 
         return v
 
@@ -731,6 +745,25 @@ class KillShellToolResult(StrictModel):
 
 # NOTE: BashOutput tool uses BashToolResult (same structure)
 
+
+# ==============================================================================
+# Unknown Tool Result (Fallback for MCP Tools)
+# ==============================================================================
+
+
+class UnknownToolResult(PermissiveModel):
+    """Fallback for unmodeled MCP tool results.
+
+    Uses PermissiveModel to accept any fields while remaining a proper type.
+    Allows detection via isinstance(x, UnknownToolResult) for observability.
+
+    MCP tools (64+ different tools) use this fallback. Claude Code built-in
+    tools must be explicitly modeled (see MODELED_CLAUDE_TOOLS).
+    """
+
+    pass
+
+
 # Union of all tool result types (validated left-to-right, most specific first)
 ToolUseResultUnion = (
     BashToolResult  # Also handles BashOutput
@@ -746,7 +779,7 @@ ToolUseResultUnion = (
     | WebFetchToolResult
     | ExitPlanModeToolResult
     | KillShellToolResult
-    | dict[str, Any]  # Fallback for MCP tools (64 different tools)
+    | UnknownToolResult  # Fallback for MCP tools (PermissiveModel for observability)
 )
 
 # ==============================================================================

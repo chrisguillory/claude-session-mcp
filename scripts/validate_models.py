@@ -16,14 +16,27 @@ import json
 import sys
 from collections import Counter, defaultdict
 from pathlib import Path
-from typing import TypedDict
+from typing import Any, TypedDict
 
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+import pydantic
 from pydantic import ValidationError
 
 from src.schemas.session import SessionRecordAdapter
+from src.schemas.types import PermissiveModel
+
+
+class FallbackUsage(TypedDict):
+    """Information about a PermissiveModel fallback being used."""
+
+    file: str  # Session filename
+    line: int  # Line number in JSONL
+    path: str  # Dot-separated path to the fallback
+    fallback_type: str  # Class name (e.g., UnknownToolInput, UnknownToolResult)
+    tool_name: str | None  # MCP tool name if available
+    extra_fields: dict[str, str]  # Field name -> type name
 
 
 class FileValidationResult(TypedDict):
@@ -38,6 +51,7 @@ class FileValidationResult(TypedDict):
     unknown_types: set[str]
     unknown_content_types: set[str]
     missing_fields: defaultdict[str, list[str]]
+    fallbacks: list[FallbackUsage]
 
 
 class TotalStats(TypedDict):
@@ -50,6 +64,7 @@ class TotalStats(TypedDict):
     record_types: Counter[str]
     unknown_types: set[str]
     unknown_content_types: set[str]
+    fallbacks: list[FallbackUsage]
 
 
 def find_all_session_files() -> list[Path]:
@@ -66,6 +81,71 @@ def find_all_session_files() -> list[Path]:
     return sorted(session_files)
 
 
+# ==============================================================================
+# Fallback Detection
+# ==============================================================================
+
+
+def find_fallbacks(
+    obj: Any,
+    path: str = '',
+    tool_name: str | None = None,
+) -> list[tuple[str, str, str | None, dict[str, str]]]:
+    """
+    Recursively find all PermissiveModel instances in a validated record.
+
+    This detects where typed unions fell back to permissive fallback types
+    (UnknownToolInput, UnknownToolResult).
+
+    Args:
+        obj: The object to search (typically a validated session record)
+        path: Current dot-separated path for reporting
+        tool_name: Tool name context (for tracking which MCP tool)
+
+    Returns:
+        List of tuples: (path, fallback_type, tool_name, extra_fields)
+    """
+    fallbacks: list[tuple[str, str, str | None, dict[str, str]]] = []
+
+    if isinstance(obj, PermissiveModel):
+        # Found a fallback! Record it with its extra fields
+        extra = obj.get_extra_fields()
+        fallbacks.append(
+            (
+                path or '(root)',
+                type(obj).__name__,
+                tool_name,
+                {k: type(v).__name__ for k, v in extra.items()},
+            )
+        )
+
+    if isinstance(obj, pydantic.BaseModel):
+        # Recurse into Pydantic model fields
+        for field_name in type(obj).model_fields:
+            value = getattr(obj, field_name, None)
+            if value is not None:
+                child_path = f'{path}.{field_name}' if path else field_name
+                # Track tool name for ToolUseContent
+                current_tool_name = tool_name
+                if field_name == 'input' and hasattr(obj, 'name'):
+                    current_tool_name = getattr(obj, 'name', None)
+                fallbacks.extend(find_fallbacks(value, child_path, current_tool_name))
+
+    elif isinstance(obj, dict):
+        # Recurse into dict values
+        for key, value in obj.items():
+            child_path = f'{path}.{key}' if path else str(key)
+            fallbacks.extend(find_fallbacks(value, child_path, tool_name))
+
+    elif isinstance(obj, (list, tuple)):
+        # Recurse into sequence elements
+        for i, item in enumerate(obj):
+            child_path = f'{path}[{i}]' if path else f'[{i}]'
+            fallbacks.extend(find_fallbacks(item, child_path, tool_name))
+
+    return fallbacks
+
+
 def validate_session_file(session_file: Path) -> FileValidationResult:
     """Validate a single session file and return statistics."""
     results: FileValidationResult = {
@@ -78,7 +158,10 @@ def validate_session_file(session_file: Path) -> FileValidationResult:
         'unknown_types': set(),
         'unknown_content_types': set(),
         'missing_fields': defaultdict(list),
+        'fallbacks': [],
     }
+
+    session_filename = Path(session_file).name
 
     with open(session_file) as f:
         for line_num, line in enumerate(f, 1):
@@ -94,8 +177,21 @@ def validate_session_file(session_file: Path) -> FileValidationResult:
                 results['record_types'][record_type] += 1
 
                 # Try to parse with Pydantic
-                _record = SessionRecordAdapter.validate_python(record_data)
+                record = SessionRecordAdapter.validate_python(record_data)
                 results['valid_records'] += 1
+
+                # Check for PermissiveModel fallbacks in the validated record
+                for path, fb_type, tool_name, extra_fields in find_fallbacks(record):
+                    results['fallbacks'].append(
+                        {
+                            'file': session_filename,
+                            'line': line_num,
+                            'path': path,
+                            'fallback_type': fb_type,
+                            'tool_name': tool_name,
+                            'extra_fields': extra_fields,
+                        }
+                    )
 
             except ValidationError as e:
                 # Check if this is a validator error about unmodeled tools
@@ -186,6 +282,7 @@ def main() -> None:
         'record_types': Counter(),
         'unknown_types': set(),
         'unknown_content_types': set(),
+        'fallbacks': [],
     }
 
     for session_file in session_files:
@@ -199,6 +296,7 @@ def main() -> None:
         total_stats['record_types'].update(results['record_types'])
         total_stats['unknown_types'].update(results['unknown_types'])
         total_stats['unknown_content_types'].update(results['unknown_content_types'])
+        total_stats['fallbacks'].extend(results['fallbacks'])
 
     # Print summary
     print('SUMMARY')
@@ -247,6 +345,34 @@ def main() -> None:
                 print('  First 3 errors:')
                 for error in result['errors'][:3]:
                     print(f'    - {error}')
+
+    # Print PermissiveModel fallback usage (MCP tools)
+    if total_stats['fallbacks']:
+        print()
+        print('PERMISSIVE MODEL FALLBACKS')
+        print('-' * 80)
+        print(f'⚠ {len(total_stats["fallbacks"])} records used fallback typing:')
+
+        # Group fallbacks by type
+        fallback_by_type: dict[str, list[FallbackUsage]] = defaultdict(list)
+        for fb in total_stats['fallbacks']:
+            fallback_by_type[fb['fallback_type']].append(fb)
+
+        for fb_type, usages in sorted(fallback_by_type.items(), key=lambda x: -len(x[1])):
+            print(f'\n  {fb_type}: {len(usages)} instance(s)')
+
+            # Count tool name patterns (for MCP tools)
+            tool_patterns: Counter[str] = Counter()
+            for usage in usages:
+                if usage['tool_name']:
+                    tool_patterns[usage['tool_name']] += 1
+
+            if tool_patterns:
+                print('    Tool patterns:')
+                for tool_name, count in tool_patterns.most_common(10):
+                    print(f'      {tool_name} ({count}x)')
+                if len(tool_patterns) > 10:
+                    print(f'      ... and {len(tool_patterns) - 10} more tools')
 
     # Exit code based on validation success
     if total_stats['invalid_records'] == 0:
