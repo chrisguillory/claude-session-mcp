@@ -125,7 +125,7 @@ def _find_claude_context() -> ClaudeContext:
             if not cwd:
                 raise RuntimeError(f'Found Claude process (PID {current}) but could not determine CWD')
 
-            # Verify by checking if Claude has .claude/ files open that match the CWD
+            # Verify by checking if Claude has .claude/ files open
             result = subprocess.run(['lsof', '-p', str(current)], capture_output=True, text=True)
 
             claude_files = []
@@ -141,18 +141,6 @@ def _find_claude_context() -> ClaudeContext:
                 raise RuntimeError(
                     f'Found Claude process (PID {current}) with CWD {cwd}, '
                     f'but no .claude/ files are open - may not be a Claude project'
-                )
-
-            # Verify at least one .claude file is parented to the CWD
-            cwd_str = str(cwd)
-            matching_files = [f for f in claude_files if f.startswith(cwd_str)]
-
-            if not matching_files:
-                raise RuntimeError(
-                    f'Found Claude process (PID {current}) with CWD {cwd}, '
-                    f'but .claude/ files open are not parented to this directory:\n'
-                    f'  Open files: {claude_files}\n'
-                    f'  Expected parent: {cwd_str}'
                 )
 
             return ClaudeContext(claude_pid=current, project_dir=cwd)
