@@ -12,12 +12,9 @@ from src.schemas.session.markers import PathField, PathListField, PathMarker
 
 # Re-export all public symbols from models
 from src.schemas.session.models import (
-    ALLOWED_CLAUDE_TOOL_NAMES,
     CLAUDE_CODE_MAX_VERSION,
     CLAUDE_CODE_MIN_VERSION,
     LAST_VALIDATED,
-    # Tool mapping
-    MODELED_CLAUDE_TOOLS,
     # Schema version
     SCHEMA_VERSION,
     VALIDATION_RECORD_COUNT,
@@ -98,10 +95,10 @@ from src.schemas.session.models import (
     TodoToolResult,
     TokenUsage,
     ToolInput,
+    ToolResult,
     ToolResultContent,
     ToolResultContentBlock,
     ToolUseContent,
-    ToolUseResultUnion,
     UserQuestion,
     UserRecord,
     WebFetchToolResult,
@@ -191,7 +188,7 @@ __all__ = [
     'ExitPlanModeToolResult',
     'McpResource',
     'KillShellToolResult',
-    'ToolUseResultUnion',
+    'ToolResult',
     # Records
     'BaseRecord',
     'UserRecord',
@@ -214,9 +211,6 @@ __all__ = [
     # Metadata/Analysis
     'SessionMetadata',
     'SessionAnalysis',
-    # Tool mapping
-    'MODELED_CLAUDE_TOOLS',
-    'ALLOWED_CLAUDE_TOOL_NAMES',
     # Markers
     'PathField',
     'PathListField',

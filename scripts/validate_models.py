@@ -13,6 +13,7 @@ them against the Pydantic models to ensure complete schema coverage.
 from __future__ import annotations
 
 import json
+import math
 import sys
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -303,12 +304,11 @@ def main() -> None:
     print('-' * 80)
     print(f'Total files processed: {total_stats["files"]}')
     print(f'Total records: {total_stats["total_records"]}')
-    print(
-        f'Valid records: {total_stats["valid_records"]} ({total_stats["valid_records"] / total_stats["total_records"] * 100:.1f}%)'
-    )
-    print(
-        f'Invalid records: {total_stats["invalid_records"]} ({total_stats["invalid_records"] / total_stats["total_records"] * 100:.1f}%)'
-    )
+    # Use floor for valid% (never overstate) and ceil for invalid% (never understate)
+    valid_pct = math.floor(total_stats['valid_records'] / total_stats['total_records'] * 10000) / 100
+    invalid_pct = math.ceil(total_stats['invalid_records'] / total_stats['total_records'] * 10000) / 100
+    print(f'Valid records: {total_stats["valid_records"]} ({valid_pct:.2f}%)')
+    print(f'Invalid records: {total_stats["invalid_records"]} ({invalid_pct:.2f}%)')
     print()
 
     print('Record types found:')
