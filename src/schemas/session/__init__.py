@@ -99,6 +99,8 @@ from src.schemas.session.models import (
     ToolResultContent,
     ToolResultContentBlock,
     ToolUseContent,
+    UnknownToolInput,
+    UnknownToolResult,
     UserQuestion,
     UserRecord,
     WebFetchToolResult,
@@ -145,6 +147,7 @@ __all__ = [
     'AgentOutputToolInput',
     'TaskOutputToolInput',
     'ToolInput',
+    'UnknownToolInput',  # Fallback for MCP tool inputs (enables isinstance checks)
     # Context management
     'ContextManagement',
     # Message
@@ -189,6 +192,7 @@ __all__ = [
     'McpResource',
     'KillShellToolResult',
     'ToolResult',
+    'UnknownToolResult',  # Fallback for MCP tool results (enables isinstance checks)
     # Records
     'BaseRecord',
     'UserRecord',

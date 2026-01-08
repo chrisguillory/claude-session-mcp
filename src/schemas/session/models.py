@@ -1213,7 +1213,11 @@ class UnknownToolResult(PermissiveModel):
 
 # Union of all tool result types (validated left-to-right, most specific first)
 # NOTE: Order matters! More specific models (more required fields) should come first.
-ToolResult = (
+# NOTE: Unlike ToolInput, there's no validator enforcing MCP-only fallback here.
+# This is intentional: tool results don't carry the tool name (it's in the previous
+# assistant message's ToolUseContent), so we can't easily distinguish MCP vs Claude Code.
+# Observability is provided by find_fallbacks() in validate_models.py instead.
+ToolResult = Annotated[
     # Core tool results (most specific first)
     BashToolResult  # Also handles BashOutput
     | ReadToolResult
@@ -1235,8 +1239,9 @@ ToolResult = (
     | KillShellMessageResult  # Message variant (has message + shell_id)
     | KillShellToolResult  # Original variant (has success + shellId)
     | HandoffCommandResult  # Handoff command
-    | UnknownToolResult  # Fallback for MCP tools (PermissiveModel for observability)
-)
+    | UnknownToolResult,  # Fallback for MCP tools (PermissiveModel for observability)
+    pydantic.Field(union_mode='left_to_right'),
+]
 
 # ==============================================================================
 # Base Record
