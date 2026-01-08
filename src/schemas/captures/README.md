@@ -109,12 +109,32 @@ DynamicConfigValue = Annotated[
 Because `PermissiveModel` subclasses are proper types, detection is trivial:
 
 ```python
-# In validate_captures.py
-if isinstance(config.value, PermissiveModel):
-    logger.warning(f"Unknown structure: {config.value.get_structure().keys()}")
+# In validate_captures.py - recursive fallback detection
+def find_fallbacks(obj: Any, path: str = '') -> list[FallbackUsage]:
+    if isinstance(obj, PermissiveModel):
+        extra = obj.get_extra_fields()  # Returns only unknown fields
+        fallbacks.append({
+            'path': path,
+            'fallback_type': type(obj).__name__,
+            'extra_fields': {k: type(v).__name__ for k, v in extra.items()},
+        })
+    # ... recurse into model fields, dicts, lists
 ```
 
-This enables tracking fallback usage without hard failures.
+The validation script reports fallback usage:
+
+```
+PERMISSIVE MODEL FALLBACKS
+--------------------------------------------------------------------------------
+⚠ 10 captures used fallback typing:
+
+  UnknownConfigValue: 10 instance(s)
+    Field patterns:
+      {enabled: bool} (10x)
+```
+
+This enables tracking fallback usage without hard failures - the capture validates
+successfully, but you get visibility into what structures need typed models.
 
 #### Key Points
 
@@ -172,7 +192,7 @@ might reuse it, and the maintenance cost is near-zero.
 
 ## Validation Scripts
 
-- `validate_captures.py` - Validates all captures against schemas
+- `validate_captures.py` - Validates all captures against schemas, tracks PermissiveModel fallback usage
 - `check_schema_typing.py` - Enforces immutable types AND strict typing patterns
 
 ## Module Structure
