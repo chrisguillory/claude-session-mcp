@@ -1,38 +1,45 @@
+# Pre-commit hooks using project virtualenv via uv
+#
+# This configuration uses `language: system` to run hooks in the project's
+# virtualenv rather than creating isolated pip-based environments. This:
+#   - Eliminates dependency duplication (deps only in pyproject.toml)
+#   - Uses uv for fast, reproducible installs via uv.lock
+#   - Ensures hooks use exact same versions as development
+#
+# IMPORTANT: Run `uv sync --all-groups` before committing to ensure
+# all dev dependencies (ruff, mypy, etc.) are installed.
+
 repos:
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.14.10
+  - repo: local
     hooks:
       - id: ruff
-        args: [--fix, .]
-        pass_filenames: false
-        always_run: true
-      - id: ruff-format
-        args: [.]
+        name: ruff
+        description: Run ruff linter with auto-fix
+        entry: uv run ruff check --fix .
+        language: system
         pass_filenames: false
         always_run: true
 
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.19.1
-    hooks:
+      - id: ruff-format
+        name: ruff-format
+        description: Run ruff formatter
+        entry: uv run ruff format .
+        language: system
+        pass_filenames: false
+        always_run: true
+
       - id: mypy
-        # NOTE: pre-commit runs mypy in an isolated environment. Dependencies from
-        # pyproject.toml are NOT automatically available. Any library or type stub
-        # that mypy needs must be listed here explicitly.
-        additional_dependencies:
-          - pydantic>=2.12
-          - pydantic-settings>=2.12
-          - httpx
-          - typer
-          - fastmcp
-          - zstandard
-          - uuid6
-          - filelock
-          - attrs
-          - lazy-object-proxy
-          - mitmproxy
-          - anthropic
-          - psutil
-          - types-psutil
-        args: [--config-file=pyproject.toml, .]
+        name: mypy
+        description: Run mypy type checker
+        entry: uv run mypy --config-file=pyproject.toml .
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: check-mutable-annotations
+        name: check-mutable-annotations
+        description: Enforce immutable types (Sequence, Mapping, Set) in model annotations
+        entry: ./scripts/check_mutable_annotations.py . --exclude .venv .git __pycache__ .mypy_cache
+        language: script
         pass_filenames: false
         always_run: true

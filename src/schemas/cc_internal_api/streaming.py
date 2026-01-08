@@ -13,11 +13,12 @@ With 'ping' events interspersed for keepalive.
 
 from __future__ import annotations
 
-from typing import Annotated, Any, Literal
+from collections.abc import Sequence
+from typing import Annotated, Literal
 
-from pydantic import Discriminator
+import pydantic
 
-from src.schemas.cc_internal_api.base import PermissiveModel
+from src.schemas.cc_internal_api.base import EmptyDict, EmptySequence, StrictModel
 from src.schemas.cc_internal_api.common import ApiCacheCreation
 from src.schemas.cc_internal_api.response import StopReason
 from src.schemas.types import ModelId
@@ -27,7 +28,7 @@ from src.schemas.types import ModelId
 # ==============================================================================
 
 
-class TextDelta(PermissiveModel):
+class TextDelta(StrictModel):
     """
     Text delta in streaming response.
 
@@ -39,7 +40,7 @@ class TextDelta(PermissiveModel):
     text: str
 
 
-class ThinkingDelta(PermissiveModel):
+class ThinkingDelta(StrictModel):
     """
     Thinking delta in streaming response.
 
@@ -51,7 +52,7 @@ class ThinkingDelta(PermissiveModel):
     thinking: str
 
 
-class SignatureDelta(PermissiveModel):
+class SignatureDelta(StrictModel):
     """
     Signature delta for thinking blocks.
 
@@ -63,7 +64,7 @@ class SignatureDelta(PermissiveModel):
     signature: str
 
 
-class InputJsonDelta(PermissiveModel):
+class InputJsonDelta(StrictModel):
     """
     Input JSON delta for tool use blocks.
 
@@ -78,7 +79,7 @@ class InputJsonDelta(PermissiveModel):
 # Union of all delta types
 DeltaContent = Annotated[
     TextDelta | ThinkingDelta | SignatureDelta | InputJsonDelta,
-    Discriminator('type'),
+    pydantic.Discriminator('type'),
 ]
 
 
@@ -87,7 +88,7 @@ DeltaContent = Annotated[
 # ==============================================================================
 
 
-class TextBlockStart(PermissiveModel):
+class TextBlockStart(StrictModel):
     """
     Text block start in streaming response.
 
@@ -99,7 +100,7 @@ class TextBlockStart(PermissiveModel):
     text: str  # Usually empty string at start
 
 
-class ThinkingBlockStart(PermissiveModel):
+class ThinkingBlockStart(StrictModel):
     """
     Thinking block start in streaming response.
 
@@ -112,7 +113,7 @@ class ThinkingBlockStart(PermissiveModel):
     signature: str  # Usually empty string at start
 
 
-class ToolUseBlockStart(PermissiveModel):
+class ToolUseBlockStart(StrictModel):
     """
     Tool use block start in streaming response.
 
@@ -123,13 +124,15 @@ class ToolUseBlockStart(PermissiveModel):
     type: Literal['tool_use']
     id: str
     name: str
-    input: dict[str, Any]  # Usually empty dict at start
+    # STREAMING BEHAVIOR: Always {} at content_block_start event.
+    # Input is populated incrementally via content_block_delta events with InputJsonDelta.
+    input: EmptyDict
 
 
 # Union of content block start types
 ContentBlockStart = Annotated[
     TextBlockStart | ThinkingBlockStart | ToolUseBlockStart,
-    Discriminator('type'),
+    pydantic.Discriminator('type'),
 ]
 
 
@@ -138,7 +141,7 @@ ContentBlockStart = Annotated[
 # ==============================================================================
 
 
-class InitialUsage(PermissiveModel):
+class InitialUsage(StrictModel):
     """
     Initial usage in message_start event.
 
@@ -154,7 +157,7 @@ class InitialUsage(PermissiveModel):
     service_tier: Literal['standard']
 
 
-class InitialMessage(PermissiveModel):
+class InitialMessage(StrictModel):
     """
     Initial message in message_start event.
 
@@ -166,7 +169,7 @@ class InitialMessage(PermissiveModel):
     id: str  # e.g., "msg_01WsgytDj2C14cRxDGqz36ZF"
     type: Literal['message']
     role: Literal['assistant']
-    content: list[Any]  # Usually empty at start
+    content: EmptySequence  # Always [] at message_start - content comes via content_block_* events
     stop_reason: None  # Always null at start
     stop_sequence: None  # Always null at start
     usage: InitialUsage
@@ -177,7 +180,7 @@ class InitialMessage(PermissiveModel):
 # ==============================================================================
 
 
-class MessageDeltaUsage(PermissiveModel):
+class MessageDeltaUsage(StrictModel):
     """
     Usage in message_delta event.
 
@@ -193,7 +196,7 @@ class MessageDeltaUsage(PermissiveModel):
     output_tokens: int
 
 
-class MessageDeltaPayload(PermissiveModel):
+class MessageDeltaPayload(StrictModel):
     """
     Delta payload in message_delta event.
 
@@ -205,7 +208,19 @@ class MessageDeltaPayload(PermissiveModel):
     stop_sequence: str | None
 
 
-class MessageDeltaContextManagement(PermissiveModel):
+class AppliedEdit(StrictModel):
+    """
+    Applied context management edit.
+
+    VALIDATION STATUS: INFERRED
+    Based on request-side ContextManagementEdit structure.
+    Always observed as empty array - this types what we'd expect when populated.
+    """
+
+    type: str  # Edit type, e.g., "clear_thinking_20251015"
+
+
+class MessageDeltaContextManagement(StrictModel):
     """
     Context management in message_delta event.
 
@@ -213,7 +228,7 @@ class MessageDeltaContextManagement(PermissiveModel):
     Observed in message_delta.context_management.
     """
 
-    applied_edits: list[dict[str, Any]]  # Usually empty
+    applied_edits: Sequence[AppliedEdit]
 
 
 # ==============================================================================
@@ -221,7 +236,7 @@ class MessageDeltaContextManagement(PermissiveModel):
 # ==============================================================================
 
 
-class MessageStartEvent(PermissiveModel):
+class MessageStartEvent(StrictModel):
     """
     message_start SSE event.
 
@@ -233,7 +248,7 @@ class MessageStartEvent(PermissiveModel):
     message: InitialMessage
 
 
-class ContentBlockStartEvent(PermissiveModel):
+class ContentBlockStartEvent(StrictModel):
     """
     content_block_start SSE event.
 
@@ -246,7 +261,7 @@ class ContentBlockStartEvent(PermissiveModel):
     content_block: ContentBlockStart
 
 
-class ContentBlockDeltaEvent(PermissiveModel):
+class ContentBlockDeltaEvent(StrictModel):
     """
     content_block_delta SSE event.
 
@@ -259,7 +274,7 @@ class ContentBlockDeltaEvent(PermissiveModel):
     delta: DeltaContent
 
 
-class ContentBlockStopEvent(PermissiveModel):
+class ContentBlockStopEvent(StrictModel):
     """
     content_block_stop SSE event.
 
@@ -271,7 +286,7 @@ class ContentBlockStopEvent(PermissiveModel):
     index: int
 
 
-class MessageDeltaEvent(PermissiveModel):
+class MessageDeltaEvent(StrictModel):
     """
     message_delta SSE event.
 
@@ -285,7 +300,7 @@ class MessageDeltaEvent(PermissiveModel):
     context_management: MessageDeltaContextManagement | None = None
 
 
-class MessageStopEvent(PermissiveModel):
+class MessageStopEvent(StrictModel):
     """
     message_stop SSE event.
 
@@ -296,7 +311,7 @@ class MessageStopEvent(PermissiveModel):
     type: Literal['message_stop']
 
 
-class PingEvent(PermissiveModel):
+class PingEvent(StrictModel):
     """
     ping SSE event.
 
@@ -307,7 +322,19 @@ class PingEvent(PermissiveModel):
     type: Literal['ping']
 
 
-class ErrorEvent(PermissiveModel):
+class StreamError(StrictModel):
+    """
+    Error payload in streaming error event.
+
+    VALIDATION STATUS: INFERRED
+    Based on Anthropic API error structure.
+    """
+
+    type: str  # e.g., "overloaded_error", "api_error"
+    message: str
+
+
+class ErrorEvent(StrictModel):
     """
     error SSE event.
 
@@ -316,7 +343,7 @@ class ErrorEvent(PermissiveModel):
     """
 
     type: Literal['error']
-    error: dict[str, Any]
+    error: StreamError
 
 
 # ==============================================================================
@@ -333,5 +360,5 @@ SSEEvent = Annotated[
     | MessageStopEvent
     | PingEvent
     | ErrorEvent,
-    Discriminator('type'),
+    pydantic.Discriminator('type'),
 ]

@@ -5,17 +5,28 @@ These model Claude Code's internal API endpoints beyond the Messages API:
 - /v1/messages/count_tokens - Token counting
 - /api/claude_code/grove - Feature gating by region/tier
 - /api/claude_code/organizations/metrics_enabled - Telemetry opt-in
-- /api/eval/sdk-{code} - Feature flags
 - /api/oauth/account/settings - User preferences
 - /api/oauth/claude_cli/client_data - Client configuration
+- /api/oauth/claude_cli/create_api_key - API key creation
+- /api/oauth/claude_cli/roles - Organization/workspace roles
+- /api/oauth/profile - User profile and organization info
+- /api/oauth/organizations/{uuid}/referral/eligibility - Referral eligibility
+- /api/oauth/organizations/{uuid}/referral/redemptions - Referral redemptions
+- /api/organization/{uuid}/claude_code_sonnet_1m_access - Model access check
 - /api/hello - Health check
+
+Note: Feature flag schemas (/api/eval/sdk-*) moved to feature_flags.py
 """
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from collections.abc import Mapping, Sequence
+from typing import Literal
 
-from src.schemas.cc_internal_api.base import PermissiveModel
+import pydantic
+
+from src.schemas.cc_internal_api.base import EmptyDict, StrictModel
+from src.schemas.cc_internal_api.request import RequestMessage, SystemBlock, ThinkingConfig, ToolDefinition
 from src.schemas.types import ModelId
 
 # ==============================================================================
@@ -23,7 +34,7 @@ from src.schemas.types import ModelId
 # ==============================================================================
 
 
-class CountTokensRequest(PermissiveModel):
+class CountTokensRequest(StrictModel):
     """
     Request to /v1/messages/count_tokens.
 
@@ -34,12 +45,13 @@ class CountTokensRequest(PermissiveModel):
     """
 
     model: ModelId
-    messages: list[dict[str, Any]]  # Can be empty
-    tools: list[dict[str, Any]] | None = None
-    system: list[dict[str, Any]] | None = None
+    messages: Sequence[RequestMessage]
+    tools: Sequence[ToolDefinition] | None = None
+    system: Sequence[SystemBlock] | None = None
+    thinking: ThinkingConfig | None = None  # Extended thinking config
 
 
-class CountTokensResponse(PermissiveModel):
+class CountTokensResponse(StrictModel):
     """
     Response from /v1/messages/count_tokens.
 
@@ -55,7 +67,7 @@ class CountTokensResponse(PermissiveModel):
 # ==============================================================================
 
 
-class GroveResponse(PermissiveModel):
+class GroveResponse(StrictModel):
     """
     Response from /api/claude_code/grove or /api/claude_code_grove.
 
@@ -74,11 +86,105 @@ class GroveResponse(PermissiveModel):
 
 
 # ==============================================================================
-# Metrics (/api/claude_code/organizations/metrics_enabled)
+# Metrics (/api/claude_code/metrics, /api/claude_code/organizations/metrics_enabled)
 # ==============================================================================
 
 
-class MetricsEnabledResponse(PermissiveModel):
+class ResourceAttributes(StrictModel):
+    """
+    Resource attributes in OpenTelemetry metrics.
+
+    VALIDATION STATUS: VALIDATED
+    Service identification and environment metadata.
+
+    JSON keys use dots per OpenTelemetry convention (e.g., "service.name").
+    Python field names use underscores with Field(alias=...) for mapping.
+    """
+
+    service_name: str = pydantic.Field(alias='service.name')
+    service_version: str = pydantic.Field(alias='service.version')
+    os_type: str = pydantic.Field(alias='os.type')
+    os_version: str = pydantic.Field(alias='os.version')
+    host_arch: str = pydantic.Field(alias='host.arch')
+    aggregation_temporality: str = pydantic.Field(alias='aggregation.temporality')
+    user_customer_type: str = pydantic.Field(alias='user.customer_type')
+    user_subscription_type: str | None = pydantic.Field(
+        default=None, alias='user.subscription_type'
+    )  # Missing during OAuth init
+
+
+class MetricsAttributes(StrictModel):
+    """
+    Attributes on a metric data point.
+
+    VALIDATION STATUS: VALIDATED
+    OpenTelemetry-style dimensions with dot-notation keys.
+    """
+
+    # --- Always present ---
+    user_id: str = pydantic.Field(alias='user.id')
+    session_id: str = pydantic.Field(alias='session.id')
+    organization_id: str = pydantic.Field(alias='organization.id')
+    user_email: str = pydantic.Field(alias='user.email')
+    user_account_uuid: str = pydantic.Field(alias='user.account_uuid')
+    terminal_type: str = pydantic.Field(alias='terminal.type')
+
+    # --- Present on token usage metrics only ---
+    type: Literal['input', 'output', 'cacheRead', 'cacheCreation', 'user', 'cli'] | None = None
+    model: str | None = None  # Model ID for token metrics
+
+
+class MetricsDataPoint(StrictModel):
+    """
+    Single data point in a metrics report.
+
+    VALIDATION STATUS: VALIDATED
+    OpenTelemetry-style data point.
+    """
+
+    attributes: MetricsAttributes | None  # Null for some metrics
+    value: float | int
+    timestamp: str  # ISO 8601 timestamp
+
+
+class MetricDefinition(StrictModel):
+    """
+    Single metric in a metrics report.
+
+    VALIDATION STATUS: VALIDATED
+    """
+
+    name: str  # e.g., "claude_code.session.count", "claude_code.cost.usage"
+    description: str
+    unit: str  # e.g., "", "USD"
+    data_points: Sequence[MetricsDataPoint]
+
+
+class MetricsRequest(StrictModel):
+    """
+    Request to /api/claude_code/metrics.
+
+    VALIDATION STATUS: VALIDATED
+    OpenTelemetry-style metrics reporting.
+    """
+
+    resource_attributes: ResourceAttributes
+    metrics: Sequence[MetricDefinition]
+
+
+class MetricsResponse(StrictModel):
+    """
+    Response from /api/claude_code/metrics.
+
+    VALIDATION STATUS: VALIDATED
+    Same structure as telemetry response.
+    """
+
+    accepted_count: int
+    rejected_count: int
+
+
+class MetricsEnabledResponse(StrictModel):
     """
     Response from /api/claude_code/organizations/metrics_enabled.
 
@@ -91,137 +197,22 @@ class MetricsEnabledResponse(PermissiveModel):
 
 
 # ==============================================================================
-# Feature Flags (/api/eval/sdk-{code})
-# ==============================================================================
-
-FeatureSource = Literal['force', 'defaultValue', 'experiment']
-
-
-class ExperimentConfig(PermissiveModel):
-    """
-    Experiment configuration for a feature flag.
-
-    VALIDATION STATUS: VALIDATED
-    """
-
-    key: str  # Experiment key
-    variations: list[str]  # Possible variations
-
-
-class ExperimentResult(PermissiveModel):
-    """
-    Result of experiment assignment.
-
-    VALIDATION STATUS: VALIDATED
-    """
-
-    inExperiment: bool  # Whether user is in experiment
-    variationId: int  # Assigned variation ID
-    value: str  # Assigned variation value
-    hashUsed: bool  # Whether hash was used for assignment
-
-
-class FeatureValue(PermissiveModel):
-    """
-    Individual feature flag value.
-
-    VALIDATION STATUS: VALIDATED
-    Observed in features dict values.
-    """
-
-    value: bool | str | dict[str, Any]  # Feature value (varies by flag)
-    on: bool  # Whether feature is on
-    off: bool  # Whether feature is off
-    source: FeatureSource  # Where value comes from
-    experiment: ExperimentConfig | None = None  # Experiment config if applicable
-    experimentResult: ExperimentResult | None = None  # Experiment result if applicable
-
-
-class EvalAttributes(PermissiveModel):
-    """
-    Attributes sent with feature flag evaluation request.
-
-    VALIDATION STATUS: VALIDATED
-    Identifies user/device for feature targeting.
-    """
-
-    id: str  # Device ID (hashed)
-    sessionId: str  # Session UUID
-    deviceID: str  # Device ID (same as id)
-    organizationUUID: str  # Organization UUID
-    accountUUID: str  # Account UUID
-    userType: Literal['external', 'internal']
-    subscriptionType: Literal['free', 'pro', 'team', 'max', 'enterprise']
-    firstTokenTime: int  # Timestamp of first token
-    appVersion: str  # Claude Code version
-
-
-class EvalRequest(PermissiveModel):
-    """
-    Request to /api/eval/sdk-{code}.
-
-    VALIDATION STATUS: VALIDATED
-    Feature flag evaluation request.
-    """
-
-    attributes: EvalAttributes
-    forcedVariations: dict[str, Any]  # Forced variations (usually empty)
-    forcedFeatures: list[str]  # Forced features (usually empty)
-    url: str  # URL context (usually empty string)
-
-
-class EvalResponse(PermissiveModel):
-    """
-    Response from /api/eval/sdk-{code}.
-
-    VALIDATION STATUS: VALIDATED
-    Contains all feature flags for the user.
-    """
-
-    features: dict[str, FeatureValue]
-
-
-# Known feature flag names (observed)
-KNOWN_FEATURE_FLAGS = [
-    'auto_migrate_to_native',
-    'tengu_accept_with_feedback',
-    'tengu_ant_attribution_header_new',
-    'tengu_c4w_usage_limit_notifications_enabled',
-    'tengu_disable_bypass_permissions_mode',
-    'tengu_feedback_survey_config',
-    'tengu_gha_plugin_code_review',
-    'tengu_mcp_tool_search',
-    'tengu_pid_based_version_locking',
-    'tengu_prompt_suggestion',
-    'tengu_react_vulnerability_warning',
-    'tengu_scratch',
-    'tengu_spinner_words',
-    'tengu_sumi',
-    'tengu_thinkback',
-    'tengu_tool_pear',
-    'tengu_tool_result_persistence',
-    'tengu_version_config',
-    'tengu_vscode_review_upsell',
-    'tengu_year_end_2025_campaign_promo',
-]
-
-
-# ==============================================================================
 # OAuth Client Data (/api/oauth/claude_cli/client_data)
 # ==============================================================================
 
 
-class ClientDataResponse(PermissiveModel):
+class ClientDataResponse(StrictModel):
     """
     Response from /api/oauth/claude_cli/client_data.
 
     VALIDATION STATUS: VALIDATED
     Observed: {"client_data": {}}
 
-    Contains client-specific configuration. Currently empty in captures.
+    Contains client-specific configuration.
+    ALWAYS EMPTY in observed captures - strict typing for fail-fast validation.
     """
 
-    client_data: dict[str, Any]
+    client_data: EmptyDict  # Always {} - will fail if API starts sending data
 
 
 # ==============================================================================
@@ -231,7 +222,7 @@ class ClientDataResponse(PermissiveModel):
 PaprikaMode = Literal['basic', 'extended', 'disabled']
 
 
-class DismissedBanner(PermissiveModel):
+class DismissedBanner(StrictModel):
     """
     Dismissed banner record.
 
@@ -242,33 +233,52 @@ class DismissedBanner(PermissiveModel):
     dismissed_at: str  # ISO 8601 timestamp
 
 
-class AccountSettingsResponse(PermissiveModel):
+class AccountSettingsResponse(StrictModel):
     """
     Response from /api/oauth/account/settings.
 
     VALIDATION STATUS: VALIDATED
     User preferences and feature toggles.
 
-    Note: This is a large structure with ~47 fields. We model known fields
-    and let PermissiveModel handle unknown ones.
+    Note: 13 fields are always present (required), 35 are sparse user prefs (optional).
     """
 
+    # --- Always present (required) ---
+    # Onboarding state
+    has_started_claudeai_onboarding: bool
+    has_finished_claudeai_onboarding: bool
+
+    # Feature toggles
+    grove_enabled: bool
+    paprika_mode: PaprikaMode  # "basic", "extended", or "disabled"
+    enabled_saffron: bool
+    enabled_saffron_search: bool
+    enabled_web_search: bool
+
+    # MCP tools permissions (per-tool boolean map)
+    enabled_mcp_tools: Mapping[str, bool]
+
+    # UI state
+    dismissed_claudeai_banners: Sequence[DismissedBanner]
+    dismissed_saffron_themes: bool
+
+    # Grove metadata
+    grove_updated_at: str
+    grove_notice_viewed_at: str
+
+    # Wiggle egress
+    wiggle_egress_spotlight_viewed_at: str
+
+    # --- Sparse user preferences (optional until set) ---
     # Onboarding state
     has_seen_mm_examples: bool | None = None
     has_seen_starter_prompts: bool | None = None
-    has_started_claudeai_onboarding: bool | None = None
-    has_finished_claudeai_onboarding: bool | None = None
     has_acknowledged_mcp_app_dev_terms: bool | None = None
     onboarding_use_case: str | None = None
 
     # Feature toggles
-    grove_enabled: bool | None = None
-    paprika_mode: PaprikaMode | None = None  # "basic", "extended", or "disabled"
-    enabled_saffron: bool | None = None
-    enabled_saffron_search: bool | None = None
     enabled_artifacts_attachments: bool | None = None
     enabled_mm_pdfs: bool | None = None
-    enabled_web_search: bool | None = None
     enabled_gdrive: bool | None = None
     enabled_gdrive_indexing: bool | None = None
     enabled_geolocation: bool | None = None
@@ -282,16 +292,11 @@ class AccountSettingsResponse(PermissiveModel):
     enabled_monkeys_in_a_barrel: bool | None = None
     enable_chat_suggestions: bool | None = None
 
-    # MCP tools permissions (per-tool boolean map)
-    enabled_mcp_tools: dict[str, bool] | None = None
-
     # UI state
-    input_menu_pinned_items: list[str] | None = None
-    dismissed_claudeai_banners: list[DismissedBanner] | None = None
+    input_menu_pinned_items: Sequence[str] | None = None
     dismissed_artifacts_announcement: bool | None = None
     dismissed_artifact_feedback_form: bool | None = None
     dismissed_claude_code_spotlight: bool | None = None
-    dismissed_saffron_themes: bool | None = None
 
     # Preview features
     preview_feature_uses_artifacts: bool | None = None
@@ -299,14 +304,9 @@ class AccountSettingsResponse(PermissiveModel):
     preview_feature_uses_citations: bool | None = None
     preview_feature_uses_harmony: bool | None = None
 
-    # Grove metadata
-    grove_updated_at: str | None = None
-    grove_notice_viewed_at: str | None = None
-
     # Wiggle egress
-    wiggle_egress_allowed_hosts: list[str] | None = None
+    wiggle_egress_allowed_hosts: Sequence[str] | None = None
     wiggle_egress_hosts_template: str | None = None
-    wiggle_egress_spotlight_viewed_at: str | None = None
 
     # Internal tier info
     internal_tier_org_type: str | None = None
@@ -325,7 +325,7 @@ class AccountSettingsResponse(PermissiveModel):
 # ==============================================================================
 
 
-class HelloResponse(PermissiveModel):
+class HelloResponse(StrictModel):
     """
     Response from /api/hello.
 
@@ -341,7 +341,7 @@ class HelloResponse(PermissiveModel):
 # ==============================================================================
 
 
-class ModelAccessResponse(PermissiveModel):
+class ModelAccessResponse(StrictModel):
     """
     Response from /api/organization/{uuid}/claude_code_sonnet_1m_access.
 
@@ -358,7 +358,7 @@ class ModelAccessResponse(PermissiveModel):
 # ==============================================================================
 
 
-class ReferralCodeDetails(PermissiveModel):
+class ReferralCodeDetails(StrictModel):
     """
     Referral code details.
 
@@ -370,7 +370,7 @@ class ReferralCodeDetails(PermissiveModel):
     referral_link: str  # Full referral URL
 
 
-class ReferralEligibilityResponse(PermissiveModel):
+class ReferralEligibilityResponse(StrictModel):
     """
     Response from /api/oauth/organizations/{uuid}/referral/eligibility.
 
@@ -380,3 +380,152 @@ class ReferralEligibilityResponse(PermissiveModel):
 
     eligible: bool
     referral_code_details: ReferralCodeDetails | None = None
+
+
+# ==============================================================================
+# Referral Redemptions (/api/oauth/organizations/{uuid}/referral/redemptions)
+# ==============================================================================
+
+
+class ReferralRedemption(StrictModel):
+    """
+    Individual referral redemption record.
+
+    VALIDATION STATUS: INFERRED (empty array only observed)
+    Structure placeholder - no non-empty redemptions captured yet.
+    Will fail fast if API starts returning data with unexpected fields.
+    """
+
+    # Placeholder - capture non-empty redemptions to validate fields
+    pass
+
+
+class ReferralRedemptionsResponse(StrictModel):
+    """
+    Response from /api/oauth/organizations/{uuid}/referral/redemptions.
+
+    VALIDATION STATUS: VALIDATED (empty case)
+    Returns referral redemption status and history.
+
+    Query param 'campaign' filters by campaign (e.g., 'claude_code_guest_pass').
+    """
+
+    limit: int  # Max redemptions allowed
+    used: int  # Redemptions used
+    redemptions: Sequence[ReferralRedemption]  # Redemption history
+    has_referral_code: bool  # Whether user has referral code
+
+
+# ==============================================================================
+# OAuth API Key Creation (/api/oauth/claude_cli/create_api_key)
+# ==============================================================================
+
+
+class ApiKeyCreator(StrictModel):
+    """
+    Reference to the user who created an API key.
+
+    VALIDATION STATUS: VALIDATED
+    """
+
+    id: str  # user_... format
+    type: Literal['user']
+
+
+class CreateApiKeyResponse(StrictModel):
+    """
+    Response from /api/oauth/claude_cli/create_api_key.
+
+    VALIDATION STATUS: VALIDATED
+    Creates a new API key for Claude Code CLI access.
+
+    WARNING: raw_key contains the full API key secret - handle securely!
+    """
+
+    id: str  # apikey_... format
+    type: Literal['api_key']
+    name: str  # Generated: claude_code_key_{user}_{suffix}
+    workspace_id: str  # wrkspc_... format
+    created_at: str  # ISO 8601 timestamp
+    created_by: ApiKeyCreator
+    partial_key_hint: str  # Masked: sk-ant-api03-Xxx...xxx
+    status: Literal['active']  # May expand to revoked, expired
+    raw_key: str  # SENSITIVE: Full API key secret
+
+
+# ==============================================================================
+# OAuth CLI Roles (/api/oauth/claude_cli/roles)
+# ==============================================================================
+
+OrganizationRole = Literal['admin', 'user']
+WorkspaceRole = Literal['workspace_developer']  # May expand
+
+
+class CliRolesResponse(StrictModel):
+    """
+    Response from /api/oauth/claude_cli/roles.
+
+    VALIDATION STATUS: VALIDATED
+    Returns current user's organization and workspace roles.
+
+    Workspace fields are all-or-nothing: either all populated or all null.
+    """
+
+    organization_uuid: str
+    organization_name: str
+    organization_role: OrganizationRole
+
+    # Workspace info - all null when no workspace selected
+    workspace_uuid: str | None = None
+    workspace_name: str | None = None
+    workspace_role: WorkspaceRole | None = None
+
+
+# ==============================================================================
+# OAuth Profile (/api/oauth/profile)
+# ==============================================================================
+
+OrganizationType = Literal['api_team', 'claude_team', 'claude_max']
+BillingType = Literal['prepaid', 'stripe_subscription']
+
+
+class ProfileAccount(StrictModel):
+    """
+    User account information from profile endpoint.
+
+    VALIDATION STATUS: VALIDATED
+    """
+
+    uuid: str
+    full_name: str
+    display_name: str
+    email: str
+    has_claude_max: bool
+    has_claude_pro: bool
+
+
+class ProfileOrganization(StrictModel):
+    """
+    Organization information from profile endpoint.
+
+    VALIDATION STATUS: VALIDATED
+    """
+
+    uuid: str
+    name: str
+    organization_type: OrganizationType
+    billing_type: BillingType
+    rate_limit_tier: str  # Too many variants for Literal
+    has_extra_usage_enabled: bool
+
+
+class ProfileResponse(StrictModel):
+    """
+    Response from /api/oauth/profile.
+
+    VALIDATION STATUS: VALIDATED
+    Returns current user's account and active organization info.
+    """
+
+    account: ProfileAccount
+    organization: ProfileOrganization

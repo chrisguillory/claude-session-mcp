@@ -12,18 +12,18 @@ from typing import Annotated, Literal
 import anthropic.types
 
 from src.schemas import session
-from src.schemas.cc_internal_api.base import FromSdk, FromSession, PermissiveModel
+from src.schemas.cc_internal_api.base import FromSdk, FromSession, StrictModel
 
 # ==============================================================================
 # Cache Control (API-only, not persisted to session files)
 # ==============================================================================
 
 
-class CacheControl(PermissiveModel):
+class CacheControl(StrictModel):
     """
     Cache control directive for API requests.
 
-    VALIDATION STATUS: VALIDATED (2026-01-02)
+    VALIDATION STATUS: VALIDATED
     Observed on system blocks and user message blocks.
 
     No ttl field was observed in captured traffic - CC uses default TTL.
@@ -37,11 +37,11 @@ class CacheControl(PermissiveModel):
 # ==============================================================================
 
 
-class ApiCacheCreation(PermissiveModel):
+class ApiCacheCreation(StrictModel):
     """
     Detailed cache creation breakdown in API responses.
 
-    VALIDATION STATUS: VALIDATED (2026-01-02)
+    VALIDATION STATUS: VALIDATED
     Observed in response.usage.cache_creation.
 
     CORRESPONDING SESSION TYPE: session.models.CacheCreation
@@ -63,11 +63,11 @@ class ApiCacheCreation(PermissiveModel):
 # ==============================================================================
 
 
-class ApiUsage(PermissiveModel):
+class ApiUsage(StrictModel):
     """
     Token usage in API responses.
 
-    VALIDATION STATUS: VALIDATED (2026-01-02)
+    VALIDATION STATUS: VALIDATED
     Observed in response.usage field.
 
     CORRESPONDING TYPES:

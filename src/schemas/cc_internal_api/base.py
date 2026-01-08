@@ -2,8 +2,12 @@
 Base classes and type markers for Claude Code internal API schemas.
 
 This module provides:
-- PermissiveModel: Base class that allows unknown fields during observation
+- StrictModel: API-layer strict model (inherits from BaseStrictModel)
+- EmptyBody: Capture-layer empty HTTP body marker
 - Type correspondence markers: Link fields to session schemas and SDK types
+
+Note: EmptyDict and EmptySequence are now in src.schemas.types and re-exported
+here for backwards compatibility.
 """
 
 from __future__ import annotations
@@ -11,29 +15,50 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+# Import foundation types and re-export for backwards compatibility
+from src.schemas.types import BaseStrictModel, EmptyDict, EmptySequence
+
+# Re-export for backwards compatibility (other modules import from here)
+__all__ = ['StrictModel', 'EmptyDict', 'EmptySequence', 'EmptyBody', 'FromSession', 'FromSdk', 'ValidationStatus']
+
 
 # ==============================================================================
-# Permissive Base Model
+# Strict Base Model
 # ==============================================================================
 
 
-class PermissiveModel(BaseModel):
+class StrictModel(BaseStrictModel):
     """
-    Base model for API schemas during observation phase.
+    API-layer strict model.
 
-    Uses extra='ignore' to accept unknown fields, allowing us to parse
-    real API traffic even when fields haven't been modeled yet.
-
-    Once a schema is fully validated against captured traffic, consider
-    switching to extra='forbid' for stricter validation.
+    Inherits from BaseStrictModel (extra='forbid', strict=True, frozen=True).
+    Domain-specific customization can be added here if needed.
     """
 
-    model_config = ConfigDict(
-        extra='ignore',  # Accept unknown fields during observation
-        strict=True,  # Strict type coercion
-        frozen=True,  # Immutable after creation
-    )
+    pass
+
+
+# ==============================================================================
+# Empty HTTP Body Type (Capture-layer specific)
+# ==============================================================================
+
+
+class EmptyBody(StrictModel):
+    """
+    Marker type for empty HTTP bodies at the capture layer.
+
+    This structure is produced by intercept_traffic.py's _parse_body()
+    when HTTP content is empty (size=0). It's an infrastructure convention
+    for the capture layer, not an API protocol.
+
+    Used for:
+    - GET request bodies (no request content)
+    - 204 No Content responses (e.g., Statsig delta with no updates)
+    - Any HTTP message with empty body
+    """
+
+    empty: Literal[True]
+    size: int
 
 
 # ==============================================================================
@@ -50,7 +75,7 @@ class PermissiveModel(BaseModel):
 #   from src.schemas import session
 #   import anthropic.types
 #
-#   class ApiUsage(PermissiveModel):
+#   class ApiUsage(StrictModel):
 #       input_tokens: Annotated[int,
 #           FromSession(session.models.TokenUsage, 'input_tokens'),
 #           FromSdk(anthropic.types.Usage, 'input_tokens'),

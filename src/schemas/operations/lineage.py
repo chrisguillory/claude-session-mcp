@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import Field
+import pydantic
 
 from src.schemas.base import StrictModel
 from src.schemas.types import JsonDatetime
@@ -97,4 +97,5 @@ class LineageFile(StrictModel):
     model_config = {'extra': 'forbid', 'strict': True, 'frozen': False}
 
     schema_version: str = '1.0'
-    sessions: dict[str, LineageEntry] = Field(default_factory=dict)
+    # Intentionally mutable - this model is frozen=False to allow dict mutation
+    sessions: dict[str, LineageEntry] = pydantic.Field(default_factory=dict)  # noqa: mutable-type

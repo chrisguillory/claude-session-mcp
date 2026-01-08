@@ -2,18 +2,19 @@
 Shared Pydantic base model for strict validation.
 
 All Pydantic schema models in the application should inherit from StrictModel.
+This module re-exports BaseStrictModel as StrictModel for the operations/ package.
 """
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict
+from src.schemas.types import BaseStrictModel
 
 
-class StrictModel(BaseModel):
-    """Base model with strict validation settings."""
+class StrictModel(BaseStrictModel):
+    """Operations-layer strict model.
 
-    model_config = ConfigDict(
-        extra='forbid',  # Raise error on unexpected fields
-        strict=True,  # Strict type validation
-        frozen=True,  # Immutable (cannot modify after creation)
-    )
+    Inherits from BaseStrictModel (extra='forbid', strict=True, frozen=True).
+    Used by src/schemas/operations/ package.
+    """
+
+    pass

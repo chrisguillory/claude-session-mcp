@@ -353,16 +353,16 @@ ls -la captures/<session-id>/
 # Verify session_id in captures
 jq '.session_id' captures/<session-id>/req_*.json | head
 
-# Inspect a messages request (body is nested under .body.json)
+# Inspect a messages request (body is nested under .body.data for JSON)
 cat captures/<session-id>/req_*messages*.json | jq '{
   session_id,
   flow_id,
   method,
   path,
-  model: .body.json.model,
-  max_tokens: .body.json.max_tokens,
-  messages_count: (.body.json.messages | length),
-  tools_count: (.body.json.tools | length)
+  model: .body.data.model,
+  max_tokens: .body.data.max_tokens,
+  messages_count: (.body.data.messages | length),
+  tools_count: (.body.data.tools | length)
 }'
 ```
 
@@ -373,14 +373,17 @@ captures/
 ├── traffic.log              # Global summary log
 ├── <session-id-1>/          # One directory per Claude session
 │   ├── manifest.json        # Session metadata from claude-workspace
-│   ├── req_001_*.json       # Request payloads
-│   ├── resp_001_*.json      # Response payloads
+│   ├── 001_req_*.json       # Request payloads (sequence-first for sorting)
+│   ├── 001_resp_*.json      # Response payloads (pairs stay adjacent)
 │   └── ...
 ├── <session-id-2>/
 │   └── ...
 └── unknown/                  # Traffic without session correlation
     └── ...
 ```
+
+Note: Sequence-first naming (`NNN_req_*`, `NNN_resp_*`) keeps request/response
+pairs adjacent when sorted alphabetically.
 
 ### Previously Discovered Endpoints
 
@@ -404,6 +407,12 @@ When Claude Code updates break validation:
 
 ## Git Workflow
 
+**Setup**: Ensure dev dependencies are installed before committing:
+
+```bash
+uv sync --all-groups  # Install all dependencies including dev group
+```
+
 **Always run pre-commit before committing** to avoid failed commits:
 
 ```bash
@@ -414,26 +423,15 @@ git commit -m "message"
 
 This catches formatting and type errors before the commit hook runs, saving tokens on failed attempts.
 
-### Pre-commit mypy Dependencies
+### Pre-commit Configuration
 
-**IMPORTANT:** Pre-commit runs mypy in an isolated virtual environment. Dependencies from `pyproject.toml` are NOT automatically available to the mypy hook.
+Pre-commit hooks use `language: system` with `uv run` to execute in the project's virtualenv. This means:
 
-If you add a new import to a Python file and mypy fails in pre-commit with `Library stubs not installed`, you need to:
+- **No dependency duplication**: All deps are in `pyproject.toml` only
+- **Fast execution**: Uses project's already-installed packages
+- **Consistent versions**: Hooks use exact same versions as development (via `uv.lock`)
 
-1. Add the library AND its type stubs to `.pre-commit-config.yaml` under `additional_dependencies`:
-
-```yaml
-- repo: https://github.com/pre-commit/mirrors-mypy
-  hooks:
-    - id: mypy
-      additional_dependencies:
-        - your-library
-        - types-your-library  # if type stubs exist
-```
-
-2. The same dependency must also be in `pyproject.toml` for normal development.
-
-**Why this happens:** Pre-commit creates isolated environments for reproducibility. This is by design, but means mypy dependencies must be declared twice - once in `pyproject.toml` (for development) and once in `.pre-commit-config.yaml` (for pre-commit hooks).
+If you add a new dev dependency (e.g., a mypy plugin or type stubs), just add it to the dev group in `pyproject.toml` and run `uv sync --all-groups`.
 
 ## Error Handling Philosophy
 
@@ -495,3 +493,19 @@ When reviewing code, ignore suggestions like:
 - "Handle Z case that might occur"
 
 These are premature. Wait for the failure, then handle it.
+
+## Tool Usage Rules
+
+### Never Silently Fall Back on Tool Failures
+
+**CRITICAL:** When the user explicitly requests a specific tool (e.g., Perplexity for research) and that tool is unavailable, **DO NOT silently fall back to an alternative** (e.g., WebSearch). Instead:
+
+1. **Hard fail** - Tell the user the tool is not available
+2. **Ask them to enable it** - e.g., "Perplexity MCP is not connected. Please run `/mcp reconnect perplexity`"
+3. **Wait for their instruction** - Do not proceed with a substitute
+
+This applies especially to:
+- `mcp__perplexity__*` tools - Never substitute with WebSearch
+- Any MCP tool the user explicitly names
+
+**Why:** The user chose a specific tool for a reason. Silent fallback wastes their time with inferior results and hides the real problem (tool not connected).

@@ -18,6 +18,7 @@ CLAUDE CODE VERSION COMPATIBILITY:
 - Schema v0.1.7: Added model_context_window_exceeded stop_reason for context overflow handling
 - Schema v0.1.8: Added sourceToolUseID, EmptyError, BeforeValidator for ultrathink case normalization (2.0.76+)
 - Schema v0.1.9: Added CustomTitleRecord for user-defined session names
+- Schema v0.2.0: Added sourceToolAssistantUUID to UserRecord, TurnDurationSystemRecord for Claude Code 2.1.1+
 - If validation fails, Claude Code schema may have changed - update models accordingly
 
 NEW FIELDS IN CLAUDE CODE 2.0.51+ (Schema v0.1.3):
@@ -78,20 +79,20 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Annotated, Any, Literal, TypeVar
 
-from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, TypeAdapter, ValidationInfo, field_validator
+import pydantic
 
 from src.schemas.session.markers import PathField, PathListField
-from src.schemas.types import ModelId
+from src.schemas.types import BaseStrictModel, ModelId
 
 # ==============================================================================
 # Schema Version
 # ==============================================================================
 
-SCHEMA_VERSION = '0.1.9'
+SCHEMA_VERSION = '0.2.0'
 CLAUDE_CODE_MIN_VERSION = '2.0.35'
-CLAUDE_CODE_MAX_VERSION = '2.0.76'
-LAST_VALIDATED = '2025-12-29'
-VALIDATION_RECORD_COUNT = 98_971
+CLAUDE_CODE_MAX_VERSION = '2.1.1'
+LAST_VALIDATED = '2026-01-07'
+VALIDATION_RECORD_COUNT = 377_833
 
 
 # ==============================================================================
@@ -99,21 +100,21 @@ VALIDATION_RECORD_COUNT = 98_971
 # ==============================================================================
 
 
-class StrictModel(BaseModel):
-    """Base model with strict validation settings."""
+class StrictModel(BaseStrictModel):
+    """Session-layer strict model.
 
-    model_config = ConfigDict(
-        extra='forbid',  # Raise error on unexpected fields
-        strict=True,  # Strict type validation
-        frozen=True,  # Immutable - use validated_copy() for changes
-    )
+    Inherits from BaseStrictModel (extra='forbid', strict=True, frozen=True).
+    Domain-specific customization can be added here if needed.
+    """
+
+    pass
 
 
 # Type variable for validated_copy function
-T = TypeVar('T', bound=BaseModel)
+T = TypeVar('T', bound=pydantic.BaseModel)
 
 
-def validated_copy[T: BaseModel](model: T, update: Mapping[str, Any]) -> T:
+def validated_copy[T: pydantic.BaseModel](model: T, update: Mapping[str, Any]) -> T:
     """
     Create a validated copy of a model with updates.
 
@@ -146,7 +147,7 @@ class ThinkingContent(StrictModel):
 
     type: Literal['thinking']
     thinking: str
-    signature: str | None = None
+    signature: str  # Always non-null in observed data (31,105/31,105)
 
 
 class TextContent(StrictModel):
@@ -223,7 +224,7 @@ ToolInput = Annotated[
     | SkillToolInput  # command required
     | EnterPlanModeToolInput  # No required fields - must be last before dict!
     | dict[str, Any],  # Fallback for MCP tools
-    Field(union_mode='left_to_right'),
+    pydantic.Field(union_mode='left_to_right'),
 ]
 
 
@@ -270,9 +271,9 @@ class ToolUseContent(StrictModel):
     name: str
     input: ToolInput  # Typed for Read/Write/Edit, dict for MCP tools only
 
-    @field_validator('input', mode='after')
+    @pydantic.field_validator('input', mode='after')
     @classmethod
-    def validate_mcp_tool_fallback(cls, v: Any, info: ValidationInfo) -> Any:
+    def validate_mcp_tool_fallback(cls, v: ToolInput, info: pydantic.ValidationInfo) -> ToolInput:
         """
         Enforce that only MCP tools (starting with 'mcp__') can use dict fallback.
         All Claude Code built-in tools must be explicitly modeled.
@@ -300,7 +301,7 @@ class ToolUseContent(StrictModel):
 
 
 # ToolResultContentBlock - for content inside tool_result
-ToolResultContentBlock = Annotated[TextContent | ImageContent, Field(discriminator='type')]
+ToolResultContentBlock = Annotated[TextContent | ImageContent, pydantic.Field(discriminator='type')]
 
 
 class ToolResultContent(StrictModel):
@@ -317,7 +318,7 @@ class ToolResultContent(StrictModel):
 # Discriminated union of all message content types
 MessageContent = Annotated[
     ThinkingContent | TextContent | ToolUseContent | ToolResultContent | ImageContent | DocumentContent,
-    Field(discriminator='type'),
+    pydantic.Field(discriminator='type'),
 ]
 
 
@@ -326,10 +327,22 @@ MessageContent = Annotated[
 # ==============================================================================
 
 
+class ClearThinkingEdit(StrictModel):
+    """Applied context edit for clearing thinking blocks."""
+
+    type: Literal['clear_thinking_20251015']
+    cleared_thinking_turns: int
+    cleared_input_tokens: int
+
+
+# Union of all applied edit types (add new types here as discovered)
+AppliedEdit = ClearThinkingEdit
+
+
 class ContextManagement(StrictModel):
     """Context management metadata for message responses (Claude Code 2.0.51+)."""
 
-    applied_edits: Sequence[Any]  # List of applied edits (empty in observed data)
+    applied_edits: Sequence[AppliedEdit]  # Can be empty or contain edit records
 
 
 # ==============================================================================
@@ -343,18 +356,26 @@ class Message(StrictModel):
     role: Literal['user', 'assistant']
     content: Sequence[MessageContent] | str
     # Additional fields that may appear in assistant messages (nested API response)
-    type: Literal['message'] | None = Field(
+    type: Literal['message'] | None = pydantic.Field(
         None, description='Message type indicator (present in agent/subprocess responses)'
     )
-    model: ModelId | None = Field(None, description='Claude model identifier (e.g., claude-sonnet-4-5-20250929)')
-    id: str | None = Field(None, description='Message ID from Claude API')
-    stop_reason: Literal['tool_use', 'stop_sequence', 'end_turn', 'refusal', 'model_context_window_exceeded'] | None = (
-        Field(None, description='Reason why the model stopped generating')
+    model: ModelId | None = pydantic.Field(
+        None, description='Claude model identifier (e.g., claude-sonnet-4-5-20250929)'
     )
-    stop_sequence: str | None = Field(None, description='The actual stop sequence string that triggered stopping')
-    usage: TokenUsage | None = Field(None, description='Token usage information (present in nested API responses)')
-    container: None = Field(None, description='Reserved for future use', json_schema_extra={'status': 'reserved'})
-    context_management: ContextManagement | None = Field(
+    id: str | None = pydantic.Field(None, description='Message ID from Claude API')
+    stop_reason: Literal['tool_use', 'stop_sequence', 'end_turn', 'refusal', 'model_context_window_exceeded'] | None = (
+        pydantic.Field(None, description='Reason why the model stopped generating')
+    )
+    stop_sequence: str | None = pydantic.Field(
+        None, description='The actual stop sequence string that triggered stopping'
+    )
+    usage: TokenUsage | None = pydantic.Field(
+        None, description='Token usage information (present in nested API responses)'
+    )
+    container: None = pydantic.Field(
+        None, description='Reserved for future use', json_schema_extra={'status': 'reserved'}
+    )
+    context_management: ContextManagement | None = pydantic.Field(
         None, description='Context management metadata (Claude Code 2.0.51+)'
     )
 
@@ -375,7 +396,7 @@ class ServerToolUse(StrictModel):
     """Server-side tool use tracking."""
 
     web_search_requests: int
-    web_fetch_requests: int | None = None
+    web_fetch_requests: int  # Always present (553/553)
 
 
 class TokenUsage(StrictModel):
@@ -383,11 +404,11 @@ class TokenUsage(StrictModel):
 
     input_tokens: int
     output_tokens: int
-    cache_creation_input_tokens: int | None = None
-    cache_read_input_tokens: int | None = None
-    cache_creation: CacheCreation | None = None
-    service_tier: Literal['standard'] | None = None  # Only value: 'standard' (19018 occurrences)
-    server_tool_use: ServerToolUse | None = None  # Server-side tool use tracking
+    cache_creation_input_tokens: int  # Always present (115,497/115,497)
+    cache_read_input_tokens: int  # Always present (115,497/115,497)
+    cache_creation: CacheCreation  # Always present (115,497/115,497)
+    service_tier: Literal['standard'] | None = None  # Only value: 'standard' (19018 occurrences) - null for synthetic
+    server_tool_use: ServerToolUse | None = None  # Server-side tool use tracking (0.5% present)
 
 
 # ==============================================================================
@@ -407,7 +428,9 @@ class ThinkingTrigger(StrictModel):
 
     start: int
     end: int
-    text: Annotated[Literal['ultrathink'], BeforeValidator(_normalize_ultrathink)]  # Any casing normalized to lowercase
+    text: Annotated[
+        Literal['ultrathink'], pydantic.BeforeValidator(_normalize_ultrathink)
+    ]  # Any casing normalized to lowercase
 
 
 class ThinkingMetadata(StrictModel):
@@ -615,7 +638,7 @@ class TaskToolResult(StrictModel):
     totalTokens: int
     totalToolUseCount: int
     usage: TokenUsage
-    agentId: str | None = None
+    agentId: str  # Always present (621/621)
 
 
 # ==============================================================================
@@ -756,35 +779,41 @@ class UserRecord(BaseRecord):
     version: str
     gitBranch: str
     message: Message
-    projectPaths: PathListField | None = Field(
+    projectPaths: PathListField | None = pydantic.Field(
         None, description='Additional project paths beyond cwd (each path will be translated)'
     )
-    budgetTokens: int | None = Field(None, description='Token budget limit for this request')
-    skills: None = Field(None, description='Reserved for future use', json_schema_extra={'status': 'reserved'})
-    mcp: None = Field(None, description='Reserved for future use', json_schema_extra={'status': 'reserved'})
-    agentId: str | None = Field(
+    budgetTokens: int | None = pydantic.Field(None, description='Token budget limit for this request')
+    skills: None = pydantic.Field(None, description='Reserved for future use', json_schema_extra={'status': 'reserved'})
+    mcp: None = pydantic.Field(None, description='Reserved for future use', json_schema_extra={'status': 'reserved'})
+    agentId: str | None = pydantic.Field(
         None, description='Agent ID for subprocess/agent records (references agent-{agentId}.jsonl)'
     )
-    isMeta: bool | None = Field(None, description='Indicates meta messages (system-level information)')
-    thinkingMetadata: ThinkingMetadata | None = Field(None, description='Extended thinking configuration (Claude 3.7+)')
-    isVisibleInTranscriptOnly: bool | None = Field(
+    isMeta: bool | None = pydantic.Field(None, description='Indicates meta messages (system-level information)')
+    thinkingMetadata: ThinkingMetadata | None = pydantic.Field(
+        None, description='Extended thinking configuration (Claude 3.7+)'
+    )
+    isVisibleInTranscriptOnly: bool | None = pydantic.Field(
         None, description='Message visible only in transcript, not in session history'
     )
-    isCompactSummary: bool | None = Field(None, description='Indicates this is a compacted session summary')
+    isCompactSummary: bool | None = pydantic.Field(None, description='Indicates this is a compacted session summary')
     toolUseResult: Annotated[
         Sequence[ToolResultContentBlock]  # TextContent/ImageContent with 'type' discriminator - must come first
         | Sequence[McpResource]  # MCP resources (no 'type' field, has 'name', 'uri', etc.)
         | ToolUseResultUnion
         | str
         | None,
-        Field(union_mode='left_to_right'),
+        pydantic.Field(union_mode='left_to_right'),
     ] = None  # Tool execution metadata (validated left-to-right)
-    todos: Sequence[TodoItem] | None = Field(None, description='Todo list state (Claude Code 2.0.47+)')
-    slug: str | None = Field(None, description='Human-readable session slug (Claude Code 2.0.51+)')
-    imagePasteIds: Sequence[int] | None = Field(None, description='IDs of pasted images in this message')
-    sourceToolUseID: str | None = Field(
+    todos: Sequence[TodoItem] | None = pydantic.Field(None, description='Todo list state (Claude Code 2.0.47+)')
+    slug: str | None = pydantic.Field(None, description='Human-readable session slug (Claude Code 2.0.51+)')
+    imagePasteIds: Sequence[int] | None = pydantic.Field(None, description='IDs of pasted images in this message')
+    sourceToolUseID: str | None = pydantic.Field(
         None,
         description='Tool use ID that generated this message (e.g., toolu_015eZkLKZz5JVkGC1zZrnnKm) (Claude Code 2.0.76+)',
+    )
+    sourceToolAssistantUUID: str | None = pydantic.Field(
+        None,
+        description='UUID of the assistant message that created the tool use this record responds to',
     )
 
 
@@ -798,32 +827,34 @@ class AssistantRecord(BaseRecord):
 
     type: Literal['assistant']
     cwd: PathField
-    parentUuid: str | None = Field(..., description='UUID of parent record (null for root agent records)')
+    parentUuid: str | None = pydantic.Field(..., description='UUID of parent record (null for root agent records)')
     message: Message
     # Note: usage/stopReason are optional for agent records (nested in message instead)
-    usage: TokenUsage | None = Field(
+    usage: TokenUsage | None = pydantic.Field(
         None, description='Token usage for this request (null for agent records - usage in message instead)'
     )
-    stopReason: None = Field(None, description='Reserved for future use', json_schema_extra={'status': 'reserved'})
-    model: ModelId | None = Field(
+    stopReason: None = pydantic.Field(
+        None, description='Reserved for future use', json_schema_extra={'status': 'reserved'}
+    )
+    model: ModelId | None = pydantic.Field(
         None, description='Claude model identifier (null for agent records - model in message instead)'
     )
-    requestDuration: int | None = Field(None, description='Request duration in milliseconds')
-    requestId: str | None = Field(None, description='Claude API request ID')
-    agentId: str | None = Field(
+    requestDuration: int | None = pydantic.Field(None, description='Request duration in milliseconds')
+    requestId: str | None = pydantic.Field(None, description='Claude API request ID')
+    agentId: str | None = pydantic.Field(
         None, description='Agent ID for subprocess/agent records (references agent-{agentId}.jsonl)'
     )
-    isSidechain: bool | None = Field(
+    isSidechain: bool | None = pydantic.Field(
         None, description='Indicates sidechain/subprocess execution (present in agent records)'
     )
-    userType: str | None = Field(None, description='User type (present in agent records)')
-    version: str | None = Field(None, description='Claude Code version (present in agent records)')
-    gitBranch: str | None = Field(None, description='Git branch (present in agent records)')
-    isApiErrorMessage: bool | None = Field(None, description='Indicates this message represents an API error')
-    error: Literal['rate_limit', 'unknown', 'invalid_request', 'authentication_failed'] | None = Field(
+    userType: str | None = pydantic.Field(None, description='User type (present in agent records)')
+    version: str | None = pydantic.Field(None, description='Claude Code version (present in agent records)')
+    gitBranch: str | None = pydantic.Field(None, description='Git branch (present in agent records)')
+    isApiErrorMessage: bool | None = pydantic.Field(None, description='Indicates this message represents an API error')
+    error: Literal['rate_limit', 'unknown', 'invalid_request', 'authentication_failed'] | None = pydantic.Field(
         None, description='Error type for API error messages'
     )
-    slug: str | None = Field(None, description='Human-readable session slug (Claude Code 2.0.51+)')
+    slug: str | None = pydantic.Field(None, description='Human-readable session slug (Claude Code 2.0.51+)')
 
 
 # ==============================================================================
@@ -873,7 +904,7 @@ class LocalCommandSystemRecord(BaseRecord):
     userType: str
     version: str
     gitBranch: str
-    slug: str | None = Field(None, description='Human-readable session slug (Claude Code 2.0.51+)')
+    slug: str | None = pydantic.Field(None, description='Human-readable session slug (Claude Code 2.0.51+)')
 
 
 class CompactBoundarySystemRecord(BaseRecord):
@@ -890,7 +921,7 @@ class CompactBoundarySystemRecord(BaseRecord):
     userType: str
     version: str
     gitBranch: str
-    slug: str | None = Field(None, description='Human-readable session slug (Claude Code 2.0.51+)')
+    slug: str | None = pydantic.Field(None, description='Human-readable session slug (Claude Code 2.0.51+)')
     logicalParentUuid: str | None = None
     compactMetadata: CompactMetadata | None = None
 
@@ -907,7 +938,7 @@ class ApiErrorSystemRecord(BaseRecord):
     userType: str | None = None  # Optional for api_error
     version: str | None = None  # Optional for api_error
     gitBranch: str | None = None  # Optional for api_error
-    slug: str | None = Field(None, description='Human-readable session slug (Claude Code 2.0.51+)')
+    slug: str | None = pydantic.Field(None, description='Human-readable session slug (Claude Code 2.0.51+)')
     cause: ConnectionError | None = None  # Connection error details (for network failures)
     error: (
         ApiError | NetworkError | EmptyError
@@ -933,10 +964,30 @@ class InformationalSystemRecord(BaseRecord):
     gitBranch: str | None = None
 
 
+class TurnDurationSystemRecord(BaseRecord):
+    """System record for turn duration tracking (subtype=turn_duration, Claude Code 2.1.1+)."""
+
+    type: Literal['system']
+    cwd: PathField
+    parentUuid: str | None
+    subtype: Literal['turn_duration']
+    durationMs: int  # Duration of the turn in milliseconds
+    isMeta: bool
+    isSidechain: bool
+    userType: str
+    version: str
+    gitBranch: str
+    slug: str | None = None
+
+
 # Union of system subtype records
 SystemSubtypeRecord = Annotated[
-    LocalCommandSystemRecord | CompactBoundarySystemRecord | ApiErrorSystemRecord | InformationalSystemRecord,
-    Field(discriminator='subtype'),
+    LocalCommandSystemRecord
+    | CompactBoundarySystemRecord
+    | ApiErrorSystemRecord
+    | InformationalSystemRecord
+    | TurnDurationSystemRecord,
+    pydantic.Field(discriminator='subtype'),
 ]
 
 
@@ -982,10 +1033,10 @@ class QueueOperationRecord(StrictModel):
     operation: Literal['enqueue', 'dequeue', 'remove', 'popAll']  # Queue operation type
     timestamp: str
     sessionId: str
-    content: str | Sequence[MessageContent] | None = Field(
+    content: str | Sequence[MessageContent] | None = pydantic.Field(
         None, description='User input content for the queued operation (string or structured message)'
     )
-    data: None = Field(None, description='Reserved for future use', json_schema_extra={'status': 'reserved'})
+    data: None = pydantic.Field(None, description='Reserved for future use', json_schema_extra={'status': 'reserved'})
 
 
 # ==============================================================================
@@ -1016,15 +1067,16 @@ SessionRecord = Annotated[
     | CompactBoundarySystemRecord  # Must be before SystemRecord!
     | ApiErrorSystemRecord  # Must be before SystemRecord!
     | InformationalSystemRecord  # Must be before SystemRecord!
+    | TurnDurationSystemRecord  # Must be before SystemRecord!
     | SystemRecord
     | FileHistorySnapshotRecord
     | QueueOperationRecord
     | CustomTitleRecord,
-    Field(union_mode='left_to_right'),
+    pydantic.Field(union_mode='left_to_right'),
 ]
 
 # Type adapter for validating session records (required for union types)
-SessionRecordAdapter: TypeAdapter[SessionRecord] = TypeAdapter(SessionRecord)
+SessionRecordAdapter: pydantic.TypeAdapter[SessionRecord] = pydantic.TypeAdapter(SessionRecord)
 
 
 # ==============================================================================

@@ -7,6 +7,7 @@ Extracted from services/restore.py for reuse.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime
 
 from src.schemas.base import StrictModel
@@ -23,4 +24,4 @@ class RestoreResult(StrictModel):
     records_restored: int
     paths_translated: bool
     main_session_file: str
-    agent_files: list[str]
+    agent_files: Sequence[str]

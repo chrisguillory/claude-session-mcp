@@ -2,29 +2,48 @@
 
 from __future__ import annotations
 
-from src.schemas.cc_internal_api.base import FromSdk, FromSession, PermissiveModel
+from src.schemas.cc_internal_api.base import EmptyBody, FromSdk, FromSession, StrictModel
 from src.schemas.cc_internal_api.common import ApiCacheCreation, ApiUsage, CacheControl
-from src.schemas.cc_internal_api.internal_endpoints import (
+from src.schemas.cc_internal_api.feature_flags import (
     KNOWN_FEATURE_FLAGS,
-    AccountSettingsResponse,
-    ClientDataResponse,
-    CountTokensRequest,
-    CountTokensResponse,
-    DismissedBanner,
+    BoolFeatureValue,
     EvalAttributes,
     EvalRequest,
     EvalResponse,
     ExperimentConfig,
     ExperimentResult,
+    FeaturesDict,
     FeatureSource,
     FeatureValue,
+    FeedbackSurveyConfig,
+    FeedbackSurveyFeatureValue,
+    SpinnerWordsConfig,
+    SpinnerWordsFeatureValue,
+    StringFeatureValue,
+    VersionConfig,
+    VersionConfigFeatureValue,
+)
+from src.schemas.cc_internal_api.internal_endpoints import (
+    AccountSettingsResponse,
+    ClientDataResponse,
+    CliRolesResponse,
+    CountTokensRequest,
+    CountTokensResponse,
+    CreateApiKeyResponse,
+    DismissedBanner,
     GroveResponse,
     HelloResponse,
+    MetricDefinition,
+    MetricsDataPoint,
     MetricsEnabledResponse,
+    MetricsRequest,
+    MetricsResponse,
     ModelAccessResponse,
     PaprikaMode,
+    ProfileResponse,
     ReferralCodeDetails,
     ReferralEligibilityResponse,
+    ReferralRedemptionsResponse,
 )
 from src.schemas.cc_internal_api.rate_limits import (
     FallbackStatus,
@@ -62,9 +81,11 @@ from src.schemas.cc_internal_api.statsig import (
     StatsigCustomIDs,
     StatsigEnvironment,
     StatsigEvent,
-    StatsigEventMetadata,
+    StatsigInitializeDeltaResponse,
+    StatsigInitializeFullResponse,
     StatsigInitializeRequest,
     StatsigInitializeResponse,
+    StatsigMarker,
     StatsigMetadata,
     StatsigRegisterRequest,
     StatsigRegisterResponse,
@@ -111,9 +132,10 @@ from src.schemas.cc_internal_api.telemetry import (
 
 __all__ = [
     # Base
+    'EmptyBody',
     'FromSdk',
     'FromSession',
-    'PermissiveModel',
+    'StrictModel',
     # Common
     'ApiCacheCreation',
     'ApiUsage',
@@ -191,23 +213,42 @@ __all__ = [
     'CountTokensResponse',
     # Internal endpoints - Grove/Metrics
     'GroveResponse',
+    'MetricsRequest',
+    'MetricsResponse',
+    'MetricDefinition',
+    'MetricsDataPoint',
     'MetricsEnabledResponse',
-    # Internal endpoints - Feature flags
+    # Feature flags (strict per-flag typing)
     'EvalRequest',
     'EvalResponse',
     'EvalAttributes',
     'FeatureValue',
     'FeatureSource',
+    'FeaturesDict',
     'ExperimentConfig',
     'ExperimentResult',
     'KNOWN_FEATURE_FLAGS',
+    # Feature flag value types
+    'BoolFeatureValue',
+    'StringFeatureValue',
+    'FeedbackSurveyFeatureValue',
+    'VersionConfigFeatureValue',
+    'SpinnerWordsFeatureValue',
+    # Feature flag config types
+    'FeedbackSurveyConfig',
+    'VersionConfig',
+    'SpinnerWordsConfig',
     # Internal endpoints - OAuth
     'AccountSettingsResponse',
     'ClientDataResponse',
+    'CliRolesResponse',
+    'CreateApiKeyResponse',
     'DismissedBanner',
     'PaprikaMode',
+    'ProfileResponse',
     'ReferralCodeDetails',
     'ReferralEligibilityResponse',
+    'ReferralRedemptionsResponse',
     # Internal endpoints - Health/Access
     'HelloResponse',
     'ModelAccessResponse',
@@ -219,8 +260,10 @@ __all__ = [
     'StatsigMetadata',
     'StatsigInitializeRequest',
     'StatsigInitializeResponse',
+    'StatsigInitializeFullResponse',
+    'StatsigInitializeDeltaResponse',
+    'StatsigMarker',
     'StatsigEvent',
-    'StatsigEventMetadata',
     'StatsigRegisterRequest',
     'StatsigRegisterResponse',
 ]

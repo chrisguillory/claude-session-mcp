@@ -9,9 +9,10 @@ Headers follow the pattern: anthropic-ratelimit-unified-{component}
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Literal
 
-from src.schemas.cc_internal_api.base import PermissiveModel
+from src.schemas.cc_internal_api.base import StrictModel
 
 # ==============================================================================
 # Rate Limit Status Types
@@ -28,7 +29,7 @@ RepresentativeClaim = Literal['five_hour', 'seven_day']
 # ==============================================================================
 
 
-class RateLimitWindow(PermissiveModel):
+class RateLimitWindow(StrictModel):
     """
     Rate limit status for a specific time window (5h or 7d).
 
@@ -46,7 +47,7 @@ class RateLimitWindow(PermissiveModel):
 # ==============================================================================
 
 
-class UnifiedRateLimit(PermissiveModel):
+class UnifiedRateLimit(StrictModel):
     """
     Complete rate limit information extracted from response headers.
 
@@ -85,7 +86,7 @@ class UnifiedRateLimit(PermissiveModel):
     overage_disabled_reason: str | None = None
 
     @classmethod
-    def from_headers(cls, headers: dict[str, str]) -> UnifiedRateLimit:
+    def from_headers(cls, headers: Mapping[str, str]) -> UnifiedRateLimit:
         """
         Extract rate limit information from response headers.
 
@@ -130,7 +131,7 @@ class UnifiedRateLimit(PermissiveModel):
         )
 
     @classmethod
-    def from_headers_safe(cls, headers: dict[str, str]) -> UnifiedRateLimit | None:
+    def from_headers_safe(cls, headers: Mapping[str, str]) -> UnifiedRateLimit | None:
         """
         Extract rate limit information, returning None if headers are missing.
 

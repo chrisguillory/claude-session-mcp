@@ -2,6 +2,8 @@
 
 Pydantic models for **Claude Code's internal API usage patterns** - how Claude Code structures requests and handles responses when communicating with the Anthropic Messages API.
 
+> **Type System Philosophy**: This codebase follows maximum strictness in typing. See **[STRICT_TYPING.md](./STRICT_TYPING.md)** for the cognitive science foundations, operational guidelines, and anti-patterns to avoid.
+
 ## What This Module Models
 
 This module captures **how Claude Code uses the API**, which is distinct from:

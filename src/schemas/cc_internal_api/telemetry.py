@@ -13,9 +13,10 @@ Privacy controls:
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from typing import Any, Literal
 
-from src.schemas.cc_internal_api.base import PermissiveModel
+from src.schemas.cc_internal_api.base import StrictModel
 
 # ==============================================================================
 # Type Aliases (strict Literal types - add new values when discovered)
@@ -33,7 +34,7 @@ UserType = Literal['external', 'internal']
 # ==============================================================================
 
 
-class TelemetryEnv(PermissiveModel):
+class TelemetryEnv(StrictModel):
     """
     Environment information included in telemetry events.
 
@@ -63,7 +64,7 @@ class TelemetryEnv(PermissiveModel):
 # ==============================================================================
 
 
-class TelemetryEventData(PermissiveModel):
+class TelemetryEventData(StrictModel):
     """
     Core telemetry event data.
 
@@ -104,7 +105,7 @@ class TelemetryEventData(PermissiveModel):
 # ==============================================================================
 
 
-class TelemetryEvent(PermissiveModel):
+class TelemetryEvent(StrictModel):
     """
     Single telemetry event in a batch.
 
@@ -121,7 +122,7 @@ class TelemetryEvent(PermissiveModel):
 # ==============================================================================
 
 
-class TelemetryBatchRequest(PermissiveModel):
+class TelemetryBatchRequest(StrictModel):
     """
     Batch telemetry request to /api/event_logging/batch.
 
@@ -129,10 +130,10 @@ class TelemetryBatchRequest(PermissiveModel):
     Observed in request body.
     """
 
-    events: list[TelemetryEvent]
+    events: Sequence[TelemetryEvent]
 
 
-class TelemetryBatchResponse(PermissiveModel):
+class TelemetryBatchResponse(StrictModel):
     """
     Response from /api/event_logging/batch.
 
