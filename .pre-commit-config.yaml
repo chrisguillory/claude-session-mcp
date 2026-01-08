@@ -36,10 +36,10 @@ repos:
         pass_filenames: false
         always_run: true
 
-      - id: check-mutable-annotations
-        name: check-mutable-annotations
-        description: Enforce immutable types (Sequence, Mapping, Set) in model annotations
-        entry: ./scripts/check_mutable_annotations.py . --exclude .venv .git __pycache__ .mypy_cache
+      - id: check-schema-typing
+        name: check-schema-typing
+        description: Enforce strict typing (immutable types, no Any, no lazy defaults) in model annotations
+        entry: ./scripts/check_schema_typing.py . --exclude .venv .git __pycache__ .mypy_cache --ignore default-value
         language: script
         pass_filenames: false
         always_run: true

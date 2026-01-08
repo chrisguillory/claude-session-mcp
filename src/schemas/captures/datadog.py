@@ -135,11 +135,11 @@ class DatadogApiSuccessLogEntry(DatadogLogEntryBase):
 
     # --- Optional context fields (TODO: bifurcate by querySource) ---
     # These vary based on querySource - inner bifurcation needed
-    pre_normalized_model: str | None = None  # noqa: bifurcate-later
-    query_chain_id: str | None = None  # noqa: bifurcate-later
-    query_depth: int | None = None  # noqa: bifurcate-later
-    agent_id: str | None = None  # noqa: bifurcate-later
-    agent_type: str | None = None  # noqa: bifurcate-later
+    pre_normalized_model: str | None = None  # TODO: bifurcate by querySource
+    query_chain_id: str | None = None  # TODO: bifurcate by querySource
+    query_depth: int | None = None  # TODO: bifurcate by querySource
+    agent_id: str | None = None  # TODO: bifurcate by querySource
+    agent_type: str | None = None  # TODO: bifurcate by querySource
 
 
 # ==============================================================================
@@ -178,9 +178,9 @@ class DatadogApiErrorLogEntry(DatadogLogEntryBase):
     query_source: str
 
     # --- Optional HTTP status ---
-    http_status: str | None = None  # noqa: genuinely-optional (e.g., "400", "undefined")
-    http_status_range: str | None = None  # noqa: genuinely-optional (e.g., "4xx")
-    request_id: str | None = None  # noqa: genuinely-optional (not always present on errors)
+    http_status: str | None = None  # genuinely optional: (e.g., "400", "undefined")
+    http_status_range: str | None = None  # genuinely optional: (e.g., "4xx")
+    request_id: str | None = None  # genuinely optional: (not always present on errors)
 
 
 # ==============================================================================
@@ -211,11 +211,11 @@ class DatadogToolUseSuccessLogEntry(DatadogLogEntryBase):
     request_id: str  # The API request that triggered this tool
 
     # --- Agent context (when tool used by agent) ---
-    agent_id: str | None = None  # noqa: genuinely-optional (only for agent tool calls)
-    agent_type: str | None = None  # noqa: genuinely-optional (only for agent tool calls)
+    agent_id: str | None = None  # genuinely optional: (only for agent tool calls)
+    agent_type: str | None = None  # genuinely optional: (only for agent tool calls)
 
     # --- MCP-specific (only when is_mcp=True) ---
-    mcp_server_type: str | None = None  # noqa: genuinely-optional (e.g., "stdio")
+    mcp_server_type: str | None = None  # genuinely optional: (e.g., "stdio")
 
 
 # ==============================================================================

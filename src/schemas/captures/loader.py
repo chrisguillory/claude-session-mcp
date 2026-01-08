@@ -68,10 +68,8 @@ from src.schemas.captures.external import (
 from src.schemas.captures.gcs import (
     GCSVersionRequestCapture,
     GCSVersionResponseCapture,
-    ProxyErrorCapture,
-    UnknownRequestCapture,
-    UnknownResponseCapture,
 )
+from src.schemas.captures.proxy import ProxyErrorCapture
 from src.schemas.captures.registry import extract_endpoint_from_filename, get_capture_type
 from src.schemas.captures.segment import (
     SegmentBatchRequestCapture,
@@ -82,6 +80,10 @@ from src.schemas.captures.statsig import (
     StatsigInitializeResponseCapture,
     StatsigRegisterRequestCapture,
     StatsigRegisterResponseCapture,
+)
+from src.schemas.captures.unknown import (
+    UnknownRequestCapture,
+    UnknownResponseCapture,
 )
 
 # ==============================================================================

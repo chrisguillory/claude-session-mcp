@@ -48,15 +48,28 @@ class RecordWithoutField(StrictModel):
 Record = RecordWithField | RecordWithoutField
 ```
 
-### Exceptions: The noqa Pattern
+### Exceptions: Directive Comments
 
 When a loose pattern is genuinely necessary (e.g., JSON Schema meta-schema),
-add an explicit noqa comment with a reason:
+add an explicit directive comment with a reason. The directive uses the script
+filename as the prefix for maximum clarity:
 
 ```python
-# noqa: loose-typing - JSON Schema meta-schema; typing would require typing JSON Schema itself
+# check_schema_typing.py: loose-typing - JSON Schema meta-schema
 properties: Mapping[str, Any]
 ```
+
+#### Directive Codes
+
+| Code            | Suppresses                        | Use Case                        |
+|-----------------|-----------------------------------|---------------------------------|
+| `mutable-type`  | `list`, `dict`, `set` annotations | When mutability is intentional  |
+| `loose-typing`  | `Any`, `Mapping[str, Any]`        | True Unknown captures           |
+| `default-value` | Mutable default values            | Factory defaults with `Field()` |
+
+The `# check_schema_typing.py:` prefix is explicit by design - anyone reading
+the code can immediately identify which tool processes these directives and
+`grep "check_schema_typing.py"` finds both the script and all its annotations.
 
 ### The Typed + Fallback Pattern
 
@@ -140,7 +153,7 @@ successfully, but you get visibility into what structures need typed models.
 
 1. **Type what you observe** - Create models for EVERY observed structure
 2. **Subclass names describe domain** - `UnknownConfigValue`, not `PermissiveConfigValue`
-3. **No noqa needed** - `PermissiveModel` subclasses are proper types!
+3. **No directive needed** - `PermissiveModel` subclasses are proper types!
 4. **Detection via isinstance()** - `isinstance(x, PermissiveModel)` catches all fallbacks
 5. **Order matters** - Put specific types first, fallback last (union_mode='left_to_right')
 
@@ -148,16 +161,16 @@ successfully, but you get visibility into what structures need typed models.
 
 There are TWO different patterns - don't confuse them:
 
-| Pattern              | Location               | Body Type                            | noqa? | Goal                            |
-|----------------------|------------------------|--------------------------------------|-------|---------------------------------|
-| **Typed + Fallback** | statsig.py, segment.py | `PermissiveModel` subclass           | NO    | Type safety + graceful fallback |
-| **True Unknown**     | gcs.py                 | `Mapping[str, Any] \| Sequence[Any]` | YES   | Catch unmapped endpoints        |
+| Pattern              | Location               | Body Type                            | Directive? | Goal                            |
+|----------------------|------------------------|--------------------------------------|------------|---------------------------------|
+| **Typed + Fallback** | statsig.py, segment.py | `PermissiveModel` subclass           | NO         | Type safety + graceful fallback |
+| **True Unknown**     | unknown.py             | `Mapping[str, Any] \| Sequence[Any]` | YES        | Catch unmapped endpoints        |
 
 **Typed + Fallback**: We have typed models, need fallback for unknown structures.
-The fallback is a proper type (`UnknownConfigValue`), detectable, no noqa needed.
+The fallback is a proper type (`UnknownConfigValue`), detectable, no directive needed.
 
 **True Unknown** (`UnknownRequestCapture`): Entire endpoint is unmapped. Body can
-be dict OR list. Uses `Mapping[str, Any]` with noqa. Goal is to shrink as we type
+be dict OR list. Uses `Mapping[str, Any]` with directive. Goal is to shrink as we type
 more endpoints.
 
 #### Anti-pattern: Premature Type Deletion
@@ -178,7 +191,7 @@ might reuse it, and the maintenance cost is near-zero.
 
 - API has a fixed schema (use strict typing only)
 - You haven't observed any data yet (capture first, then type)
-- Entire endpoint is unmapped (use `UnknownRequestCapture` in gcs.py)
+- Entire endpoint is unmapped (use `UnknownRequestCapture` in unknown.py)
 
 ## Adding New Capture Types
 
@@ -197,22 +210,24 @@ might reuse it, and the maintenance cost is near-zero.
 
 ## Module Structure
 
-| Module         | Contents                                                                  |
-|----------------|---------------------------------------------------------------------------|
-| `base.py`      | `RequestCapture`, `ResponseCapture`, service bases, connection metadata   |
-| `anthropic.py` | Anthropic API: Messages, Telemetry, CountTokens, Eval, internal endpoints |
-| `statsig.py`   | Statsig feature flags: Register, Initialize                               |
-| `datadog.py`   | Datadog telemetry: log ingestion                                          |
-| `segment.py`   | Segment analytics: discriminated union of 6 event types                   |
-| `external.py`  | Other services: OAuth, domain checks, documentation                       |
-| `gcs.py`       | GCS version check, fallback/unknown captures                              |
-| `registry.py`  | `CAPTURE_REGISTRY`, `get_capture_type()`, path normalization              |
-| `loader.py`    | `CapturedTraffic` union, `load_capture()`, preprocessing                  |
-| `__init__.py`  | Public API exports                                                        |
+| Module         | Contents                                                                       |
+|----------------|--------------------------------------------------------------------------------|
+| `base.py`      | `RequestCapture`, `ResponseCapture`, service bases, connection metadata        |
+| `anthropic.py` | Anthropic API: Messages, Telemetry, CountTokens, Eval, internal endpoints      |
+| `statsig.py`   | Statsig feature flags: Register, Initialize                                    |
+| `datadog.py`   | Datadog telemetry: log ingestion                                               |
+| `segment.py`   | Segment analytics: discriminated union of 6 event types                        |
+| `external.py`  | Other services: OAuth, domain checks, documentation                            |
+| `gcs.py`       | GCS version check (`storage.googleapis.com`)                                   |
+| `unknown.py`   | Application-layer fallbacks: `UnknownRequestCapture`, `UnknownResponseCapture` |
+| `proxy.py`     | Infrastructure-layer: `ProxyErrorCapture` (mitmproxy errors)                   |
+| `registry.py`  | `CAPTURE_REGISTRY`, `get_capture_type()`, path normalization                   |
+| `loader.py`    | `CapturedTraffic` union, `load_capture()`, preprocessing                       |
+| `__init__.py`  | Public API exports                                                             |
 
 ### Module Organization Rationale
 
-Modules are organized by **service host**, not by function:
+Most modules are organized by **service host**:
 
 - **`anthropic.py`** - `api.anthropic.com` (~38 classes)
 - **`statsig.py`** - `statsig.anthropic.com` (~4 classes)
@@ -226,6 +241,32 @@ Modules are organized by **service host**, not by function:
 Services get their own module when they have sufficient volume and complexity.
 `external.py` aggregates services with few endpoints (1-2 each) that don't
 warrant dedicated files. If a service grows, it can be extracted to its own module.
+
+### Layer-Based Organization (Non-Service Modules)
+
+Two modules don't fit the service-host pattern because they represent different
+**architectural layers**, not external services:
+
+| Module        | Layer          | Knowledge State                   | Purpose                         |
+|---------------|----------------|-----------------------------------|---------------------------------|
+| `unknown.py` | Application    | Incomplete domain knowledge       | Fallback for unmapped endpoints |
+| `proxy.py`    | Infrastructure | Complete infrastructure knowledge | Proxy system events             |
+
+**Why separate?** These modules share one property (no service host) but represent
+categorically different concerns:
+
+- **`unknown.py`** - Application-layer fallbacks. We *don't know* the structure
+  of these endpoints yet. Goal: shrink as we type more endpoints.
+- **`proxy.py`** - Infrastructure-layer events. We *fully understand* mitmproxy's
+  error structure. These are about the capture system itself, not captured traffic.
+
+Grouping them together would conflate:
+- "Unknown structure" (incomplete domain knowledge) with
+- "Infrastructure concern" (complete infrastructure knowledge)
+
+This separation follows patterns from well-designed Python projects (Django, FastAPI,
+SQLAlchemy) which organize cross-cutting concerns by architectural layer rather than
+creating catch-all modules.
 
 ## Architecture
 

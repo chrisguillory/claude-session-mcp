@@ -12,10 +12,10 @@ every value must be explicitly provided by the data being validated.
 Design Philosophy:
     - Error-only, no auto-fix: Forces conscious decision at each occurrence
     - Pure analysis: Checks exactly the files it's given (no internal filtering)
-    - Escape hatches:
-      - # noqa: mutable-type - suppress mutable type violations (list, dict, set)
-      - # noqa: loose-typing - suppress loose typing violations (Any)
-      - # noqa: default-value - suppress default value violations
+    - Escape hatches (use this script's filename as the directive prefix):
+      - # check_schema_typing.py: mutable-type - suppress mutable type violations
+      - # check_schema_typing.py: loose-typing - suppress loose typing violations
+      - # check_schema_typing.py: default-value - suppress default value violations
 
 Usage:
     ./scripts/check_schema_typing.py <files...>
@@ -89,10 +89,11 @@ MODEL_BASE_CLASSES: Set[str] = {
     'PermissiveModel',
 }
 
-# Classes that are exempt from checking (interface definitions)
+# Classes that are exempt from checking (interface definitions and domain models)
 EXEMPT_BASE_CLASSES: Set[str] = {
     'TypedDict',
     'Protocol',
+    'DomainModel',  # Domain/application models are intentionally mutable (src/domain/)
 }
 
 
@@ -104,7 +105,7 @@ EXEMPT_BASE_CLASSES: Set[str] = {
 # Type aliases for constrained string values
 ViolationKind = Literal['mutable', 'loose', 'default']
 FieldContext = Literal['field', 'parameter']
-NoqaCode = Literal['mutable-type', 'loose-typing', 'default-value']
+DirectiveCode = Literal['mutable-type', 'loose-typing', 'default-value']
 
 
 @dataclass(frozen=True)
@@ -217,8 +218,8 @@ class SchemaTypeChecker(ast.NodeVisitor):
 
         lineno = node.lineno
 
-        # Check for noqa before doing detailed analysis
-        if self._has_noqa(lineno, 'default'):
+        # Check for directive before doing detailed analysis
+        if self._has_directive(lineno, 'default'):
             return
 
         # Case 1: Field() call - check for default/default_factory
@@ -310,8 +311,8 @@ class SchemaTypeChecker(ast.NodeVisitor):
             # Determine violation kind
             kind: ViolationKind = 'loose' if bad_type in LOOSE_TYPES else 'mutable'
 
-            # Check for noqa comment with appropriate code
-            if self._has_noqa(lineno, kind):
+            # Check for directive comment with appropriate code
+            if self._has_directive(lineno, kind):
                 return
 
             # Get the source line for context
@@ -418,41 +419,37 @@ class SchemaTypeChecker(ast.NodeVisitor):
             # Invalid annotation - let other tools catch this
             return None
 
-    # Mapping from violation kind to noqa code
-    _NOQA_CODES: Mapping[ViolationKind, NoqaCode] = {
+    # Mapping from violation kind to directive code
+    _DIRECTIVE_CODES: Mapping[ViolationKind, DirectiveCode] = {
         'mutable': 'mutable-type',
         'loose': 'loose-typing',
         'default': 'default-value',
     }
 
-    def _has_noqa(self, lineno: int, violation_kind: ViolationKind) -> bool:
-        """Check if line has a noqa comment for this check.
+    # The directive prefix - uses the script filename for maximum clarity
+    _DIRECTIVE_PREFIX = '# check_schema_typing.py:'
+
+    def _has_directive(self, lineno: int, violation_kind: ViolationKind) -> bool:
+        """Check if line has a directive comment for this check.
 
         Args:
             lineno: Line number to check
-            violation_kind: 'mutable', 'loose', or 'default' - determines which noqa code to check
+            violation_kind: 'mutable', 'loose', or 'default' - determines which code to check
 
         Returns:
-            True if a matching noqa comment is found
+            True if a matching directive comment is found
         """
         if 0 < lineno <= len(self.source_lines):
             line = self.source_lines[lineno - 1]
 
-            # Look for noqa comment
-            if '# noqa' not in line.lower():
+            # Look for our directive prefix
+            prefix_lower = self._DIRECTIVE_PREFIX.lower()
+            if prefix_lower not in line.lower():
                 return False
 
-            # Find the noqa part
-            noqa_idx = line.lower().find('# noqa')
-            noqa_part = line[noqa_idx + 6 :].strip()
-
-            # Bare # noqa ignores everything
-            if not noqa_part or not noqa_part.startswith(':'):
-                return True
-
-            # Check for specific codes after the colon
-            # Handle: "# noqa: CODE # explanation" or "# noqa: CODE1, CODE2"
-            codes_part = noqa_part[1:].strip()
+            # Find the directive part
+            directive_idx = line.lower().find(prefix_lower)
+            codes_part = line[directive_idx + len(self._DIRECTIVE_PREFIX) :].strip()
 
             # Strip trailing comment (# explanation)
             if ' #' in codes_part:
@@ -461,8 +458,8 @@ class SchemaTypeChecker(ast.NodeVisitor):
             # Split by comma and extract just the code (strip any trailing text)
             codes = [c.strip().lower().split()[0] for c in codes_part.split(',') if c.strip()]
 
-            # Look up the noqa code for this violation kind
-            expected_code = self._NOQA_CODES.get(violation_kind)
+            # Look up the code for this violation kind
+            expected_code = self._DIRECTIVE_CODES.get(violation_kind)
             if expected_code and expected_code in codes:
                 return True
 
@@ -507,23 +504,23 @@ def find_python_files(root: Path, exclude_dirs: Set[str]) -> list[Path]:
 
 def format_violation(v: Violation) -> str:
     """Format a violation for display."""
-    # Determine error type description and noqa code
+    # Determine error type description and directive code
     if v.violation_kind == 'default':
         type_desc = 'Default value'
-        noqa_code = 'default-value'
+        directive_code = 'default-value'
     elif v.violation_kind == 'loose':
         type_desc = 'Loose type'
-        noqa_code = 'loose-typing'
+        directive_code = 'loose-typing'
     else:
         type_desc = 'Mutable type'
-        noqa_code = 'mutable-type'
+        directive_code = 'mutable-type'
 
     return (
         f'{v.filepath}:{v.line}:{v.column}: error: '
         f"{type_desc} '{v.bad_type}' in {v.context} annotation\n"
         f'    {v.source_line}\n'
         f'    Suggestion: Use {v.suggestion}\n'
-        f'    Silence with: # noqa: {noqa_code}'
+        f'    Silence with: # check_schema_typing.py: {directive_code}'
     )
 
 
@@ -532,11 +529,19 @@ def format_violation(v: Violation) -> str:
 # =============================================================================
 
 
+# Map from directive codes to violation kinds for --ignore flag
+_CODE_TO_KIND: dict[str, ViolationKind] = {
+    'mutable-type': 'mutable',
+    'loose-typing': 'loose',
+    'default-value': 'default',
+}
+
+
 def main() -> int:
     """Main entry point."""
     parser = argparse.ArgumentParser(
         description='Check for mutable and loose types in model annotations.',
-        epilog='Example: %(prog)s . --exclude .venv .git',
+        epilog='Example: %(prog)s . --exclude .venv .git --ignore default-value',
     )
     parser.add_argument(
         'paths',
@@ -550,9 +555,18 @@ def main() -> int:
         metavar='DIR',
         help='Directories to exclude when searching recursively',
     )
+    parser.add_argument(
+        '--ignore',
+        nargs='*',
+        default=[],
+        metavar='CODE',
+        choices=['mutable-type', 'loose-typing', 'default-value'],
+        help='Violation codes to ignore (mutable-type, loose-typing, default-value)',
+    )
 
     args = parser.parse_args()
     exclude_dirs = set(args.exclude)
+    ignored_kinds: set[ViolationKind] = {_CODE_TO_KIND[code] for code in args.ignore}
 
     # Collect files to check
     files: list[Path] = []
@@ -573,6 +587,10 @@ def main() -> int:
     for filepath in files:
         violations = check_file(filepath)
         all_violations.extend(violations)
+
+    # Filter out ignored violation kinds
+    if ignored_kinds:
+        all_violations = [v for v in all_violations if v.violation_kind not in ignored_kinds]
 
     # Report violations
     if all_violations:

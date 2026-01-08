@@ -95,15 +95,17 @@ from src.schemas.captures.external import (
 from src.schemas.captures.gcs import (
     GCSVersionRequestCapture,
     GCSVersionResponseCapture,
-    ProxyErrorCapture,
     RawTextBody,
-    UnknownRequestCapture,
-    UnknownResponseCapture,
 )
 from src.schemas.captures.loader import (
     CapturedTraffic,
     load_capture,
     load_captures_batch,
+)
+from src.schemas.captures.proxy import (
+    ProxyErrorCapture,
+    ProxyErrorDetail,
+    ProxyErrorRequest,
 )
 from src.schemas.captures.registry import (
     CAPTURE_REGISTRY,
@@ -120,6 +122,10 @@ from src.schemas.captures.statsig import (
     StatsigInitializeResponseCapture,
     StatsigRegisterRequestCapture,
     StatsigRegisterResponseCapture,
+)
+from src.schemas.captures.unknown import (
+    UnknownRequestCapture,
+    UnknownResponseCapture,
 )
 
 __all__ = [
@@ -228,8 +234,11 @@ __all__ = [
     'CodeClaudeComDocResponseCapture',
     'PlatformClaudeComDocRequestCapture',
     'PlatformClaudeComDocResponseCapture',
-    # Fallback captures
+    # Fallback captures (unknown.py - application layer)
     'UnknownRequestCapture',
     'UnknownResponseCapture',
+    # Proxy infrastructure (proxy.py - infrastructure layer)
     'ProxyErrorCapture',
+    'ProxyErrorDetail',
+    'ProxyErrorRequest',
 ]
