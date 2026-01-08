@@ -18,6 +18,7 @@ CLAUDE CODE VERSION COMPATIBILITY:
 - Schema v0.1.7: Added model_context_window_exceeded stop_reason for context overflow handling
 - Schema v0.1.8: Added sourceToolUseID, EmptyError, BeforeValidator for ultrathink case normalization (2.0.76+)
 - Schema v0.1.9: Added CustomTitleRecord for user-defined session names
+- Schema v0.2.0: Added sourceToolAssistantUUID to UserRecord, TurnDurationSystemRecord for Claude Code 2.1.1+
 - If validation fails, Claude Code schema may have changed - update models accordingly
 
 NEW FIELDS IN CLAUDE CODE 2.0.51+ (Schema v0.1.3):
@@ -87,11 +88,11 @@ from src.schemas.types import BaseStrictModel, ModelId
 # Schema Version
 # ==============================================================================
 
-SCHEMA_VERSION = '0.1.9'
+SCHEMA_VERSION = '0.2.0'
 CLAUDE_CODE_MIN_VERSION = '2.0.35'
-CLAUDE_CODE_MAX_VERSION = '2.0.76'
-LAST_VALIDATED = '2025-12-29'
-VALIDATION_RECORD_COUNT = 98_971
+CLAUDE_CODE_MAX_VERSION = '2.1.1'
+LAST_VALIDATED = '2026-01-07'
+VALIDATION_RECORD_COUNT = 377_833
 
 
 # ==============================================================================
@@ -810,6 +811,10 @@ class UserRecord(BaseRecord):
         None,
         description='Tool use ID that generated this message (e.g., toolu_015eZkLKZz5JVkGC1zZrnnKm) (Claude Code 2.0.76+)',
     )
+    sourceToolAssistantUUID: str | None = pydantic.Field(
+        None,
+        description='UUID of the assistant message that created the tool use this record responds to',
+    )
 
 
 # ==============================================================================
@@ -959,9 +964,29 @@ class InformationalSystemRecord(BaseRecord):
     gitBranch: str | None = None
 
 
+class TurnDurationSystemRecord(BaseRecord):
+    """System record for turn duration tracking (subtype=turn_duration, Claude Code 2.1.1+)."""
+
+    type: Literal['system']
+    cwd: PathField
+    parentUuid: str | None
+    subtype: Literal['turn_duration']
+    durationMs: int  # Duration of the turn in milliseconds
+    isMeta: bool
+    isSidechain: bool
+    userType: str
+    version: str
+    gitBranch: str
+    slug: str | None = None
+
+
 # Union of system subtype records
 SystemSubtypeRecord = Annotated[
-    LocalCommandSystemRecord | CompactBoundarySystemRecord | ApiErrorSystemRecord | InformationalSystemRecord,
+    LocalCommandSystemRecord
+    | CompactBoundarySystemRecord
+    | ApiErrorSystemRecord
+    | InformationalSystemRecord
+    | TurnDurationSystemRecord,
     pydantic.Field(discriminator='subtype'),
 ]
 
@@ -1042,6 +1067,7 @@ SessionRecord = Annotated[
     | CompactBoundarySystemRecord  # Must be before SystemRecord!
     | ApiErrorSystemRecord  # Must be before SystemRecord!
     | InformationalSystemRecord  # Must be before SystemRecord!
+    | TurnDurationSystemRecord  # Must be before SystemRecord!
     | SystemRecord
     | FileHistorySnapshotRecord
     | QueueOperationRecord

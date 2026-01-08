@@ -18,13 +18,16 @@ The goal is complete observability with zero escape hatches.
 
 ### Banned Patterns
 
-| Pattern | Why It's Wrong | Replacement |
-|---------|----------------|-------------|
-| `Mapping[str, Any]` | Hides structure | TypedDict or per-shape Model |
-| `Sequence[Any]` | Hides element types | Typed elements |
-| `| None = None` | Lazy optionality | Bifurcate into separate types |
-| `Any` anywhere | Total escape hatch | Never use (except validators) |
-| `dict[str, Any]` | Mutable + untyped | `Mapping` + typed values |
+| Pattern                  | Why It's Wrong      | Replacement                          |
+|--------------------------|---------------------|--------------------------------------|
+| Pure `Mapping[str, Any]` | Hides structure     | Typed + Fallback pattern (see below) |
+| `Sequence[Any]`          | Hides element types | Typed elements                       |
+| `                        | None = None`        | Lazy optionality                     | Bifurcate into separate types |
+| `Any` anywhere           | Total escape hatch  | Never use (except validators)        |
+| `dict[str, Any]`         | Mutable + untyped   | `Mapping` + typed values             |
+
+Note: `Mapping[str, Any]` is acceptable **only** as a fallback in the Typed + Fallback
+pattern (see below), not as a primary type annotation.
 
 ### The Bifurcation Pattern
 
@@ -45,7 +48,7 @@ class RecordWithoutField(StrictModel):
 Record = RecordWithField | RecordWithoutField
 ```
 
-### Exceptions
+### Exceptions: The noqa Pattern
 
 When a loose pattern is genuinely necessary (e.g., JSON Schema meta-schema),
 add an explicit noqa comment with a reason:
@@ -54,6 +57,108 @@ add an explicit noqa comment with a reason:
 # noqa: loose-typing - JSON Schema meta-schema; typing would require typing JSON Schema itself
 properties: Mapping[str, Any]
 ```
+
+### The Typed + Fallback Pattern
+
+For **extensible APIs** where unknown data can appear, use a discriminated union
+with typed models for known patterns and a **PermissiveModel subclass** as fallback.
+
+#### The PermissiveModel / StrictModel Symmetry
+
+```python
+# In src/schemas/types.py - Foundation types
+class BaseStrictModel(BaseModel):
+    model_config = {'extra': 'forbid'}  # Rejects unknown fields
+
+class PermissiveModel(BaseModel):
+    model_config = {'extra': 'allow'}   # Accepts unknown fields
+```
+
+| Model             | Behavior               | Use Case                        |
+|-------------------|------------------------|---------------------------------|
+| `StrictModel`     | Rejects unknown fields | Known, fixed structures         |
+| `PermissiveModel` | Accepts unknown fields | Fallback for unknown structures |
+
+#### Creating Domain-Specific Fallbacks
+
+Subclass names describe the **domain**, not the mechanism (inheritance conveys that):
+
+```python
+# In statsig.py - domain-specific fallback
+class UnknownConfigValue(PermissiveModel):
+    """Unknown Statsig config value structure."""
+    pass
+
+# In segment.py - domain-specific fallbacks
+class UnknownSegmentTraits(PermissiveModel):
+    """Unknown Segment event traits."""
+    pass
+
+# Usage in union - NO NOQA NEEDED! It's a proper type.
+DynamicConfigValue = Annotated[
+    FeedbackTimingConfigValue
+    | EnabledConfigValue
+    | VariantConfigValue
+    | UnknownConfigValue,  # Proper type, detectable via isinstance()
+    pydantic.Field(union_mode='left_to_right'),
+]
+```
+
+#### Detection and Observability
+
+Because `PermissiveModel` subclasses are proper types, detection is trivial:
+
+```python
+# In validate_captures.py
+if isinstance(config.value, PermissiveModel):
+    logger.warning(f"Unknown structure: {config.value.get_structure().keys()}")
+```
+
+This enables tracking fallback usage without hard failures.
+
+#### Key Points
+
+1. **Type what you observe** - Create models for EVERY observed structure
+2. **Subclass names describe domain** - `UnknownConfigValue`, not `PermissiveConfigValue`
+3. **No noqa needed** - `PermissiveModel` subclasses are proper types!
+4. **Detection via isinstance()** - `isinstance(x, PermissiveModel)` catches all fallbacks
+5. **Order matters** - Put specific types first, fallback last (union_mode='left_to_right')
+
+#### Typed + Fallback vs True Unknown Captures
+
+There are TWO different patterns - don't confuse them:
+
+| Pattern              | Location               | Body Type                            | noqa? | Goal                            |
+|----------------------|------------------------|--------------------------------------|-------|---------------------------------|
+| **Typed + Fallback** | statsig.py, segment.py | `PermissiveModel` subclass           | NO    | Type safety + graceful fallback |
+| **True Unknown**     | gcs.py                 | `Mapping[str, Any] \| Sequence[Any]` | YES   | Catch unmapped endpoints        |
+
+**Typed + Fallback**: We have typed models, need fallback for unknown structures.
+The fallback is a proper type (`UnknownConfigValue`), detectable, no noqa needed.
+
+**True Unknown** (`UnknownRequestCapture`): Entire endpoint is unmapped. Body can
+be dict OR list. Uses `Mapping[str, Any]` with noqa. Goal is to shrink as we type
+more endpoints.
+
+#### Anti-pattern: Premature Type Deletion
+
+Just as we don't prematurely catch exceptions (see CLAUDE.md), we don't
+prematurely delete types. If a typed pattern seems "not useful", the correct
+response is to **keep it** unless there's evidence it's wrong. Future patterns
+might reuse it, and the maintenance cost is near-zero.
+
+#### When to Use Typed + Fallback
+
+- API is explicitly designed to be extensible (e.g., Statsig dynamic configs)
+- New variants can appear at any time
+- You have observed examples to type
+- You want detection/tracking of unknown structures
+
+#### When NOT to Use
+
+- API has a fixed schema (use strict typing only)
+- You haven't observed any data yet (capture first, then type)
+- Entire endpoint is unmapped (use `UnknownRequestCapture` in gcs.py)
 
 ## Adding New Capture Types
 

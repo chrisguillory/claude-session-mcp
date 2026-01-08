@@ -42,6 +42,48 @@ class BaseStrictModel(pydantic.BaseModel):
 
 
 # ==============================================================================
+# Permissive Model (Foundation)
+# ==============================================================================
+
+
+class PermissiveModel(pydantic.BaseModel):
+    """
+    Foundation permissive model for typed fallbacks in unions.
+
+    Symmetry with BaseStrictModel:
+    - BaseStrictModel: extra='forbid' (rejects unknown fields)
+    - PermissiveModel: extra='allow' (accepts unknown fields)
+
+    Use as the LAST type in typed unions to catch unknown structures:
+
+        DynamicConfigValue = Annotated[
+            TypedConfig1 | TypedConfig2 | UnknownConfigValue,
+            pydantic.Field(union_mode='left_to_right'),
+        ]
+
+        class UnknownConfigValue(PermissiveModel):
+            pass
+
+    Detection: isinstance(x, PermissiveModel) catches all fallback usages,
+    enabling validation scripts to report untyped structures.
+    """
+
+    model_config = pydantic.ConfigDict(
+        extra='allow',  # Accept unknown fields (graceful fallback)
+        strict=True,  # Strict type coercion for known fields
+        frozen=True,  # Immutable after creation
+    )
+
+    def get_extra_fields(self) -> dict[str, object]:
+        """Get extra fields captured by this permissive model.
+
+        Returns only the unknown fields, not defined model fields.
+        Useful for inspection and logging of untyped structures.
+        """
+        return dict(self.__pydantic_extra__) if self.__pydantic_extra__ else {}
+
+
+# ==============================================================================
 # Empty JSON Types
 # ==============================================================================
 #

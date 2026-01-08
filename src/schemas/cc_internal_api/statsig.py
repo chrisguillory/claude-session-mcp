@@ -24,6 +24,7 @@ from typing import Annotated, Any, Literal
 import pydantic
 
 from src.schemas.cc_internal_api.base import EmptyBody, EmptyDict, StrictModel
+from src.schemas.types import PermissiveModel
 
 # ==============================================================================
 # Common Types
@@ -141,6 +142,251 @@ class StatsigInitializeRequest(StrictModel):
     previousDerivedFields: DerivedFields | EmptyDict
 
 
+# ==============================================================================
+# Dynamic Config Value Types - Typed + Fallback Pattern
+#
+# Each observed value structure gets a typed model. Unknown structures fall
+# back to Mapping[str, Any]. This provides type safety for known patterns
+# while gracefully handling new configs.
+# ==============================================================================
+
+
+class EmptyConfigValue(StrictModel):
+    """Config value that is always empty ({}).
+
+    Used by 23 configs: 1250065512, 1392718930, 1658713715, etc.
+    """
+
+    pass
+
+
+class EnabledConfigValue(StrictModel):
+    """Config value with just {enabled: bool}.
+
+    Used by 4 configs: 1460041042, 1582573384, 3599666185, 709748524
+    """
+
+    enabled: bool
+
+
+class VariantConfigValue(StrictModel):
+    """Config value with {variant: str}.
+
+    Used for A/B test variant selection.
+    Used by 2 configs: 4008157471, 522643335
+    """
+
+    variant: str
+
+
+class ShowConfigValue(StrictModel):
+    """Config value with {show: bool}."""
+
+    show: bool
+
+
+class ActivatedConfigValue(StrictModel):
+    """Config value with {activated: bool}."""
+
+    activated: bool
+
+
+class CapConfigValue(StrictModel):
+    """Config value with {cap: int}."""
+
+    cap: int
+
+
+class ValueStrConfigValue(StrictModel):
+    """Config value with {value: str}."""
+
+    value: str
+
+
+class SubpagesConfigValue(StrictModel):
+    """Config value with {subpages: str} - documentation subpage list."""
+
+    subpages: str
+
+
+class MinVersionConfigValue(StrictModel):
+    """Config value with {minVersion: str} - version constraints."""
+
+    minVersion: str
+
+
+class CapableModelConfigValue(StrictModel):
+    """Config value with {capableModel: str} - model capability."""
+
+    capableModel: str
+
+
+class WordsConfigValue(StrictModel):
+    """Config value with {words: list[str]} - loading spinner words."""
+
+    words: Sequence[str]
+
+
+class OnByDefaultConfigValue(StrictModel):
+    """Config value with {on_by_default: bool}."""
+
+    on_by_default: bool
+
+
+class FromMarketplaceConfigValue(StrictModel):
+    """Config value with {fromMarketplace: bool}."""
+
+    fromMarketplace: bool
+
+
+class HideClaudeMdTipConfigValue(StrictModel):
+    """Config value with {hide_claudemd_tip: bool}."""
+
+    hide_claudemd_tip: bool
+
+
+class HideTerminalTipConfigValue(StrictModel):
+    """Config value with {hide_terminal_tip: bool}."""
+
+    hide_terminal_tip: bool
+
+
+class OpusPlanDefaultConfigValue(StrictModel):
+    """Config value with {tengu_opusplan_default: str}."""
+
+    tengu_opusplan_default: str
+
+
+class SimplifiedOnboardingConfigValue(StrictModel):
+    """Config value with {show_simplified_onboarding: bool}."""
+
+    show_simplified_onboarding: bool
+
+
+class HideQuestionsTipsConfigValue(StrictModel):
+    """Config value with {hide_questions_changes_tips: bool}."""
+
+    hide_questions_changes_tips: bool
+
+
+class FallbackWarningThresholdConfigValue(StrictModel):
+    """Config value with {fallback_available_warning_threshold: float}."""
+
+    fallback_available_warning_threshold: float
+
+
+class TipColorConfigValue(StrictModel):
+    """Config value with {tip: str, color: str}."""
+
+    tip: str
+    color: str
+
+
+class TokenThresholdConfigValue(StrictModel):
+    """Config value with {enabled: bool, tokenThreshold: float}."""
+
+    enabled: bool
+    tokenThreshold: float
+
+
+class SpinnerColorConfigValue(StrictModel):
+    """Config value for spinner colors by state."""
+
+    normal: str
+    responding: str
+    thinking: str
+    toolUse: str
+
+
+class OtelBatchConfigValue(StrictModel):
+    """Config value for OpenTelemetry batch settings."""
+
+    scheduledDelayMillis: int
+    maxExportBatchSize: int
+    maxQueueSize: int
+
+
+class ContextUpdateConfigValue(StrictModel):
+    """Config value for context update token thresholds."""
+
+    minimumMessageTokensToInit: int
+    minimumTokensBetweenUpdate: int
+    toolCallsBetweenUpdates: int
+
+
+class FeedbackTimingConfigValue(StrictModel):
+    """Config value for user feedback timing and probability."""
+
+    minTimeBeforeFeedbackMs: int
+    minTimeBetweenFeedbackMs: int
+    minTimeBetweenGlobalFeedbackMs: int
+    minUserTurnsBeforeFeedback: int
+    minUserTurnsBetweenFeedback: int
+    hideThanksAfterMs: int
+    onForModels: Sequence[str]
+    probability: float
+
+
+class UnknownConfigValue(PermissiveModel):
+    """Fallback for unknown Statsig config value structures.
+
+    Uses PermissiveModel to accept any fields while remaining a proper type.
+    Detection: isinstance(x, UnknownConfigValue) or isinstance(x, PermissiveModel)
+    """
+
+    pass
+
+
+# Discriminated union of all known config value types with fallback.
+# Pydantic tries each type in order (left_to_right), falling back to
+# UnknownConfigValue for unknown structures.
+DynamicConfigValue = Annotated[
+    # Most specific first (multi-field)
+    FeedbackTimingConfigValue
+    | ContextUpdateConfigValue
+    | OtelBatchConfigValue
+    | SpinnerColorConfigValue
+    | TokenThresholdConfigValue
+    | TipColorConfigValue
+    # Single-field types (alphabetical for consistency)
+    | ActivatedConfigValue
+    | CapConfigValue
+    | CapableModelConfigValue
+    | EnabledConfigValue
+    | FallbackWarningThresholdConfigValue
+    | FromMarketplaceConfigValue
+    | HideClaudeMdTipConfigValue
+    | HideQuestionsTipsConfigValue
+    | HideTerminalTipConfigValue
+    | MinVersionConfigValue
+    | OnByDefaultConfigValue
+    | OpusPlanDefaultConfigValue
+    | ShowConfigValue
+    | SimplifiedOnboardingConfigValue
+    | SubpagesConfigValue
+    | ValueStrConfigValue
+    | VariantConfigValue
+    | WordsConfigValue
+    # Empty config (common case)
+    | EmptyConfigValue
+    # Fallback for unknown structures (PermissiveModel - no noqa needed!)
+    | UnknownConfigValue,
+    pydantic.Field(union_mode='left_to_right'),
+]
+
+
+class SecondaryExposure(StrictModel):
+    """Secondary gate exposure in Statsig response.
+
+    Represents a secondary gate that was evaluated as part of a
+    primary gate or dynamic config evaluation.
+    """
+
+    gate: str
+    gateValue: Literal['true', 'false']  # String booleans in Statsig
+    ruleID: str
+
+
 class StatsigFeatureGate(StrictModel):
     """Feature gate value in Statsig initialize response."""
 
@@ -148,19 +394,19 @@ class StatsigFeatureGate(StrictModel):
     value: bool
     rule_id: str
     id_type: str
-    secondary_exposures: Sequence[Mapping[str, str]]
+    secondary_exposures: Sequence[SecondaryExposure]
 
 
 class StatsigBaseDynamicConfig(StrictModel):
     """Base fields for all Statsig dynamic configs."""
 
     name: str
-    value: Mapping[str, Any]  # noqa: loose-typing # genuinely polymorphic config payloads
+    value: DynamicConfigValue  # Typed + Fallback: known structures typed, unknown use Mapping fallback
     rule_id: str
     group: str
     is_device_based: bool
     id_type: str
-    secondary_exposures: Sequence[Mapping[str, str]]
+    secondary_exposures: Sequence[SecondaryExposure]
 
 
 class StatsigEvaluatedConfig(StatsigBaseDynamicConfig):
@@ -1103,7 +1349,7 @@ class StatsigConfigExposureEvent(StrictModel):
     user: StatsigUser
     time: int
     value: None  # Always null in rgstr requests
-    secondaryExposures: Sequence[Mapping[str, str]]
+    secondaryExposures: Sequence[SecondaryExposure]
 
 
 class StatsigGateExposureEvent(StrictModel):
@@ -1114,7 +1360,7 @@ class StatsigGateExposureEvent(StrictModel):
     user: StatsigUser
     time: int
     value: None  # Always null in rgstr requests
-    secondaryExposures: Sequence[Mapping[str, str]]
+    secondaryExposures: Sequence[SecondaryExposure]
 
 
 class StatsigDiagnosticsEvent(StrictModel):

@@ -15,6 +15,7 @@ from typing import Any, Literal
 
 from src.schemas.captures.base import RequestCapture, ResponseCapture
 from src.schemas.cc_internal_api.base import StrictModel
+from src.schemas.types import PermissiveModel
 
 # ==============================================================================
 # Context and Metadata
@@ -91,6 +92,26 @@ class ClaudeCodeIdentifyTraits(StrictModel):
     organization_uuid: str
 
 
+class UnknownSegmentTraits(PermissiveModel):
+    """Fallback for unknown Segment trait structures.
+
+    Uses PermissiveModel to accept any fields while remaining a proper type.
+    Detection: isinstance(x, UnknownSegmentTraits) or isinstance(x, PermissiveModel)
+    """
+
+    pass
+
+
+class UnknownSegmentProperties(PermissiveModel):
+    """Fallback for unknown Segment event properties.
+
+    Uses PermissiveModel to accept any fields while remaining a proper type.
+    Detection: isinstance(x, UnknownSegmentProperties) or isinstance(x, PermissiveModel)
+    """
+
+    pass
+
+
 # ==============================================================================
 # Event Types (Discriminated by `type` field)
 # ==============================================================================
@@ -104,8 +125,8 @@ class SegmentIdentifyEvent(SegmentEventBase):
     """
 
     type: Literal['identify']
-    # Claude Code uses strict traits; general Segment allows any dict
-    traits: ClaudeCodeIdentifyTraits | Mapping[str, Any] | None = None  # noqa: loose-typing # Fallback for non-Claude traits
+    # Claude Code uses strict traits; unknown traits use PermissiveModel fallback
+    traits: ClaudeCodeIdentifyTraits | UnknownSegmentTraits | None = None
 
 
 class SegmentTrackEvent(SegmentEventBase):
@@ -116,7 +137,7 @@ class SegmentTrackEvent(SegmentEventBase):
 
     type: Literal['track']
     event: str  # Event name (required for track)
-    properties: Mapping[str, Any] | None = None  # noqa: loose-typing # Event properties are user-defined
+    properties: UnknownSegmentProperties | None = None
 
 
 class SegmentPageEvent(SegmentEventBase):
@@ -128,7 +149,7 @@ class SegmentPageEvent(SegmentEventBase):
     type: Literal['page']
     name: str | None = None  # Page name
     category: str | None = None  # Page category
-    properties: Mapping[str, Any] | None = None  # noqa: loose-typing # Page properties are user-defined
+    properties: UnknownSegmentProperties | None = None
 
 
 class SegmentScreenEvent(SegmentEventBase):
@@ -140,7 +161,7 @@ class SegmentScreenEvent(SegmentEventBase):
     type: Literal['screen']
     name: str | None = None  # Screen name
     category: str | None = None  # Screen category
-    properties: Mapping[str, Any] | None = None  # noqa: loose-typing # Screen properties are user-defined
+    properties: UnknownSegmentProperties | None = None
 
 
 class SegmentGroupEvent(SegmentEventBase):
@@ -151,7 +172,7 @@ class SegmentGroupEvent(SegmentEventBase):
 
     type: Literal['group']
     groupId: str  # Group ID (required)
-    traits: Mapping[str, Any] | None = None  # noqa: loose-typing # Group traits are user-defined
+    traits: UnknownSegmentTraits | None = None
 
 
 class SegmentAliasEvent(SegmentEventBase):
