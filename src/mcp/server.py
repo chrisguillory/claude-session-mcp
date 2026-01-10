@@ -32,12 +32,14 @@ from mcp.server.fastmcp import Context, FastMCP
 
 from src.mcp.utils import DualLogger
 from src.schemas.operations.archive import ArchiveMetadata
+from src.schemas.operations.context import SessionContext
 from src.schemas.operations.delete import DeleteResult
 from src.schemas.operations.lineage import LineageResult
 from src.schemas.operations.restore import RestoreResult
 from src.services.archive import SessionArchiveService
 from src.services.clone import AmbiguousSessionError, SessionCloneService
 from src.services.delete import SessionDeleteService
+from src.services.info import CurrentSessionContext, SessionInfoService
 from src.services.lineage import LineageService
 from src.services.parser import SessionParserService
 from src.services.restore import SessionRestoreService
@@ -58,6 +60,7 @@ class ServerState:
 
     session_id: str
     project_path: Path
+    claude_pid: int
     temp_dir: tempfile.TemporaryDirectory[str]
     parser_service: SessionParserService
     archive_service: SessionArchiveService
@@ -250,6 +253,7 @@ async def lifespan(mcp_server: FastMCP) -> AsyncIterator[None]:
         state = ServerState(
             session_id=session_id,
             project_path=project_path,
+            claude_pid=claude_context.claude_pid,
             temp_dir=temp_dir,
             parser_service=parser_service,
             archive_service=archive_service,
@@ -603,6 +607,59 @@ def register_tools(state: ServerState) -> None:
             await logger.info(f'Method: {result.method} (no machine tracking)')
 
         return result
+
+    @server.tool()
+    async def get_session_info(
+        session_id: str | None = None,
+        ctx: Context[Any, Any, Any] | None = None,
+    ) -> SessionContext:
+        """
+        Get comprehensive information about a session.
+
+        Returns context about a session including session ID, project path,
+        session files, origin (how it was created), state, and characteristics.
+
+        Data sources:
+        - Session files (~/.claude/projects/)
+        - Claude-workspace tracking (~/.claude-workspace/sessions.json)
+        - Lineage tracking (~/.claude-session-mcp/lineage.json)
+
+        For other sessions on this machine (tracked in sessions.json), claude_pid
+        and machine_id are available from historical data. temp_dir is only
+        available for the current session.
+
+        Args:
+            session_id: Full session ID to query.
+                       If None, returns info for the current session.
+
+        Returns:
+            SessionContext with comprehensive session information.
+
+        Examples:
+            # Get current session info
+            info = await get_session_info()
+            # Returns: SessionContext(session_id='...', source='startup', ...)
+
+            # Get info for another session
+            info = await get_session_info('019b5232')
+        """
+        if ctx is None:
+            raise RuntimeError('Context is required - must be called via FastMCP')
+
+        # Build current session context for enrichment
+        current_context = CurrentSessionContext(
+            session_id=state.session_id,
+            project_path=state.project_path,
+            claude_pid=state.claude_pid,
+            temp_dir=state.temp_dir.name,
+        )
+
+        # Determine target session
+        target_id = session_id or state.session_id
+
+        # Get session info via service
+        info_service = SessionInfoService()
+        return await info_service.get_info(target_id, current_context)
 
 
 # ==============================================================================

@@ -13,6 +13,7 @@ from src.schemas.operations.archive import (
     FileMetadata,
     SessionArchive,
 )
+from src.schemas.operations.context import SessionContext, SessionSource, SessionState
 from src.schemas.operations.delete import ArtifactFile, DeleteManifest, DeleteResult
 from src.schemas.operations.discovery import SessionInfo
 from src.schemas.operations.lineage import LineageEntry, LineageFile, LineageResult
@@ -24,6 +25,10 @@ __all__ = [
     'FileMetadata',
     'ArchiveMetadata',
     'SessionArchive',
+    # Context
+    'SessionContext',
+    'SessionSource',
+    'SessionState',
     # Delete
     'ArtifactFile',
     'DeleteManifest',

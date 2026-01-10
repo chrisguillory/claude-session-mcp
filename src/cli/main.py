@@ -25,6 +25,7 @@ from src.services.archive import SessionArchiveService
 from src.services.clone import AmbiguousSessionError, SessionCloneService
 from src.services.delete import SessionDeleteService
 from src.services.discovery import SessionDiscoveryService
+from src.services.info import SessionInfoService
 from src.services.lineage import LineageService
 from src.services.parser import SessionParserService
 from src.services.restore import SessionRestoreService
@@ -594,6 +595,79 @@ def lineage(
             typer.echo(entry.model_dump_json(indent=2))
         else:
             typer.echo('null')
+
+
+@app.command()
+def info(
+    session_id: str = typer.Argument(..., help='Full session ID'),
+    format: Literal['text', 'json'] = typer.Option('text', '--format', '-f', help='Output format: text or json'),
+) -> None:
+    """Display comprehensive information about a session.
+
+    Shows session context including ID, project path, file locations,
+    origin (how it was created), state, and characteristics.
+
+    Examples:
+        claude-session info 019b53ff-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+        claude-session info 019b53ff-xxxx-xxxx-xxxx-xxxxxxxxxxxx --format json
+    """
+    asyncio.run(_info_async(session_id, format))
+
+
+async def _info_async(
+    session_id: str,
+    format: Literal['text', 'json'],
+) -> None:
+    """Async implementation of info command."""
+    info_service = SessionInfoService()
+    context = await info_service.get_info(session_id)
+
+    if format == 'json':
+        typer.echo(context.model_dump_json(indent=2))
+        return
+
+    # Text format
+    typer.echo(f'Session: {context.session_id}')
+    typer.echo(f'Project: {context.project_path}')
+    typer.echo()
+
+    # Origin section
+    typer.secho('Origin:', bold=True)
+    source_display: str = context.source
+    if context.parent_id:
+        source_display += f' (parent: {context.parent_id[:12]}...)'
+    typer.echo(f'  Source: {source_display}')
+    typer.echo(f'  State: {context.state}')
+    typer.echo(f'  Native: {"yes" if context.is_native else "no (cloned/restored)"}')
+    if context.has_lineage:
+        typer.secho('  Lineage: tracked', fg=typer.colors.CYAN)
+    typer.echo()
+
+    # Temporal section
+    typer.secho('Timestamps:', bold=True)
+    if context.started_at:
+        typer.echo(f'  Started: {context.started_at}')
+    if context.ended_at:
+        typer.echo(f'  Ended: {context.ended_at}')
+    if context.created_at:
+        typer.echo(f'  Created (UUIDv7): {context.created_at}')
+    typer.echo()
+
+    # Files section
+    typer.secho('Files:', bold=True)
+    typer.echo(f'  Session: {context.session_file}')
+    typer.echo(f'  Debug: {context.debug_file}')
+
+    # Environment section (if available)
+    if context.machine_id or context.claude_pid:
+        typer.echo()
+        typer.secho('Environment:', bold=True)
+        if context.machine_id:
+            typer.echo(f'  Machine: {context.machine_id}')
+        if context.claude_pid:
+            typer.echo(f'  Claude PID: {context.claude_pid}')
+        if context.temp_dir:
+            typer.echo(f'  Temp dir: {context.temp_dir}')
 
 
 def main() -> None:
