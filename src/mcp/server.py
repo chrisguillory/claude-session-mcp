@@ -629,7 +629,7 @@ def register_tools(state: ServerState) -> None:
         available for the current session.
 
         Args:
-            session_id: Full session ID to query.
+            session_id: Session ID (full UUID or prefix) to query.
                        If None, returns info for the current session.
 
         Returns:

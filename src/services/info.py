@@ -11,6 +11,7 @@ Aggregates data from multiple sources:
 from __future__ import annotations
 
 import json
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -18,6 +19,8 @@ import pydantic
 
 from src.schemas.claude_workspace import Session, SessionDatabase
 from src.schemas.operations.context import SessionContext
+from src.schemas.operations.discovery import SessionInfo
+from src.services.clone import AmbiguousSessionError
 from src.services.delete import get_restoration_timestamp, is_native_session
 from src.services.discovery import SessionDiscoveryService
 from src.services.lineage import LineageService, get_machine_id
@@ -69,7 +72,7 @@ class SessionInfoService:
         Get comprehensive context for a session.
 
         Args:
-            session_id: Full session ID to look up
+            session_id: Session ID (full or prefix) to look up
             current_context: MCP server context for current session (optional)
 
         Returns:
@@ -77,11 +80,10 @@ class SessionInfoService:
 
         Raises:
             FileNotFoundError: If session cannot be found
+            AmbiguousSessionError: If prefix matches multiple sessions
         """
-        # Resolve session ID prefix to full ID and find session file
-        session_info = await self.discovery.find_session_by_id(session_id)
-        if session_info is None:
-            raise FileNotFoundError(f'Session not found: {session_id}')
+        # Resolve session ID (supports both full ID and prefix)
+        session_info = await self._resolve_session(session_id)
 
         full_session_id = session_info.session_id
         session_folder = session_info.session_folder
@@ -203,3 +205,63 @@ class SessionInfoService:
                 return session
 
         return None
+
+    async def _resolve_session(self, session_id_or_prefix: str) -> SessionInfo:
+        """
+        Resolve a session ID or prefix to a full session.
+
+        Args:
+            session_id_or_prefix: Full session ID or prefix
+
+        Returns:
+            SessionInfo for the matched session
+
+        Raises:
+            FileNotFoundError: If no sessions match
+            AmbiguousSessionError: If multiple sessions match the prefix
+        """
+        # First try exact match
+        exact_match = await self.discovery.find_session_by_id(session_id_or_prefix)
+        if exact_match:
+            return exact_match
+
+        # Try prefix match
+        matches = await self._find_sessions_by_prefix(session_id_or_prefix)
+
+        if not matches:
+            raise FileNotFoundError(f'No session found matching: {session_id_or_prefix}')
+
+        if len(matches) > 1:
+            raise AmbiguousSessionError(session_id_or_prefix, [m.session_id for m in matches])
+
+        return matches[0]
+
+    async def _find_sessions_by_prefix(self, prefix: str) -> list[SessionInfo]:
+        """Find all sessions matching a prefix."""
+        claude_sessions_dir = self.discovery.claude_sessions_dir
+        if not claude_sessions_dir.exists():
+            return []
+
+        # Use rg to find all matching session files
+        result = subprocess.run(
+            ['rg', '--files', '--glob', f'{prefix}*.jsonl', str(claude_sessions_dir)],
+            capture_output=True,
+            text=True,
+        )
+
+        if not result.stdout.strip():
+            return []
+
+        matches = []
+        for line in result.stdout.strip().split('\n'):
+            session_file = Path(line)
+            # Skip agent files
+            if session_file.name.startswith('agent-'):
+                continue
+
+            session_id = session_file.stem
+            session_folder = session_file.parent
+
+            matches.append(SessionInfo(session_id=session_id, session_folder=session_folder))
+
+        return matches

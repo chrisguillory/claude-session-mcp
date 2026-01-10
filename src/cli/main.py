@@ -599,7 +599,7 @@ def lineage(
 
 @app.command()
 def info(
-    session_id: str = typer.Argument(..., help='Full session ID'),
+    session_id: str = typer.Argument(..., help='Session ID (full or prefix)'),
     format: Literal['text', 'json'] = typer.Option('text', '--format', '-f', help='Output format: text or json'),
 ) -> None:
     """Display comprehensive information about a session.
@@ -608,8 +608,8 @@ def info(
     origin (how it was created), state, and characteristics.
 
     Examples:
-        claude-session info 019b53ff-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-        claude-session info 019b53ff-xxxx-xxxx-xxxx-xxxxxxxxxxxx --format json
+        claude-session info 019b53ff
+        claude-session info c3bac5a6 --format json
     """
     asyncio.run(_info_async(session_id, format))
 
