@@ -34,6 +34,7 @@ from src.mcp.utils import DualLogger
 from src.schemas.operations.archive import ArchiveMetadata
 from src.schemas.operations.context import SessionContext
 from src.schemas.operations.delete import DeleteResult
+from src.schemas.operations.gist import GistArchiveResult
 from src.schemas.operations.lineage import LineageResult
 from src.schemas.operations.restore import RestoreResult
 from src.services.archive import SessionArchiveService
@@ -43,10 +44,11 @@ from src.services.info import CurrentSessionContext, SessionInfoService
 from src.services.lineage import LineageService
 from src.services.parser import SessionParserService
 from src.services.restore import SessionRestoreService
+from src.storage.gist import GistStorage
 from src.storage.local import LocalFileSystemStorage
 
 # ==============================================================================
-# Server State (immutable)
+# Types
 # ==============================================================================
 
 
@@ -66,153 +68,12 @@ class ServerState:
     archive_service: SessionArchiveService
 
 
-# ==============================================================================
-# Session Discovery (from python-interpreter-mcp pattern)
-# ==============================================================================
-
-
 @attrs.define(frozen=True)
 class ClaudeContext:
     """Context information about the Claude Code session."""
 
     claude_pid: int
     project_dir: pathlib.Path
-
-
-def _find_claude_context() -> ClaudeContext:
-    """
-    Find Claude process and extract its context (PID, project directory).
-
-    Walks up the process tree to find the Claude process, then uses lsof to
-    determine its working directory.
-
-    Returns:
-        ClaudeContext with PID and project directory
-
-    Raises:
-        RuntimeError: If Claude process cannot be found or CWD cannot be determined
-    """
-    current = os.getppid()
-
-    for _ in range(20):  # Depth limit
-        result = subprocess.run(
-            ['ps', '-p', str(current), '-o', 'ppid=,comm='],
-            capture_output=True,
-            text=True,
-        )
-
-        if not result.stdout.strip():
-            break
-
-        parts = result.stdout.strip().split(None, 1)
-        ppid = int(parts[0])
-        comm = parts[1] if len(parts) > 1 else ''
-
-        # Check if this is Claude
-        if 'claude' in comm.lower():
-            # Get Claude's CWD using lsof
-            result = subprocess.run(
-                ['lsof', '-p', str(current), '-a', '-d', 'cwd'],
-                capture_output=True,
-                text=True,
-            )
-
-            cwd = None
-            for line in result.stdout.split('\n'):
-                if 'cwd' in line:
-                    parts = line.split()
-                    if len(parts) >= 9:
-                        cwd = pathlib.Path(' '.join(parts[8:]))
-                        break
-
-            if not cwd:
-                raise RuntimeError(f'Found Claude process (PID {current}) but could not determine CWD')
-
-            # Verify by checking if Claude has .claude/ files open
-            result = subprocess.run(['lsof', '-p', str(current)], capture_output=True, text=True)
-
-            claude_files = []
-            for line in result.stdout.split('\n'):
-                if '.claude' in line:
-                    # Extract the full path from lsof output
-                    parts = line.split()
-                    if len(parts) >= 9:
-                        file_path = ' '.join(parts[8:])
-                        claude_files.append(file_path)
-
-            if not claude_files:
-                raise RuntimeError(
-                    f'Found Claude process (PID {current}) with CWD {cwd}, '
-                    f'but no .claude/ files are open - may not be a Claude project'
-                )
-
-            return ClaudeContext(claude_pid=current, project_dir=cwd)
-
-        current = ppid
-
-    raise RuntimeError('Could not find Claude process in parent tree')
-
-
-def _discover_session_id(session_marker: str) -> str:
-    """
-    Discover Claude Code session ID via self-referential marker search.
-
-    Workaround for lack of official session discovery API. Writes a unique marker
-    to stdout, then searches Claude's debug logs for it to find the session ID.
-
-    Args:
-        session_marker: Unique marker string to search for
-
-    Returns:
-        Session ID (UUID string)
-
-    Raises:
-        RuntimeError: If debug directory doesn't exist or session ID cannot be found
-    """
-    import time
-
-    # Emit marker (will appear in Claude's debug logs)
-    print(session_marker, file=sys.stderr, flush=True)
-
-    # Search debug logs for the marker (with retry for timing)
-    debug_dir = pathlib.Path.home() / '.claude' / 'debug'
-    if not debug_dir.exists():
-        raise RuntimeError(f'Claude debug log directory not found: {debug_dir}')
-
-    # Retry loop - Claude Code may not have flushed the marker to disk yet
-    max_retries = 10
-    retry_delay = 0.1  # 100ms between retries
-
-    for attempt in range(max_retries):
-        result = subprocess.run(
-            [
-                'rg',
-                '-l',
-                '--fixed-strings',
-                '--glob',
-                '!latest',
-                session_marker,
-                debug_dir.as_posix(),
-            ],
-            capture_output=True,
-            text=True,
-        )
-
-        if result.stdout.strip():
-            break  # Found it
-
-        time.sleep(retry_delay)
-    else:
-        raise RuntimeError(
-            f'Could not find session marker in any debug log files in {debug_dir} after {max_retries} attempts'
-        )
-
-    # rg found the marker - extract session ID from first matching file
-    # Format: ~/.claude/debug/{session_id}.log
-    log_file = pathlib.Path(result.stdout.strip().split('\n')[0])
-    session_id = log_file.stem
-
-    return session_id
 
 
 # ==============================================================================
@@ -660,6 +521,275 @@ def register_tools(state: ServerState) -> None:
         # Get session info via service
         info_service = SessionInfoService()
         return await info_service.get_info(target_id, current_context)
+
+    @server.tool()
+    async def save_session_to_gist(
+        session_id: str | None = None,
+        gist_id: str | None = None,
+        visibility: Literal['public', 'secret'] = 'secret',
+        description: str = 'Claude Code Session Archive',
+        ctx: Context[Any, Any, Any] | None = None,
+    ) -> GistArchiveResult:
+        """
+        Save a session to GitHub Gist.
+
+        Creates a new gist or updates an existing one with the session archive.
+        Requires GitHub authentication via GITHUB_TOKEN env var or gh CLI.
+
+        Args:
+            session_id: Session to save (full UUID or prefix). Defaults to current session.
+            gist_id: Existing gist ID to update. If None, creates a new gist.
+            visibility: 'public' or 'secret' (default: secret)
+            description: Gist description
+
+        Returns:
+            GistArchiveResult with gist URL, ID, and archive metadata.
+
+        Authentication:
+            Token is obtained from (in order):
+            1. GITHUB_TOKEN environment variable
+            2. `gh auth token` (GitHub CLI)
+
+            If neither is available, an error is raised with setup instructions.
+
+        Examples:
+            # Save current session to new secret gist
+            result = await save_session_to_gist()
+
+            # Save specific session to public gist
+            result = await save_session_to_gist(
+                session_id='019b5232',
+                visibility='public'
+            )
+
+            # Update an existing gist
+            result = await save_session_to_gist(gist_id='abc123xyz')
+        """
+        if ctx is None:
+            raise RuntimeError('Context is required - must be called via FastMCP')
+        logger = DualLogger(ctx)
+
+        # Get GitHub token
+        token = _get_github_token()
+        if not token:
+            raise ValueError(
+                'GitHub authentication required.\n\n'
+                'Set up authentication using one of:\n'
+                '1. Set GITHUB_TOKEN environment variable\n'
+                '2. Install and authenticate GitHub CLI: gh auth login\n\n'
+                'To create a token manually:\n'
+                '  1. Go to https://github.com/settings/tokens\n'
+                '  2. Generate new token (classic)\n'
+                "  3. Select 'gist' scope\n"
+                '  4. Set as GITHUB_TOKEN in your environment'
+            )
+
+        # Determine target session
+        target_id = session_id or state.session_id
+        await logger.info(f'Saving session to Gist: {target_id[:12]}...')
+
+        # Create Gist storage backend
+        storage = GistStorage(
+            token=token,
+            gist_id=gist_id,
+            visibility=visibility,
+            description=description,
+        )
+
+        # Create archive (force JSON format - zst not supported by Gist)
+        metadata = await state.archive_service.create_archive(
+            storage=storage,
+            output_path=None,  # Let storage generate path
+            format_param='json',  # Always JSON for Gist
+            logger=logger,
+        )
+
+        # Get gist ID from storage (set after creation)
+        final_gist_id = storage.gist_id or ''
+
+        await logger.info(f'Session uploaded to Gist: {metadata.file_path}')
+        await logger.info(f'Gist ID: {final_gist_id}')
+        await logger.info(f'To restore: claude-session restore gist://{final_gist_id}')
+
+        return GistArchiveResult(
+            gist_url=metadata.file_path,  # GistStorage returns html_url as file_path
+            gist_id=final_gist_id,
+            session_id=target_id,
+            format='json',
+            size_mb=metadata.size_mb,
+            record_count=metadata.record_count,
+            file_count=metadata.file_count,
+            restore_command=f'claude-session restore gist://{final_gist_id}',
+        )
+
+
+# ==============================================================================
+# Private Helpers
+# ==============================================================================
+
+
+def _find_claude_context() -> ClaudeContext:
+    """
+    Find Claude process and extract its context (PID, project directory).
+
+    Walks up the process tree to find the Claude process, then uses lsof to
+    determine its working directory.
+
+    Returns:
+        ClaudeContext with PID and project directory
+
+    Raises:
+        RuntimeError: If Claude process cannot be found or CWD cannot be determined
+    """
+    current = os.getppid()
+
+    for _ in range(20):  # Depth limit
+        result = subprocess.run(
+            ['ps', '-p', str(current), '-o', 'ppid=,comm='],
+            capture_output=True,
+            text=True,
+        )
+
+        if not result.stdout.strip():
+            break
+
+        parts = result.stdout.strip().split(None, 1)
+        ppid = int(parts[0])
+        comm = parts[1] if len(parts) > 1 else ''
+
+        # Check if this is Claude
+        if 'claude' in comm.lower():
+            # Get Claude's CWD using lsof
+            result = subprocess.run(
+                ['lsof', '-p', str(current), '-a', '-d', 'cwd'],
+                capture_output=True,
+                text=True,
+            )
+
+            cwd = None
+            for line in result.stdout.split('\n'):
+                if 'cwd' in line:
+                    parts = line.split()
+                    if len(parts) >= 9:
+                        cwd = pathlib.Path(' '.join(parts[8:]))
+                        break
+
+            if not cwd:
+                raise RuntimeError(f'Found Claude process (PID {current}) but could not determine CWD')
+
+            # Verify by checking if Claude has .claude/ files open
+            result = subprocess.run(['lsof', '-p', str(current)], capture_output=True, text=True)
+
+            claude_files = []
+            for line in result.stdout.split('\n'):
+                if '.claude' in line:
+                    # Extract the full path from lsof output
+                    parts = line.split()
+                    if len(parts) >= 9:
+                        file_path = ' '.join(parts[8:])
+                        claude_files.append(file_path)
+
+            if not claude_files:
+                raise RuntimeError(
+                    f'Found Claude process (PID {current}) with CWD {cwd}, '
+                    f'but no .claude/ files are open - may not be a Claude project'
+                )
+
+            return ClaudeContext(claude_pid=current, project_dir=cwd)
+
+        current = ppid
+
+    raise RuntimeError('Could not find Claude process in parent tree')
+
+
+def _discover_session_id(session_marker: str) -> str:
+    """
+    Discover Claude Code session ID via self-referential marker search.
+
+    Workaround for lack of official session discovery API. Writes a unique marker
+    to stdout, then searches Claude's debug logs for it to find the session ID.
+
+    Args:
+        session_marker: Unique marker string to search for
+
+    Returns:
+        Session ID (UUID string)
+
+    Raises:
+        RuntimeError: If debug directory doesn't exist or session ID cannot be found
+    """
+    import time
+
+    # Emit marker (will appear in Claude's debug logs)
+    print(session_marker, file=sys.stderr, flush=True)
+
+    # Search debug logs for the marker (with retry for timing)
+    debug_dir = pathlib.Path.home() / '.claude' / 'debug'
+    if not debug_dir.exists():
+        raise RuntimeError(f'Claude debug log directory not found: {debug_dir}')
+
+    # Retry loop - Claude Code may not have flushed the marker to disk yet
+    max_retries = 10
+    retry_delay = 0.1  # 100ms between retries
+
+    for attempt in range(max_retries):
+        result = subprocess.run(
+            [
+                'rg',
+                '-l',
+                '--fixed-strings',
+                '--glob',
+                '!latest',
+                session_marker,
+                debug_dir.as_posix(),
+            ],
+            capture_output=True,
+            text=True,
+        )
+
+        if result.stdout.strip():
+            break  # Found it
+
+        time.sleep(retry_delay)
+    else:
+        raise RuntimeError(
+            f'Could not find session marker in any debug log files in {debug_dir} after {max_retries} attempts'
+        )
+
+    # rg found the marker - extract session ID from first matching file
+    # Format: ~/.claude/debug/{session_id}.log
+    log_file = pathlib.Path(result.stdout.strip().split('\n')[0])
+    session_id = log_file.stem
+
+    return session_id
+
+
+def _get_github_token() -> str | None:
+    """
+    Get GitHub token from environment or gh CLI.
+
+    Checks in order:
+    1. GITHUB_TOKEN environment variable
+    2. `gh auth token` command (GitHub CLI)
+
+    Returns:
+        GitHub token string, or None if not available
+    """
+    # 1. Check environment
+    token = os.environ.get('GITHUB_TOKEN')
+    if token:
+        return token
+
+    # 2. Try gh CLI
+    result = subprocess.run(
+        ['gh', 'auth', 'token'],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode == 0 and result.stdout.strip():
+        return result.stdout.strip()
+
+    return None
 
 
 # ==============================================================================

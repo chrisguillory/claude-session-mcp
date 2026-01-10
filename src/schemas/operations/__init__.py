@@ -16,6 +16,7 @@ from src.schemas.operations.archive import (
 from src.schemas.operations.context import SessionContext, SessionSource, SessionState
 from src.schemas.operations.delete import ArtifactFile, DeleteManifest, DeleteResult
 from src.schemas.operations.discovery import SessionInfo
+from src.schemas.operations.gist import GistArchiveResult
 from src.schemas.operations.lineage import LineageEntry, LineageFile, LineageResult
 from src.schemas.operations.restore import RestoreResult
 
@@ -35,6 +36,8 @@ __all__ = [
     'DeleteResult',
     # Discovery
     'SessionInfo',
+    # Gist
+    'GistArchiveResult',
     # Lineage
     'LineageEntry',
     'LineageFile',
