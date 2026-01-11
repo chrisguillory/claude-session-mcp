@@ -117,7 +117,7 @@ class FallbackUsage(TypedDict):
     file: str  # Session filename
     line: int  # Line number in JSONL
     path: str  # Dot-separated path to the fallback
-    fallback_type: str  # Class name (e.g., UnknownToolInput, UnknownToolResult)
+    fallback_type: str  # Class name (e.g., MCPToolInput, MCPToolResult)
     tool_name: str | None  # MCP tool name if available
     extra_fields: dict[str, str]  # Field name -> type name
 
@@ -434,7 +434,7 @@ def find_fallbacks(
     Recursively find all PermissiveModel instances in a validated record.
 
     This detects where typed unions fell back to permissive fallback types
-    (UnknownToolInput, UnknownToolResult).
+    (MCPToolInput, MCPToolResult).
 
     Args:
         obj: The object to search (typically a validated session record)
@@ -559,7 +559,7 @@ def validate_session_file(session_file: Path) -> FileValidationResult:
                 is_validator_error = False
                 for error in e.errors():
                     error_msg_str = str(error.get('ctx', {}).get('error', ''))
-                    if 'fell through to UnknownToolInput' in error_msg_str:
+                    if 'fell through to MCPToolInput' in error_msg_str:
                         is_validator_error = True
                         error_msg = f'Line {line_num} ({record_type}): ⚠️  VALIDATOR ERROR: {error_msg_str}'
                         results['errors'].append(error_msg)

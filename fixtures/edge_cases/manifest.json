@@ -1,0 +1,16 @@
+{
+  "schema_version": "1.0",
+  "description": "Edge case fixtures for Claude Code session model validation",
+  "fixtures": {
+    "malformed_write_param2.jsonl": {
+      "description": "JSON serialization bug where content containing XML-like tool invocation examples was mis-parsed, causing 'param2' to leak as an actual tool parameter",
+      "models_affected": ["MalformedWriteToolInput"],
+      "original_version": "2.0.76",
+      "date_discovered": "2025-12-24",
+      "record_count": 2,
+      "record_types": ["assistant", "user"],
+      "bug_outcome": "Tool call rejected by Claude Code input validation",
+      "notes": "The Write tool content contained markdown documenting tool invocation XML patterns. The string '<parameter name=\"param1\">value1\",\"param2\":\"value2\"' was incorrectly parsed, extracting 'param2' as an actual JSON field."
+    }
+  }
+}

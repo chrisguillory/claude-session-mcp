@@ -397,6 +397,21 @@ pairs adjacent when sorted alphabetically.
 
 See `docs/intercepting-claude-api.md` for detailed exploration notes.
 
+## Checking Claude Code Changelog
+
+When investigating new features or schema changes:
+
+```bash
+# Terminal summary
+claude changelog
+
+# Full changelog from GitHub
+gh api repos/anthropics/claude-code/contents/CHANGELOG.md --jq '.content' | base64 -d
+
+# Search for specific feature
+gh api repos/anthropics/claude-code/contents/CHANGELOG.md --jq '.content' | base64 -d | rg -i "feature_name"
+```
+
 ## Schema Updates
 
 When Claude Code updates break validation:

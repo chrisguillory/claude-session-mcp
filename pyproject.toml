@@ -80,6 +80,7 @@ dev = [
     "mitmproxy>=12.2.1",
     "mypy>=1.19.1",
     "pre-commit>=4.5.1",
+    "pytest>=9.0.2",
     "ruff>=0.14.10",
     "types-psutil>=7.2.1.20251231",
 ]

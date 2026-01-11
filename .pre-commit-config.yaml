@@ -43,3 +43,11 @@ repos:
         language: script
         pass_filenames: false
         always_run: true
+
+      - id: pytest
+        name: pytest
+        description: Run pytest test suite
+        entry: uv run pytest tests/ -v --tb=short
+        language: system
+        pass_filenames: false
+        always_run: true

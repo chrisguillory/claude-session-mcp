@@ -77,7 +77,11 @@ from src.schemas.session.models import (
     KillShellToolResult,
     ListMcpResourcesToolInput,
     LocalCommandSystemRecord,
+    MalformedWriteToolInput,
     McpResource,
+    MCPSearchToolInput,
+    MCPToolInput,
+    MCPToolResult,
     # Message
     Message,
     MessageContent,
@@ -117,13 +121,13 @@ from src.schemas.session.models import (
     TodoWriteToolInput,
     TokenUsage,
     ToolInput,
+    ToolReferenceContent,
     ToolResult,
     ToolResultContent,
     ToolResultContentBlock,
+    ToolUseCaller,
     ToolUseContent,
     TurnDurationSystemRecord,
-    UnknownToolInput,
-    UnknownToolResult,
     UserQuestion,
     UserRecord,
     WebFetchToolInput,
@@ -161,7 +165,9 @@ __all__ = [
     'ImageContent',
     'DocumentSource',
     'DocumentContent',
+    'ToolUseCaller',
     'ToolUseContent',
+    'ToolReferenceContent',
     'ToolResultContent',
     'ToolResultContentBlock',
     'MessageContent',
@@ -178,6 +184,8 @@ __all__ = [
     'GrepToolInput',
     'KillShellToolInput',
     'ListMcpResourcesToolInput',
+    'MalformedWriteToolInput',  # Historical edge case - see fixtures/edge_cases/
+    'MCPSearchToolInput',
     'NotebookEditToolInput',
     'ReadMcpResourceToolInput',
     'ReadToolInput',
@@ -189,7 +197,7 @@ __all__ = [
     'WebSearchToolInput',
     'WriteToolInput',
     'ToolInput',
-    'UnknownToolInput',  # Fallback for MCP tool inputs (enables isinstance checks)
+    'MCPToolInput',  # Permissive model for MCP tool inputs (enables isinstance checks)
     # Context management
     'ContextManagement',
     # Message
@@ -244,7 +252,7 @@ __all__ = [
     'WebSearchToolResult',
     'WriteToolResult',
     'ToolResult',
-    'UnknownToolResult',  # Fallback for MCP tool results (enables isinstance checks)
+    'MCPToolResult',  # Fallback for MCP tool results (enables isinstance checks)
     # Records
     'BaseRecord',
     'UserRecord',

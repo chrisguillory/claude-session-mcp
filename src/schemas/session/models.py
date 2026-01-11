@@ -88,11 +88,11 @@ from src.schemas.types import BaseStrictModel, ModelId, PermissiveModel
 # Schema Version
 # ==============================================================================
 
-SCHEMA_VERSION = '0.2.1'  # Phase 3: Complete tool INPUT modeling
+SCHEMA_VERSION = '0.2.2'  # Added MCPSearch, ToolUseCaller, ToolReferenceContent, MalformedWriteToolInput
 CLAUDE_CODE_MIN_VERSION = '2.0.35'
-CLAUDE_CODE_MAX_VERSION = '2.1.1'
-LAST_VALIDATED = '2026-01-08'
-VALIDATION_RECORD_COUNT = 402_997
+CLAUDE_CODE_MAX_VERSION = '2.1.4'
+LAST_VALIDATED = '2026-01-11'
+VALIDATION_RECORD_COUNT = 175_295
 
 
 # ==============================================================================
@@ -180,6 +180,55 @@ class WriteToolInput(StrictModel):
     content: str
 
 
+class MalformedWriteToolInput(StrictModel):
+    """Malformed Write tool input from historical JSON serialization bug.
+
+    CONTEXT:
+    This model exists to handle exactly 2 session records from December 24, 2025
+    (Claude Code version 2.0.76) where a JSON serialization bug caused malformed
+    tool_use inputs to be recorded in session files.
+
+    WHAT HAPPENED:
+    The model was writing a markdown file documenting Claude-in-Chrome MCP tool
+    invocation patterns. The markdown content contained example XML showing how
+    to invoke tools, including syntax like:
+
+        <parameter name="param1">value1","param2":"value2"}}]
+
+    Something in the serialization chain incorrectly parsed this content. The
+    `param2` substring within the content string was extracted as an actual
+    tool parameter, producing a malformed tool_use input like:
+
+        {"file_path": "...", "content": "...<truncated>...", "param2": "value2"}}]..."}
+
+    OUTCOME:
+    Claude Code's input validation correctly rejected these tool calls with:
+        InputValidationError: An unexpected parameter `param2` was provided
+
+    The writes never executed - the session files contain records of rejected
+    attempts, not successful operations.
+
+    WHY WE MODEL THIS:
+    Our Pydantic models validate session records (what was attempted), not tool
+    execution success. The malformed tool_use attempts exist in the session files
+    and need a matching model to pass validation.
+
+    EVIDENCE:
+    See fixtures/edge_cases/malformed_write_param2.jsonl for sanitized reproduction
+    records. This fixture contains the actual malformed records (paths sanitized)
+    and is validated by tests/test_fixtures.py.
+
+    FUTURE:
+    If Anthropic fixes the serialization bug and cleans up historical session
+    files, this model can be removed. The bug appears fixed in later versions
+    (no occurrences after December 2025).
+    """
+
+    file_path: PathField
+    content: str
+    param2: str  # The malformed field - always present in affected records
+
+
 class EditToolInput(StrictModel):
     """Input for Edit tool."""
 
@@ -263,6 +312,9 @@ class GrepToolInput(StrictModel):
         multiline: Enable multiline regex mode
         head_limit: Limit output to first N results
         offset: Skip first N results
+        context_lines: Number of context lines (alternative to -C)
+        flags: String-format flags (e.g., "-i")
+        grep: Alternative flag format (e.g., "-n")
         Hyphenated flags: -n (line numbers), -A/-B/-C (context), -i (case insensitive)
     """
 
@@ -282,6 +334,9 @@ class GrepToolInput(StrictModel):
     head_limit: int | None = None
     offset: int | None = None
     context: int | str | None = None  # Context lines - can be int or flag reference string like "-A"
+    context_lines: int | None = None  # Explicit context lines count (alternative to -C)
+    flags: str | None = None  # String-format flags (e.g., "-i")
+    grep: str | None = None  # Alternative flag format (e.g., "-n") - legacy/variant usage
     # Hyphenated ripgrep flags (use Field alias for JSON compatibility)
     dash_n: bool | None = pydantic.Field(None, alias='-n')
     dash_A: int | None = pydantic.Field(None, alias='-A')
@@ -512,18 +567,41 @@ class ReadMcpResourceToolInput(StrictModel):
 
 
 # ==============================================================================
-# Unknown Tool Input (Fallback for MCP Tools)
+# MCPSearch Tool Input
 # ==============================================================================
 
 
-class UnknownToolInput(PermissiveModel):
-    """Fallback for unmodeled MCP tool inputs.
+class MCPSearchToolInput(StrictModel):
+    """Input for MCPSearch tool - searches for MCP tools.
 
-    Uses PermissiveModel to accept any fields while remaining a proper type.
-    Allows detection via isinstance(x, UnknownToolInput) for observability.
+    Fields:
+        query: Search query string, can use 'select:' prefix for exact tool selection
+        max_results: Maximum number of results to return (optional)
+    """
 
-    MCP tools (64+ different tools) use this fallback. Claude Code built-in
-    tools must have typed models in the ToolInput/ToolResult.
+    query: str
+    max_results: int | None = None
+
+
+# ==============================================================================
+# MCP Tool Input (Third-Party Tools)
+# ==============================================================================
+
+
+class MCPToolInput(PermissiveModel):
+    """Permissive model for MCP (Model Context Protocol) tool inputs.
+
+    MCP tools are third-party integrations with varying schemas. We intentionally
+    do not model their specific fields because:
+    1. There are 64+ different MCP tools with different schemas
+    2. They are user-configured and can change without Claude Code updates
+    3. Their schemas are defined by external MCP servers
+
+    The validator on ToolUseContent enforces that ONLY tools with names starting
+    with 'mcp__' can use this model. Claude Code built-in tools MUST have typed
+    models - if one falls through to MCPToolInput, the validator raises an error.
+
+    Uses PermissiveModel to accept any fields while maintaining type observability.
     """
 
     pass
@@ -534,7 +612,8 @@ class UnknownToolInput(PermissiveModel):
 # Models with no required fields must come last before fallback.
 ToolInput = Annotated[
     # Path-based tools (most specific - file_path + other required fields)
-    WriteToolInput  # file_path, content required
+    MalformedWriteToolInput  # file_path, content, param2 required - must be before WriteToolInput!
+    | WriteToolInput  # file_path, content required
     | EditToolInput  # file_path, old_string, new_string required
     | NotebookEditToolInput  # notebook_path, new_source required
     | ReadToolInput  # file_path required
@@ -548,6 +627,7 @@ ToolInput = Annotated[
     | AskUserQuestionToolInput  # questions required
     | TodoWriteToolInput  # todos required
     | WebSearchToolInput  # query required
+    | MCPSearchToolInput  # query required (new in 2.1.4)
     # Single-field tools
     | AgentOutputToolInput  # agentId required
     | TaskOutputToolInput  # task_id required
@@ -558,7 +638,7 @@ ToolInput = Annotated[
     | ExitPlanModeToolInput  # plan optional, launchSwarm optional
     | ListMcpResourcesToolInput  # server optional
     | EnterPlanModeToolInput  # No fields - must be last before fallback!
-    | UnknownToolInput,  # Fallback for MCP tools (PermissiveModel for observability)
+    | MCPToolInput,  # Fallback for MCP tools (PermissiveModel for observability)
     pydantic.Field(union_mode='left_to_right'),
 ]
 
@@ -598,26 +678,33 @@ class DocumentContent(StrictModel):
     source: DocumentSource
 
 
+class ToolUseCaller(StrictModel):
+    """Caller metadata for tool use (Claude Code 2.1.4+)."""
+
+    type: Literal['direct']  # Only observed value so far
+
+
 class ToolUseContent(StrictModel):
     """Tool use content block from assistant messages."""
 
     type: Literal['tool_use']
     id: str
     name: str
-    input: ToolInput  # Typed for Claude Code tools, UnknownToolInput for MCP tools
+    input: ToolInput  # Typed for Claude Code tools, MCPToolInput for MCP tools
+    caller: ToolUseCaller | None = None  # Caller metadata (Claude Code 2.1.4+)
 
     @pydantic.field_validator('input', mode='after')
     @classmethod
     def validate_mcp_tool_fallback(cls, v: ToolInput, info: pydantic.ValidationInfo) -> ToolInput:
         """
-        Enforce that only MCP tools (starting with 'mcp__') can use UnknownToolInput fallback.
+        Enforce that only MCP tools (starting with 'mcp__') can use MCPToolInput fallback.
         All Claude Code built-in tools must have typed models that successfully validate.
 
         This catches both:
         1. New Claude Code tools we haven't modeled yet
         2. Bugs in existing models (missing/wrong fields causing fallthrough)
         """
-        if isinstance(v, UnknownToolInput):
+        if isinstance(v, MCPToolInput):
             tool_name = info.data.get('name', '')
 
             # MCP tools are expected to use the fallback - they're third-party
@@ -628,7 +715,7 @@ class ToolUseContent(StrictModel):
             # - New tool needs a model, OR
             # - Existing model has missing/wrong fields
             raise ValueError(
-                f"Claude Code tool '{tool_name}' fell through to UnknownToolInput. "
+                f"Claude Code tool '{tool_name}' fell through to MCPToolInput. "
                 f'This means either: (1) no typed model exists for this tool, or '
                 f'(2) the typed model has missing/incorrect fields. '
                 f'Extra fields captured: {list(v.get_extra_fields().keys())}'
@@ -637,8 +724,20 @@ class ToolUseContent(StrictModel):
         return v
 
 
+class ToolReferenceContent(StrictModel):
+    """Tool reference content block from MCPSearch tool results (Claude Code 2.1.4+).
+
+    Appears in tool_result content when MCPSearch returns matched MCP tools.
+    """
+
+    type: Literal['tool_reference']
+    tool_name: str  # Full MCP tool name (e.g., "mcp__perplexity__perplexity_research")
+
+
 # ToolResultContentBlock - for content inside tool_result
-ToolResultContentBlock = Annotated[TextContent | ImageContent, pydantic.Field(discriminator='type')]
+ToolResultContentBlock = Annotated[
+    TextContent | ImageContent | ToolReferenceContent, pydantic.Field(discriminator='type')
+]
 
 
 class ToolResultContent(StrictModel):
@@ -1190,18 +1289,25 @@ class EnterPlanModeToolResult(StrictModel):
 
 
 # ==============================================================================
-# Unknown Tool Result (Fallback for MCP Tools)
+# MCP Tool Result (Third-Party Tools)
 # ==============================================================================
 
 
-class UnknownToolResult(PermissiveModel):
-    """Fallback for unmodeled MCP tool results.
+class MCPToolResult(PermissiveModel):
+    """Permissive model for MCP (Model Context Protocol) tool results.
 
-    Uses PermissiveModel to accept any fields while remaining a proper type.
-    Allows detection via isinstance(x, UnknownToolResult) for observability.
+    MCP tools are third-party integrations with varying result schemas. We
+    intentionally do not model their specific fields because:
+    1. There are 64+ different MCP tools with different result structures
+    2. They are user-configured and can change without Claude Code updates
+    3. Their schemas are defined by external MCP servers
 
-    MCP tools (64+ different tools) use this fallback. Claude Code built-in
-    tools must have typed models in the ToolInput/ToolResult.
+    NOTE: Unlike MCPToolInput, we cannot validate that only MCP tools use this
+    fallback. Tool results don't carry the tool name (it's in the previous
+    assistant message's ToolUseContent). Observability is provided by
+    find_fallbacks() in validate_models.py instead.
+
+    Uses PermissiveModel to accept any fields while maintaining type observability.
     """
 
     pass
@@ -1235,7 +1341,7 @@ ToolResult = Annotated[
     | KillShellMessageResult  # Message variant (has message + shell_id)
     | KillShellToolResult  # Original variant (has success + shellId)
     | HandoffCommandResult  # Handoff command
-    | UnknownToolResult,  # Fallback for MCP tools (PermissiveModel for observability)
+    | MCPToolResult,  # Fallback for MCP tools (PermissiveModel for observability)
     pydantic.Field(union_mode='left_to_right'),
 ]
 
