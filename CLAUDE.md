@@ -412,6 +412,22 @@ gh api repos/anthropics/claude-code/contents/CHANGELOG.md --jq '.content' | base
 gh api repos/anthropics/claude-code/contents/CHANGELOG.md --jq '.content' | base64 -d | rg -i "feature_name"
 ```
 
+## MCPSearch Tool (Claude Code 2.0.73+)
+
+MCPSearch is an undocumented built-in tool for dynamic MCP tool discovery, introduced in v2.0.73 (Dec 18, 2025) and default-on in v2.1.x.
+
+**Schema additions (v0.2.2):**
+- `MCPSearchToolInput` - Query-based tool discovery with `select:` prefix support
+- `ToolReferenceContent` - Tool reference blocks in search results
+- `ToolUseCaller` - Caller metadata on tool_use blocks
+
+**Session file identification:**
+```json
+{"type": "tool_use", "name": "MCPSearch", "input": {"query": "select:mcp__...", "max_results": 1}}
+```
+
+**For user-facing information**, including how to disable, known issues, and accuracy concerns, see `docs/mcpsearch-guide.md`.
+
 ## Schema Updates
 
 When Claude Code updates break validation:
