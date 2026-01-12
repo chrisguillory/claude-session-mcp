@@ -94,6 +94,30 @@ claude-session restore --in-place ~/.claude-session-mcp/deleted/<backup>.json
 - **Fail-fast checks**: Prevents partial writes if any output file already exists
 - **UUIDv7 session IDs**: Cloned/restored sessions use time-ordered UUIDv7 (vs Claude's random UUIDv4)
 
+## Understanding Claude Code Sessions
+
+Claude Code session files (`~/.claude/projects/.../*.jsonl`) capture complete conversation history, but their format is **not officially documented** by Anthropic. This project provides typed Pydantic models derived from empirical analysis of real session records. See `src/schemas/session/models.py` for current schema version and validation coverage.
+
+### What You Should Know
+
+- **Unofficial schema**: The session file format is an internal implementation detail that may change without notice. We track compatibility through continuous validation against real session data.
+- **CLI vs storage**: What you see in the Claude Code terminal is a visual "veneer" over the underlying data. Tool operations that appear as single units are actually stored as two linked records ([details below](#tool-useresult-pairing)).
+- **Empirical coverage**: Our models cover observed patterns. New Claude Code versions may introduce unmodeled fields or record types—run `validate_models.py` to detect drift.
+
+### Related Projects
+
+Other projects working with Claude Code sessions:
+
+| Project | Purpose |
+|---------|---------|
+| [claude-code-transcripts](https://github.com/simonw/claude-code-transcripts) | Convert sessions to browseable HTML (Simon Willison) |
+| [claude-JSONL-browser](https://github.com/withLinda/claude-JSONL-browser) | Web-based session log viewer |
+| [claude-conversation-extractor](https://pypi.org/project/claude-conversation-extractor/) | Export conversations to Markdown |
+| [ccrider](https://github.com/neilberkman/ccrider) | Session analysis with [schema research](https://github.com/neilberkman/ccrider/blob/main/research/schema.md) |
+| [claude_code_session_client](https://github.com/randombet/claude_code_session_client) | Python client for session file parsing |
+
+*Know of another project? Open an issue or PR.*
+
 ## Clone vs Native Fork
 
 Claude Code 2.0.73+ supports `--fork-session`. Here's how it compares to our `clone` command:
@@ -335,11 +359,29 @@ When cloning, artifacts get new IDs to preserve parent immutability:
 
 ### Pydantic Models
 
-914 lines, 56 classes covering 10 record types (user, assistant, system, local commands, compact boundaries, API errors, summaries, file history snapshots, queue operations). Validated on 78K+ records (100% valid).
+Strict typed models for all session record types, message content blocks, and tool inputs/results. See `src/schemas/session/models.py` header for current class count and validation coverage.
+
+### Tool Use/Result Pairing
+
+Claude Code's CLI presents tool operations as unified visual blocks:
+
+```
+⏺ Read config.json
+  ⎿  {"setting": "value"}
+```
+
+However, these are stored as **two separate JSONL records**:
+
+1. **AssistantRecord** with `message.content[].type = "tool_use"` — Claude's request
+2. **UserRecord** with `message.content[].type = "tool_result"` — System's response
+
+The records are linked via `tool_use.id` → `tool_result.tool_use_id`. Errors set `is_error: true` on the tool_result, and the error message appears both in `message.content[].content` and the top-level `toolUseResult` field.
+
+This pattern follows the [Claude API tool use specification](https://docs.anthropic.com/en/docs/build-with-claude/tool-use), which is officially documented—unlike the session file format itself.
 
 ### Compatibility
 
-Claude Code 2.0.35 - 2.0.64
+See `CLAUDE_CODE_MIN_VERSION` and `CLAUDE_CODE_MAX_VERSION` in `src/schemas/session/models.py` for current supported range.
 
 ### Claude Code Architecture Reference
 

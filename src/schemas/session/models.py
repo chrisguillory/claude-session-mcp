@@ -88,10 +88,10 @@ from src.schemas.types import BaseStrictModel, ModelId, PermissiveModel
 # Schema Version
 # ==============================================================================
 
-SCHEMA_VERSION = '0.2.2'  # Added MCPSearch, ToolUseCaller, ToolReferenceContent, MalformedWriteToolInput
+SCHEMA_VERSION = '0.2.3'
 CLAUDE_CODE_MIN_VERSION = '2.0.35'
 CLAUDE_CODE_MAX_VERSION = '2.1.4'
-LAST_VALIDATED = '2026-01-11'
+LAST_VALIDATED = '2026-01-12'
 VALIDATION_RECORD_COUNT = 175_295
 
 
