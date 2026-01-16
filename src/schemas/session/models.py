@@ -19,6 +19,8 @@ CLAUDE CODE VERSION COMPATIBILITY:
 - Schema v0.1.8: Added sourceToolUseID, EmptyError, BeforeValidator for ultrathink case normalization (2.0.76+)
 - Schema v0.1.9: Added CustomTitleRecord for user-defined session names
 - Schema v0.2.0: Added sourceToolAssistantUUID to UserRecord, TurnDurationSystemRecord for Claude Code 2.1.1+
+- Schema v0.2.4: Added ProgressRecord (hook/mcp/bash/task progress), MicrocompactBoundarySystemRecord,
+                 allowedPrompts to ExitPlanModeToolInput, fixed MCPSearchToolInput max_results type (2.1.9+)
 - If validation fails, Claude Code schema may have changed - update models accordingly
 
 NEW FIELDS IN CLAUDE CODE 2.0.51+ (Schema v0.1.3):
@@ -82,17 +84,17 @@ from typing import Annotated, Any, Literal
 import pydantic
 
 from src.schemas.session.markers import PathField, PathListField
-from src.schemas.types import BaseStrictModel, ModelId, PermissiveModel
+from src.schemas.types import BaseStrictModel, EmptySequence, ModelId, PermissiveModel
 
 # ==============================================================================
 # Schema Version
 # ==============================================================================
 
-SCHEMA_VERSION = '0.2.3'
+SCHEMA_VERSION = '0.2.4'
 CLAUDE_CODE_MIN_VERSION = '2.0.35'
-CLAUDE_CODE_MAX_VERSION = '2.1.4'
-LAST_VALIDATED = '2026-01-12'
-VALIDATION_RECORD_COUNT = 175_295
+CLAUDE_CODE_MAX_VERSION = '2.1.9'
+LAST_VALIDATED = '2026-01-16'
+VALIDATION_RECORD_COUNT = 423_332
 
 
 # ==============================================================================
@@ -490,10 +492,12 @@ class ExitPlanModeToolInput(StrictModel):
     Fields:
         plan: Plan content in markdown (optional)
         launchSwarm: Whether to launch swarm agents (optional)
+        allowedPrompts: Permission requests (only empty arrays observed so far)
     """
 
     plan: str | None = None
     launchSwarm: bool | None = None
+    allowedPrompts: EmptySequence | None = None
 
 
 # ==============================================================================
@@ -576,11 +580,11 @@ class MCPSearchToolInput(StrictModel):
 
     Fields:
         query: Search query string, can use 'select:' prefix for exact tool selection
-        max_results: Maximum number of results to return (optional)
+        max_results: Maximum number of results to return (optional, can be int or string)
     """
 
     query: str
-    max_results: int | None = None
+    max_results: int | str | None = None  # Can be "1" string or 1 int depending on serialization
 
 
 # ==============================================================================
@@ -900,6 +904,16 @@ class CompactMetadata(StrictModel):
 
     trigger: Literal['auto', 'manual']  # auto=24, manual=18 across all sessions
     preTokens: int
+
+
+class MicrocompactMetadata(StrictModel):
+    """Metadata for micro-compaction (Claude Code 2.1.9+)."""
+
+    trigger: Literal['auto']  # Only 'auto' observed so far
+    preTokens: int
+    tokensSaved: int
+    compactedToolIds: Sequence[str]
+    clearedAttachmentUUIDs: EmptySequence  # Only empty arrays observed
 
 
 # ==============================================================================
@@ -1522,6 +1536,24 @@ class CompactBoundarySystemRecord(BaseRecord):
     compactMetadata: CompactMetadata | None = None
 
 
+class MicrocompactBoundarySystemRecord(BaseRecord):
+    """System record for micro-compaction (subtype=microcompact_boundary, Claude Code 2.1.9+)."""
+
+    type: Literal['system']
+    cwd: PathField
+    parentUuid: str | None
+    subtype: Literal['microcompact_boundary']
+    content: Literal['Context microcompacted']
+    level: Literal['info', 'error', 'warning', 'suggestion'] | None = None
+    isMeta: bool
+    isSidechain: bool
+    userType: str
+    version: str
+    gitBranch: str
+    slug: str | None = None
+    microcompactMetadata: MicrocompactMetadata
+
+
 class ApiErrorSystemRecord(BaseRecord):
     """System record for API errors (subtype=api_error)."""
 
@@ -1580,6 +1612,7 @@ class TurnDurationSystemRecord(BaseRecord):
 SystemSubtypeRecord = Annotated[
     LocalCommandSystemRecord
     | CompactBoundarySystemRecord
+    | MicrocompactBoundarySystemRecord
     | ApiErrorSystemRecord
     | InformationalSystemRecord
     | TurnDurationSystemRecord,
@@ -1649,6 +1682,84 @@ class CustomTitleRecord(StrictModel):
 
 
 # ==============================================================================
+# Progress Record (Claude Code 2.1.9+)
+# ==============================================================================
+
+
+class HookProgressData(StrictModel):
+    """Progress data for hook execution."""
+
+    type: Literal['hook_progress']
+    hookEvent: str  # e.g., "SessionStart"
+    hookName: str  # e.g., "SessionStart:startup"
+    command: PathField
+
+
+class McpProgressStartedData(StrictModel):
+    """Progress data for MCP tool start."""
+
+    type: Literal['mcp_progress']
+    status: Literal['started']
+    serverName: str
+    toolName: str
+
+
+class McpProgressFailedData(StrictModel):
+    """Progress data for MCP tool failure."""
+
+    type: Literal['mcp_progress']
+    status: Literal['failed']
+    serverName: str
+    toolName: str
+    elapsedTimeMs: int
+
+
+class BashProgressData(StrictModel):
+    """Progress data for bash command execution."""
+
+    type: Literal['bash_progress']
+    output: str
+    fullOutput: str
+    elapsedTimeSeconds: int
+    totalLines: int
+
+
+class WaitingForTaskData(StrictModel):
+    """Progress data for waiting on a task."""
+
+    type: Literal['waiting_for_task']
+    taskDescription: str
+    taskType: Literal['local_bash']
+
+
+# Discriminated union of progress data types
+# NOTE: McpProgressFailedData must come before McpProgressStartedData (more fields)
+ProgressData = Annotated[
+    HookProgressData | McpProgressFailedData | McpProgressStartedData | BashProgressData | WaitingForTaskData,
+    pydantic.Field(union_mode='left_to_right'),
+]
+
+
+class ProgressRecord(StrictModel):
+    """Progress record for tracking long-running operations (Claude Code 2.1.9+)."""
+
+    type: Literal['progress']
+    uuid: str
+    timestamp: str
+    sessionId: str
+    cwd: PathField
+    parentUuid: str | None
+    isSidechain: bool
+    userType: Literal['external']
+    version: str
+    gitBranch: str
+    data: ProgressData
+    parentToolUseID: str
+    toolUseID: str
+    slug: str | None = None  # Missing on first record before slug assigned
+
+
+# ==============================================================================
 # Session Record (Discriminated Union)
 # ==============================================================================
 
@@ -1661,13 +1772,15 @@ SessionRecord = Annotated[
     | SummaryRecord
     | LocalCommandSystemRecord  # Must be before SystemRecord!
     | CompactBoundarySystemRecord  # Must be before SystemRecord!
+    | MicrocompactBoundarySystemRecord  # Must be before SystemRecord!
     | ApiErrorSystemRecord  # Must be before SystemRecord!
     | InformationalSystemRecord  # Must be before SystemRecord!
     | TurnDurationSystemRecord  # Must be before SystemRecord!
     | SystemRecord
     | FileHistorySnapshotRecord
     | QueueOperationRecord
-    | CustomTitleRecord,
+    | CustomTitleRecord
+    | ProgressRecord,
     pydantic.Field(union_mode='left_to_right'),
 ]
 
