@@ -1704,6 +1704,16 @@ class McpProgressStartedData(StrictModel):
     toolName: str
 
 
+class McpProgressCompletedData(StrictModel):
+    """Progress data for MCP tool completion."""
+
+    type: Literal['mcp_progress']
+    status: Literal['completed']
+    serverName: str
+    toolName: str
+    elapsedTimeMs: int
+
+
 class McpProgressFailedData(StrictModel):
     """Progress data for MCP tool failure."""
 
@@ -1733,9 +1743,14 @@ class WaitingForTaskData(StrictModel):
 
 
 # Discriminated union of progress data types
-# NOTE: McpProgressFailedData must come before McpProgressStartedData (more fields)
+# NOTE: Models with more required fields must come first (left_to_right matching)
 ProgressData = Annotated[
-    HookProgressData | McpProgressFailedData | McpProgressStartedData | BashProgressData | WaitingForTaskData,
+    HookProgressData
+    | McpProgressCompletedData
+    | McpProgressFailedData
+    | McpProgressStartedData
+    | BashProgressData
+    | WaitingForTaskData,
     pydantic.Field(union_mode='left_to_right'),
 ]
 
