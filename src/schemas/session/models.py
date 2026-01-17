@@ -1742,10 +1742,21 @@ class WaitingForTaskData(StrictModel):
     taskType: Literal['local_bash']
 
 
+class AgentProgressData(StrictModel):
+    """Progress data for agent/subagent execution."""
+
+    type: Literal['agent_progress']
+    agentId: str
+    prompt: str
+    message: Mapping[str, Any]  # Nested session record-like structure
+    normalizedMessages: Sequence[Mapping[str, Any]]
+
+
 # Discriminated union of progress data types
 # NOTE: Models with more required fields must come first (left_to_right matching)
 ProgressData = Annotated[
-    HookProgressData
+    AgentProgressData  # Most fields (5 required)
+    | HookProgressData
     | McpProgressCompletedData
     | McpProgressFailedData
     | McpProgressStartedData
