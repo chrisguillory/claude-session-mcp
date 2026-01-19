@@ -491,7 +491,7 @@ def find_fallbacks(
 
 
 def find_all_session_files() -> list[Path]:
-    """Find all .jsonl session files in ~/.claude/projects/*/"""
+    """Find all .jsonl session files in ~/.claude/projects/ (recursive)."""
     claude_dir = Path.home() / '.claude' / 'projects'
     if not claude_dir.exists():
         return []
@@ -499,7 +499,8 @@ def find_all_session_files() -> list[Path]:
     session_files: list[Path] = []
     for project_dir in claude_dir.iterdir():
         if project_dir.is_dir():
-            session_files.extend(project_dir.glob('*.jsonl'))
+            # Use recursive glob to include subagent files in subagents/ subdirectory
+            session_files.extend(project_dir.glob('**/*.jsonl'))
 
     return sorted(session_files)
 

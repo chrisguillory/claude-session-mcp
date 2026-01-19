@@ -16,6 +16,13 @@ from .agent_ids import (
     generate_clone_agent_id,
     transform_agent_filename,
 )
+from .custom_title import (
+    CLONE_SUFFIX_PATTERN,
+    extract_base_custom_title,
+    extract_custom_title_from_file,
+    extract_custom_title_from_records,
+    generate_clone_custom_title,
+)
 from .paths import (
     MissingCwdError,
     extract_source_project_path,
@@ -47,6 +54,12 @@ from .tool_results import (
 )
 
 __all__ = [
+    # custom_title
+    'CLONE_SUFFIX_PATTERN',
+    'extract_custom_title_from_file',
+    'extract_custom_title_from_records',
+    'extract_base_custom_title',
+    'generate_clone_custom_title',
     # agent_ids
     'AGENT_FILENAME_PATTERN',
     'extract_agent_ids_from_files',

@@ -35,6 +35,7 @@ from src.services.artifacts import (
     collect_plan_files,
     collect_todos,
     collect_tool_results,
+    extract_custom_title_from_records,
     extract_slugs_from_records,
     extract_source_project_path,
     validate_session_env_empty,
@@ -312,6 +313,11 @@ class SessionArchiveService:
         # The record cwd field is always the authoritative source
         source_project_path = extract_source_project_path(files_data)
 
+        # Extract custom title (user-defined session name from /rename)
+        custom_title = extract_custom_title_from_records(files_data)
+        if custom_title:
+            await log.info(f'Found custom title: {custom_title}')
+
         # Create archive structure
         archive = SessionArchive(
             version=ARCHIVE_FORMAT_VERSION,
@@ -324,6 +330,7 @@ class SessionArchiveService:
             tool_results=tool_results,
             todos=todos,
             machine_id=get_machine_id(),
+            custom_title=custom_title,
         )
 
         # Serialize and compress
@@ -355,6 +362,7 @@ class SessionArchiveService:
             record_count=total_records,
             file_count=len(session_files),
             files=file_metadata,
+            custom_title=custom_title,
         )
 
     async def _discover_session_files(self, project_folder: Path, logger: LoggerProtocol) -> Sequence[Path]:

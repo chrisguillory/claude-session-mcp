@@ -38,6 +38,7 @@ class SessionContext(StrictModel):
 
     # Identity
     session_id: str
+    custom_title: str | None = None  # User-defined session name from /rename
 
     # Temporal
     started_at: JsonDatetime | None  # From claude-workspace sessions.json

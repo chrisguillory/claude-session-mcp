@@ -19,7 +19,7 @@ from src.paths import encode_path
 from src.protocols import LoggerProtocol
 from src.schemas.operations.discovery import SessionInfo
 from src.schemas.operations.restore import RestoreResult
-from src.schemas.session import SessionRecord, SessionRecordAdapter
+from src.schemas.session import CustomTitleRecord, SessionRecord, SessionRecordAdapter
 from src.services.artifacts import (
     TODOS_DIR,
     apply_agent_id_mapping,
@@ -29,9 +29,11 @@ from src.services.artifacts import (
     collect_tool_results,
     create_session_env_dir,
     extract_agent_ids_from_files,
+    extract_custom_title_from_records,
     extract_slugs_from_records,
     extract_source_project_path,
     generate_agent_id_mapping,
+    generate_clone_custom_title,
     generate_clone_slug,
     transform_agent_filename,
     transform_todo_filename,
@@ -146,6 +148,11 @@ class SessionCloneService:
         plan_files = collect_plan_files(slugs)
         if logger:
             await logger.info(f'Found {len(slugs)} slugs, {len(plan_files)} plan files')
+
+        # Extract custom title from source session
+        source_custom_title = extract_custom_title_from_records(files_data)
+        if logger and source_custom_title:
+            await logger.info(f'Found custom title: {source_custom_title}')
 
         # Generate new session ID (UUIDv7 for identification)
         new_session_id = str(uuid6.uuid7())
@@ -278,16 +285,21 @@ class SessionCloneService:
                 new_filename = filename
 
             # Transform records
-            updated_records = []
+            updated_records: list[SessionRecord] = []
             for record in records:
-                record_dict = record.model_dump(exclude_unset=True, mode='json')
-
-                # Update session ID if present
-                if 'sessionId' in record_dict:
-                    record_dict['sessionId'] = new_session_id
-
-                # Validate and reconstruct
-                updated_record = SessionRecordAdapter.validate_python(record_dict)
+                # Transform CustomTitleRecord with clone title
+                if isinstance(record, CustomTitleRecord):
+                    new_title = generate_clone_custom_title(record.customTitle, new_session_id)
+                    updated_record: SessionRecord = CustomTitleRecord(
+                        type='custom-title',
+                        customTitle=new_title,
+                        sessionId=new_session_id,
+                    )
+                else:
+                    record_dict = record.model_dump(exclude_unset=True, mode='json')
+                    if 'sessionId' in record_dict:
+                        record_dict['sessionId'] = new_session_id
+                    updated_record = SessionRecordAdapter.validate_python(record_dict)
 
                 # Translate paths if needed
                 if translator:

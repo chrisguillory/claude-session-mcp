@@ -628,6 +628,8 @@ async def _info_async(
 
     # Text format
     typer.echo(f'Session: {context.session_id}')
+    if context.custom_title:
+        typer.echo(f'Title: {context.custom_title}')
     typer.echo(f'Project: {context.project_path}')
     typer.echo()
 

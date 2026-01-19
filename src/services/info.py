@@ -20,6 +20,7 @@ import pydantic
 from src.schemas.claude_workspace import Session, SessionDatabase
 from src.schemas.operations.context import SessionContext
 from src.schemas.operations.discovery import SessionInfo
+from src.services.artifacts import extract_custom_title_from_file
 from src.services.clone import AmbiguousSessionError
 from src.services.delete import get_restoration_timestamp, is_native_session
 from src.services.discovery import SessionDiscoveryService
@@ -105,6 +106,9 @@ class SessionInfoService:
         native = is_native_session(full_session_id)
         created_at = None if native else get_restoration_timestamp(full_session_id)
 
+        # Extract custom title from session file
+        custom_title = extract_custom_title_from_file(session_file)
+
         # Determine if this is the current session
         is_current = current_context is not None and current_context.session_id == full_session_id
 
@@ -126,6 +130,7 @@ class SessionInfoService:
         return SessionContext(
             # Identity
             session_id=full_session_id,
+            custom_title=custom_title,
             # Temporal
             started_at=workspace_session.metadata.started_at if workspace_session else None,
             ended_at=workspace_session.metadata.ended_at if workspace_session else None,

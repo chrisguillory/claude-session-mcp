@@ -1748,8 +1748,10 @@ class AgentProgressData(StrictModel):
     type: Literal['agent_progress']
     agentId: str
     prompt: str
-    message: Mapping[str, Any]  # Nested session record-like structure
-    normalizedMessages: Sequence[Mapping[str, Any]]
+    # TODO: Remove "loose" typing below
+    message: Mapping[str, Any]  # check_schema_typing.py: loose-typing
+    # TODO: Remove "loose" typing below
+    normalizedMessages: Sequence[Mapping[str, Any]]  # check_schema_typing.py: loose-typing
 
 
 # Discriminated union of progress data types
@@ -1783,6 +1785,7 @@ class ProgressRecord(StrictModel):
     parentToolUseID: str
     toolUseID: str
     slug: str | None = None  # Missing on first record before slug assigned
+    agentId: str | None = None  # Present in agent subfiles (references agent-{agentId}.jsonl)
 
 
 # ==============================================================================

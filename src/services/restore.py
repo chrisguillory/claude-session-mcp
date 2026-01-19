@@ -21,7 +21,7 @@ from src.paths import encode_path
 from src.protocols import LoggerProtocol
 from src.schemas.operations.archive import SessionArchive
 from src.schemas.operations.restore import RestoreResult
-from src.schemas.session import SessionRecord, SessionRecordAdapter
+from src.schemas.session import CustomTitleRecord, SessionRecord, SessionRecordAdapter
 from src.services.artifacts import (
     TODOS_DIR,
     apply_agent_id_mapping,
@@ -29,6 +29,7 @@ from src.services.artifacts import (
     create_session_env_dir,
     extract_agent_ids_from_files,
     generate_agent_id_mapping,
+    generate_clone_custom_title,
     generate_clone_slug,
     transform_agent_filename,
     transform_todo_filename,
@@ -376,16 +377,22 @@ class SessionRestoreService:
                 new_filename = filename
 
             # Update session IDs and translate paths in records
-            updated_records = []
+            updated_records: list[SessionRecord] = []
             for record in records:
-                record_dict = record.model_dump(exclude_unset=True, mode='json')
-
-                # Update session ID if present (even in in_place mode, records need correct ID)
-                if 'sessionId' in record_dict:
-                    record_dict['sessionId'] = new_session_id
-
-                # Validate and reconstruct record
-                updated_record = SessionRecordAdapter.validate_python(record_dict)
+                # Transform CustomTitleRecord with clone title (only for non-in_place)
+                if isinstance(record, CustomTitleRecord) and not in_place:
+                    new_title = generate_clone_custom_title(record.customTitle, new_session_id)
+                    updated_record: SessionRecord = CustomTitleRecord(
+                        type='custom-title',
+                        customTitle=new_title,
+                        sessionId=new_session_id,
+                    )
+                else:
+                    record_dict = record.model_dump(exclude_unset=True, mode='json')
+                    # Update session ID if present (even in in_place mode, records need correct ID)
+                    if 'sessionId' in record_dict:
+                        record_dict['sessionId'] = new_session_id
+                    updated_record = SessionRecordAdapter.validate_python(record_dict)
 
                 # Translate paths if needed
                 if translator:

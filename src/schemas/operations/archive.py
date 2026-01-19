@@ -17,7 +17,7 @@ from src.schemas.session.models import SessionRecord
 from src.schemas.types import JsonDatetime
 
 # Archive format version - single source of truth for what this code creates
-ARCHIVE_FORMAT_VERSION = '1.3'
+ARCHIVE_FORMAT_VERSION = '1.4'
 
 
 class FileMetadata(StrictModel):
@@ -42,6 +42,7 @@ class ArchiveMetadata(StrictModel):
     record_count: int  # Total records across all files
     file_count: int  # Number of JSONL files included (main + agents)
     files: Sequence[FileMetadata]  # Per-file breakdown
+    custom_title: str | None = None  # User-defined session name from /rename (if any)
 
 
 class SessionArchive(StrictModel):
@@ -53,16 +54,19 @@ class SessionArchive(StrictModel):
     - 1.1: Added plan_files field
     - 1.2: Added tool_results and todos fields
     - 1.3: Added machine_id field for cross-machine lineage tracking
+    - 1.4: Added custom_title field for user-defined session names
 
     Cloned artifact identification patterns:
     - Session IDs: UUIDv7 (vs Claude's UUIDv4)
     - Plan slugs: {old-slug}-clone-{session-prefix}
     - Agent IDs: {old-agent-id}-clone-{session-prefix}
+    - Custom titles: {base-title} (clone-{session-prefix})
 
     Design decisions:
     - Agent files get new IDs on clone/restore for same-project fork safety
     - tool_results uses original tool_use_ids (nested under session_id dir)
     - todos filenames have primary session ID portion updated
+    - custom_title is transformed on clone to show provenance
     """
 
     version: str  # Required - use ARCHIVE_FORMAT_VERSION when creating
@@ -75,3 +79,4 @@ class SessionArchive(StrictModel):
     tool_results: Mapping[str, str] = MappingProxyType({})  # tool_use_id -> content (v1.2+)
     todos: Mapping[str, str] = MappingProxyType({})  # original_filename -> JSON content (v1.2+)
     machine_id: str | None = None  # Machine where archive was created (v1.3+)
+    custom_title: str | None = None  # User-defined session name from /rename (v1.4+)
