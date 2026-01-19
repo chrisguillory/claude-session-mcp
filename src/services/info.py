@@ -142,6 +142,7 @@ class SessionInfoService:
             # Environment
             machine_id=machine_id,
             claude_pid=claude_pid,
+            claude_version=workspace_session.metadata.claude_version if workspace_session else None,
             temp_dir=temp_dir,
             # Origin
             source=workspace_session.source if workspace_session else 'unknown',

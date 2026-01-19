@@ -661,13 +661,15 @@ async def _info_async(
     typer.echo(f'  Debug: {context.debug_file}')
 
     # Environment section (if available)
-    if context.machine_id or context.claude_pid:
+    if context.machine_id or context.claude_pid or context.claude_version:
         typer.echo()
         typer.secho('Environment:', bold=True)
         if context.machine_id:
             typer.echo(f'  Machine: {context.machine_id}')
         if context.claude_pid:
             typer.echo(f'  Claude PID: {context.claude_pid}')
+        if context.claude_version:
+            typer.echo(f'  Claude Version: {context.claude_version}')
         if context.temp_dir:
             typer.echo(f'  Temp dir: {context.temp_dir}')
 
