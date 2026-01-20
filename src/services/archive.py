@@ -22,15 +22,7 @@ from src.schemas.operations.archive import (
     FileMetadata,
     SessionArchive,
 )
-from src.schemas.session import (
-    ApiErrorSystemRecord,
-    AssistantRecord,
-    CompactBoundarySystemRecord,
-    InformationalSystemRecord,
-    LocalCommandSystemRecord,
-    SessionRecord,
-    UserRecord,
-)
+from src.schemas.session import SessionRecord
 from src.services.artifacts import (
     collect_plan_files,
     collect_todos,
@@ -42,6 +34,7 @@ from src.services.artifacts import (
 )
 from src.services.lineage import get_machine_id
 from src.services.parser import SessionParserService
+from src.services.version import get_version
 from src.storage.protocol import StorageBackend
 
 # ==============================================================================
@@ -135,16 +128,6 @@ class FormatDetector:
 # Session Archive Service
 # ==============================================================================
 
-# All record types that have a version field
-VERSION_RECORD_TYPES = (
-    UserRecord,
-    AssistantRecord,
-    LocalCommandSystemRecord,
-    CompactBoundarySystemRecord,
-    ApiErrorSystemRecord,
-    InformationalSystemRecord,
-)
-
 
 class SessionArchiveService:
     """
@@ -162,6 +145,7 @@ class SessionArchiveService:
         *,
         project_path: Path | None = None,
         session_folder: Path | None = None,
+        claude_pid: int | None = None,
     ) -> None:
         """
         Initialize archive service.
@@ -172,6 +156,7 @@ class SessionArchiveService:
             parser_service: Session parser service for loading JSONL files
             project_path: Current project directory (used to find session folder via encoding)
             session_folder: Session folder directly (bypasses encoding, use when discovered)
+            claude_pid: Optional PID of running Claude process (for accurate version detection)
 
         Note: Provide either project_path OR session_folder.
         - MCP handlers have the real project_path from lsof - use that
@@ -184,6 +169,7 @@ class SessionArchiveService:
         self.project_path = project_path
         self.temp_dir = temp_dir
         self.parser_service = parser_service
+        self.claude_pid = claude_pid
 
         # Claude stores sessions here
         self.claude_sessions_dir = Path.home() / '.claude' / 'projects'
@@ -438,34 +424,32 @@ class SessionArchiveService:
 
     async def _extract_claude_code_version(
         self, files_data: dict[str, list[SessionRecord]], logger: LoggerProtocol
-    ) -> str:
+    ) -> str | None:
         """
-        Extract Claude Code version from session records.
+        Extract Claude Code version using best available method.
 
-        Strategy:
-        1. Find first record with a version field (check all types that have version)
-        2. Fallback: subprocess call to `claude --version` (if data corrupted)
+        Fallback chain:
+        1. Process-based detection (if claude_pid was provided and process exists)
+        2. Session records (find first record with version field)
+        3. None (if version cannot be determined)
 
         Args:
             files_data: Parsed session records
             logger: Logger instance
 
         Returns:
-            Claude Code version string (e.g., '2.0.37')
+            Claude Code version string (e.g., '2.0.37'), or None if not found
         """
-        # Try to find first record with a version field
-        for records in files_data.values():
-            for record in records:
-                # Single isinstance check for all types with version
-                if isinstance(record, VERSION_RECORD_TYPES) and record.version:
-                    await logger.info(f'Extracted Claude version from {record.__class__.__name__}: {record.version}')
-                    return record.version
+        # Flatten all records from all files
+        all_records = [record for records in files_data.values() for record in records]
 
-        # Fallback: get from subprocess (data is corrupted if we reach here)
-        await logger.warning('No records with version field found - using subprocess fallback')
-        result = subprocess.run(['claude', '--version'], capture_output=True, text=True)
-        version = result.stdout.strip()
-        await logger.info(f'Extracted Claude version from subprocess: {version}')
+        version = get_version(claude_pid=self.claude_pid, records=all_records)
+
+        if version:
+            await logger.info(f'Extracted Claude version: {version}')
+        else:
+            await logger.warning('No version found')
+
         return version
 
     async def _serialize_json(self, archive: SessionArchive, logger: LoggerProtocol) -> bytes:

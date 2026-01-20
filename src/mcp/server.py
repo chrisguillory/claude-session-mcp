@@ -108,6 +108,7 @@ async def lifespan(mcp_server: FastMCP) -> AsyncIterator[None]:
             temp_dir=temp_path,
             parser_service=parser_service,
             project_path=project_path,  # Real project path from lsof
+            claude_pid=claude_context.claude_pid,  # For process-based version detection
         )
 
         # Create immutable state
@@ -383,12 +384,17 @@ def register_tools(state: ServerState) -> None:
             raise RuntimeError('Context is required - must be called via FastMCP')
         logger = DualLogger(ctx)
 
+        # Resolve prefix to full session ID
+        info_service = SessionInfoService()
+        session_info = await info_service._resolve_session(session_id)
+        full_session_id = session_info.session_id
+
         # Create delete service for current project
         delete_service = SessionDeleteService(state.project_path)
 
         # Delete the session
         result = await delete_service.delete_session(
-            session_id=session_id,
+            session_id=full_session_id,
             force=force,
             no_backup=no_backup,
             dry_run=dry_run,
@@ -440,7 +446,13 @@ def register_tools(state: ServerState) -> None:
             raise RuntimeError('Context is required - must be called via FastMCP')
         logger = DualLogger(ctx)
 
-        target_id = session_id or state.session_id
+        target_id_or_prefix = session_id or state.session_id
+
+        # Resolve prefix to full session ID and validate session exists
+        info_service = SessionInfoService()
+        session_info = await info_service._resolve_session(target_id_or_prefix)
+        target_id = session_info.session_id
+
         await logger.info(f'Looking up lineage for session: {target_id[:12]}...')
 
         # Query storage via service
@@ -584,9 +596,26 @@ def register_tools(state: ServerState) -> None:
                 '  4. Set as GITHUB_TOKEN in your environment'
             )
 
-        # Determine target session
-        target_id = session_id or state.session_id
+        # Determine target session (resolve prefix if needed)
+        target_id_or_prefix = session_id or state.session_id
+
+        # Resolve prefix to full session ID
+        info_service = SessionInfoService()
+        session_info = await info_service._resolve_session(target_id_or_prefix)
+        target_id = session_info.session_id
+
         await logger.info(f'Saving session to Gist: {target_id[:12]}...')
+
+        # Determine correct PID for version detection:
+        # - If archiving current session: use live PID from state
+        # - If archiving other session: get historical PID from sessions.json (if available)
+        is_current_session = target_id == state.session_id
+        if is_current_session:
+            archive_claude_pid: int | None = state.claude_pid
+        else:
+            # Get target session's PID from workspace sessions.json
+            workspace_session = info_service._load_workspace_session(target_id)
+            archive_claude_pid = workspace_session.metadata.claude_pid if workspace_session else None
 
         # Create Gist storage backend
         storage = GistStorage(
@@ -596,8 +625,16 @@ def register_tools(state: ServerState) -> None:
             description=description,
         )
 
+        archive_service = SessionArchiveService(
+            session_id=target_id,
+            temp_dir=Path(state.temp_dir.name),
+            parser_service=state.parser_service,
+            session_folder=session_info.session_folder,
+            claude_pid=archive_claude_pid,  # Target session's PID (not current session's PID)
+        )
+
         # Create archive (force JSON format - zst not supported by Gist)
-        metadata = await state.archive_service.create_archive(
+        metadata = await archive_service.create_archive(
             storage=storage,
             output_path=None,  # Let storage generate path
             format_param='json',  # Always JSON for Gist

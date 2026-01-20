@@ -73,7 +73,7 @@ class SessionArchive(StrictModel):
     session_id: str
     archived_at: JsonDatetime
     original_project_path: str
-    claude_code_version: str  # Claude Code version at archive time
+    claude_code_version: str | None  # Claude Code version at archive time (None if not determinable)
     files: Mapping[str, Sequence[SessionRecord]]  # filename -> records
     plan_files: Mapping[str, str] = MappingProxyType({})  # slug -> content (v1.1+)
     tool_results: Mapping[str, str] = MappingProxyType({})  # tool_use_id -> content (v1.2+)

@@ -127,6 +127,12 @@ class SessionInfoService:
             # If session is in sessions.json, it was created on this machine
             machine_id = get_machine_id() if workspace_session else None
 
+        claude_version = await self._get_claude_version(
+            claude_pid=claude_pid,
+            session_file=session_file,
+            workspace_version=workspace_session.metadata.claude_version if workspace_session else None,
+        )
+
         return SessionContext(
             # Identity
             session_id=full_session_id,
@@ -142,7 +148,7 @@ class SessionInfoService:
             # Environment
             machine_id=machine_id,
             claude_pid=claude_pid,
-            claude_version=workspace_session.metadata.claude_version if workspace_session else None,
+            claude_version=claude_version,
             temp_dir=temp_dir,
             # Origin
             source=workspace_session.source if workspace_session else 'unknown',
@@ -186,6 +192,48 @@ class SessionInfoService:
 
         # Fall back to session folder path (not ideal - lossy encoding)
         return session_file.parent
+
+    async def _get_claude_version(
+        self,
+        claude_pid: int | None,
+        session_file: Path,
+        workspace_version: str | None,
+    ) -> str | None:
+        """
+        Get Claude Code version with proper fallback chain.
+
+        Priority:
+        1. Process-based (if PID available and process exists)
+        2. JSONL records (from session file)
+        3. Workspace sessions.json (lowest priority fallback)
+
+        Args:
+            claude_pid: PID of Claude process (if available)
+            session_file: Path to session JSONL file
+            workspace_version: Version from workspace sessions.json (if available)
+
+        Returns:
+            Version string, or None if not determinable
+        """
+        # Try process-based first (most accurate for current operations)
+        if claude_pid is not None:
+            from src.services.version import get_version_from_process
+
+            version = get_version_from_process(claude_pid)
+            if version:
+                return version
+
+        # Try JSONL records (read just enough to find version)
+        if session_file.exists():
+            with session_file.open() as f:
+                for line in f:
+                    record = json.loads(line)
+                    version = record.get('version')
+                    if isinstance(version, str):
+                        return version
+
+        # Lowest fallback: workspace sessions.json
+        return workspace_version
 
     def _load_workspace_session(self, session_id: str) -> Session | None:
         """
