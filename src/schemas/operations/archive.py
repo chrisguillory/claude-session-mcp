@@ -39,7 +39,8 @@ class ArchiveMetadata(StrictModel):
     format: Literal['json', 'zst']
     size_mb: float  # Size in megabytes, rounded to 2 decimal places
     archived_at: datetime
-    record_count: int  # Total records across all files
+    session_records: int  # Records in main {session_id}.jsonl file
+    agent_records: int  # Records in agent-*.jsonl files
     file_count: int  # Number of JSONL files included (main + agents)
     files: Sequence[FileMetadata]  # Per-file breakdown
     custom_title: str | None = None  # User-defined session name from /rename (if any)

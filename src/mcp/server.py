@@ -38,7 +38,7 @@ from src.schemas.operations.gist import GistArchiveResult
 from src.schemas.operations.lineage import LineageResult
 from src.schemas.operations.restore import RestoreResult
 from src.services.archive import SessionArchiveService
-from src.services.clone import AmbiguousSessionError, SessionCloneService
+from src.services.clone import SessionCloneService
 from src.services.delete import SessionDeleteService
 from src.services.info import CurrentSessionContext, SessionInfoService
 from src.services.lineage import LineageService
@@ -316,22 +316,17 @@ def register_tools(state: ServerState) -> None:
         # Create clone service for current project
         clone_service = SessionCloneService(state.project_path)
 
-        try:
-            # Clone the session
-            result = await clone_service.clone(
-                source_session_id=target_id,
-                translate_paths=translate_paths,
-                logger=logger,
-            )
+        # Clone the session
+        result = await clone_service.clone(
+            source_session_id=target_id,
+            translate_paths=translate_paths,
+            logger=logger,
+        )
 
-            await logger.info(f'Session cloned with new ID: {result.new_session_id}')
-            await logger.info(f'Use: claude --resume {result.new_session_id}')
+        await logger.info(f'Session cloned with new ID: {result.new_session_id}')
+        await logger.info(f'Use: claude --resume {result.new_session_id}')
 
-            return result
-
-        except AmbiguousSessionError as e:
-            # Re-raise with more context for MCP
-            raise ValueError(str(e)) from e
+        return result
 
     @server.tool()
     async def delete_session(
@@ -654,7 +649,8 @@ def register_tools(state: ServerState) -> None:
             session_id=target_id,
             format='json',
             size_mb=metadata.size_mb,
-            record_count=metadata.record_count,
+            session_records=metadata.session_records,
+            agent_records=metadata.agent_records,
             file_count=metadata.file_count,
             restore_command=f'claude-session restore gist://{final_gist_id}',
         )

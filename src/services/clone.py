@@ -47,20 +47,6 @@ from src.services.parser import SessionParserService
 from src.services.restore import PathTranslator
 
 
-class AmbiguousSessionError(Exception):
-    """Raised when a session ID prefix matches multiple sessions."""
-
-    def __init__(self, prefix: str, matches: list[str]) -> None:
-        self.prefix = prefix
-        self.matches = matches
-        matches_str = '\n  '.join(matches[:10])
-        if len(matches) > 10:
-            matches_str += f'\n  ... and {len(matches) - 10} more'
-        super().__init__(
-            f"Session ID prefix '{prefix}' is ambiguous. Matches {len(matches)} sessions:\n  {matches_str}"
-        )
-
-
 class SessionCloneService:
     """
     Service for direct session-to-session cloning.
@@ -351,6 +337,9 @@ class SessionCloneService:
         """
         Resolve a session ID or prefix to a full session.
 
+        Delegates to SessionDiscoveryService which handles both exact matches
+        and prefix matching.
+
         Args:
             session_id_or_prefix: Full session ID or prefix
             logger: Optional logger
@@ -360,55 +349,12 @@ class SessionCloneService:
 
         Raises:
             FileNotFoundError: If no sessions match
-            AmbiguousSessionError: If multiple sessions match
+            AmbiguousSessionError: If multiple sessions match (from discovery service)
         """
-        # First try exact match
-        exact_match = await self.discovery_service.find_session_by_id(session_id_or_prefix)
-        if exact_match:
-            return exact_match
-
-        # Try prefix match
-        if logger:
-            await logger.info(f'No exact match, trying prefix: {session_id_or_prefix}')
-
-        matches = await self._find_sessions_by_prefix(session_id_or_prefix)
-
-        if not matches:
+        match = await self.discovery_service.find_session_by_id(session_id_or_prefix)
+        if not match:
             raise FileNotFoundError(f'No session found matching: {session_id_or_prefix}')
-
-        if len(matches) > 1:
-            raise AmbiguousSessionError(session_id_or_prefix, [m.session_id for m in matches])
-
-        return matches[0]
-
-    async def _find_sessions_by_prefix(self, prefix: str) -> list[SessionInfo]:
-        """Find all sessions matching a prefix."""
-        if not self.claude_sessions_dir.exists():
-            return []
-
-        # Use rg to find all matching session files
-        result = subprocess.run(
-            ['rg', '--files', '--glob', f'{prefix}*.jsonl', str(self.claude_sessions_dir)],
-            capture_output=True,
-            text=True,
-        )
-
-        if not result.stdout.strip():
-            return []
-
-        matches = []
-        for line in result.stdout.strip().split('\n'):
-            session_file = Path(line)
-            # Skip agent files
-            if session_file.name.startswith('agent-'):
-                continue
-
-            session_id = session_file.stem
-            session_folder = session_file.parent
-
-            matches.append(SessionInfo(session_id=session_id, session_folder=session_folder))
-
-        return matches
+        return match
 
     async def _discover_session_files(
         self,

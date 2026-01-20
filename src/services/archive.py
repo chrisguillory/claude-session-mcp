@@ -334,10 +334,17 @@ class SessionArchiveService:
         # Calculate size in MB (rounded to 2 decimal places)
         size_mb = round(len(data) / (1024 * 1024), 2)
 
-        # Build per-file metadata
-        file_metadata = [
-            FileMetadata(filename=filename, record_count=len(records)) for filename, records in files_data.items()
-        ]
+        # Build per-file metadata and calculate record breakdown
+        file_metadata = []
+        session_records = 0
+        agent_records = 0
+        for filename, records in files_data.items():
+            record_count = len(records)
+            file_metadata.append(FileMetadata(filename=filename, record_count=record_count))
+            if filename.startswith('agent-'):
+                agent_records += record_count
+            else:
+                session_records += record_count
 
         return ArchiveMetadata(
             file_path=final_path,
@@ -345,7 +352,8 @@ class SessionArchiveService:
             format=archive_format,
             size_mb=size_mb,
             archived_at=datetime.now(UTC),
-            record_count=total_records,
+            session_records=session_records,
+            agent_records=agent_records,
             file_count=len(session_files),
             files=file_metadata,
             custom_title=custom_title,

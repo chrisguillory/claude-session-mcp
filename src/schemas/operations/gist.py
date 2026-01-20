@@ -20,7 +20,8 @@ class GistArchiveResult(StrictModel):
     session_id: str
     format: str  # Always 'json' for gist
     size_mb: float
-    record_count: int
+    session_records: int  # Records in main {session_id}.jsonl file
+    agent_records: int  # Records in agent-*.jsonl files
     file_count: int
 
     # Restore instruction

@@ -20,9 +20,10 @@ import httpx
 import typer
 
 from src.cli.logger import CLILogger
+from src.exceptions import AmbiguousSessionError
 from src.launcher import launch_claude_with_session
 from src.services.archive import SessionArchiveService
-from src.services.clone import AmbiguousSessionError, SessionCloneService
+from src.services.clone import SessionCloneService
 from src.services.delete import SessionDeleteService
 from src.services.discovery import SessionDiscoveryService
 from src.services.info import SessionInfoService
@@ -152,11 +153,14 @@ async def _archive_async(
                 typer.echo('Consider using --format json instead.')
                 typer.echo()
 
+        # Use the resolved full session ID (supports prefix matching)
+        resolved_session_id = session_info.session_id
+
         # Initialize services
         with tempfile.TemporaryDirectory(prefix='claude-session-') as temp_dir:
             parser_service = SessionParserService()
             archive_service = SessionArchiveService(
-                session_id=session_id,
+                session_id=resolved_session_id,
                 temp_dir=Path(temp_dir),
                 parser_service=parser_service,
                 session_folder=session_info.session_folder,  # Use folder directly from discovery
@@ -167,7 +171,7 @@ async def _archive_async(
             if use_gist:
                 # Generate filename for Gist
                 timestamp = datetime.now(UTC).strftime('%Y%m%d_%H%M%S')
-                filename = f'session-{session_id[:8]}-{timestamp}.json'
+                filename = f'session-{resolved_session_id[:8]}-{timestamp}.json'
 
                 if token is None:
                     raise typer.BadParameter('GitHub token required for Gist storage')
@@ -199,7 +203,7 @@ async def _archive_async(
                 typer.echo(f'  Gist ID: {storage.gist_id}')
                 typer.echo(f'  Format: {metadata.format}')
                 typer.echo(f'  Size: {metadata.size_mb} MB')
-                typer.echo(f'  Records: {metadata.record_count:,}')
+                typer.echo(f'  Records: {metadata.session_records:,} session, {metadata.agent_records:,} agent')
                 typer.echo()
                 typer.echo('To restore, use:')
                 typer.secho(f'  claude-session restore gist://{storage.gist_id}', fg=typer.colors.CYAN)
@@ -208,7 +212,7 @@ async def _archive_async(
                 typer.echo(f'  Path: {metadata.file_path}')
                 typer.echo(f'  Format: {metadata.format}')
                 typer.echo(f'  Size: {metadata.size_mb} MB')
-                typer.echo(f'  Records: {metadata.record_count:,}')
+                typer.echo(f'  Records: {metadata.session_records:,} session, {metadata.agent_records:,} agent')
                 typer.echo(f'  Files: {metadata.file_count}')
                 if verbose:
                     typer.echo('\n  File breakdown:')

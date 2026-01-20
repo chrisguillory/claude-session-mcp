@@ -11,7 +11,6 @@ Aggregates data from multiple sources:
 from __future__ import annotations
 
 import json
-import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -21,7 +20,6 @@ from src.schemas.claude_workspace import Session, SessionDatabase
 from src.schemas.operations.context import SessionContext
 from src.schemas.operations.discovery import SessionInfo
 from src.services.artifacts import extract_custom_title_from_file
-from src.services.clone import AmbiguousSessionError
 from src.services.delete import get_restoration_timestamp, is_native_session
 from src.services.discovery import SessionDiscoveryService
 from src.services.lineage import LineageService, get_machine_id
@@ -264,6 +262,9 @@ class SessionInfoService:
         """
         Resolve a session ID or prefix to a full session.
 
+        Delegates to SessionDiscoveryService which handles both exact matches
+        and prefix matching.
+
         Args:
             session_id_or_prefix: Full session ID or prefix
 
@@ -272,50 +273,9 @@ class SessionInfoService:
 
         Raises:
             FileNotFoundError: If no sessions match
-            AmbiguousSessionError: If multiple sessions match the prefix
+            AmbiguousSessionError: If multiple sessions match (from discovery service)
         """
-        # First try exact match
-        exact_match = await self.discovery.find_session_by_id(session_id_or_prefix)
-        if exact_match:
-            return exact_match
-
-        # Try prefix match
-        matches = await self._find_sessions_by_prefix(session_id_or_prefix)
-
-        if not matches:
+        match = await self.discovery.find_session_by_id(session_id_or_prefix)
+        if not match:
             raise FileNotFoundError(f'No session found matching: {session_id_or_prefix}')
-
-        if len(matches) > 1:
-            raise AmbiguousSessionError(session_id_or_prefix, [m.session_id for m in matches])
-
-        return matches[0]
-
-    async def _find_sessions_by_prefix(self, prefix: str) -> list[SessionInfo]:
-        """Find all sessions matching a prefix."""
-        claude_sessions_dir = self.discovery.claude_sessions_dir
-        if not claude_sessions_dir.exists():
-            return []
-
-        # Use rg to find all matching session files
-        result = subprocess.run(
-            ['rg', '--files', '--glob', f'{prefix}*.jsonl', str(claude_sessions_dir)],
-            capture_output=True,
-            text=True,
-        )
-
-        if not result.stdout.strip():
-            return []
-
-        matches = []
-        for line in result.stdout.strip().split('\n'):
-            session_file = Path(line)
-            # Skip agent files
-            if session_file.name.startswith('agent-'):
-                continue
-
-            session_id = session_file.stem
-            session_folder = session_file.parent
-
-            matches.append(SessionInfo(session_id=session_id, session_folder=session_folder))
-
-        return matches
+        return match
