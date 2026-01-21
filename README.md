@@ -471,6 +471,13 @@ strings $(which claude) | grep -oE 'process\.env\.[A-Z_0-9]+' | sort -u
 # ... (~416 total in v2.1.14)
 ```
 
+### Deprecated/Non-functional
+
+| Variable | Status | Notes |
+|----------|--------|-------|
+| `CLAUDE_CODE_EFFORT_LEVEL` | No effect | Present in binary but does not modify API requests (tested 2.1.14) |
+| `ultrathink` | Deprecated | "Ultrathink no longer does anything. Thinking budget is now max by default." |
+
 ## Claude Code Version Sources
 
 Authoritative sources for checking Claude Code versions:
