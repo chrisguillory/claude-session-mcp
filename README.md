@@ -511,6 +511,61 @@ Set in `~/.claude/settings.json` (takes precedence over inline env vars):
 | `CLAUDE_CODE_EFFORT_LEVEL` | No effect | Present in binary but does not modify API requests (tested 2.1.14) |
 | `ultrathink` | Deprecated | "Ultrathink no longer does anything. Thinking budget is now max by default." |
 
+### Additional Useful Variables (from Perplexity research)
+
+**Compaction/Context:**
+
+| Variable                          | Effect                                                                             | Default |
+|-----------------------------------|------------------------------------------------------------------------------------|---------|
+| `DISABLE_AUTO_COMPACT`            | Disable auto compaction (gains ~22.5% context, but sessions end abruptly at limit) | off     |
+| `DISABLE_COMPACT`                 | Disable all compaction                                                             | off     |
+| `DISABLE_MICROCOMPACT`            | Disable microcompact compression                                                   | off     |
+| `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE` | Override auto-compact threshold percentage                                         | ~75%    |
+
+**Caching:**
+
+| Variable                        | Effect                                 |
+|---------------------------------|----------------------------------------|
+| `DISABLE_PROMPT_CACHING`        | Disable prompt caching globally        |
+| `DISABLE_PROMPT_CACHING_OPUS`   | Disable prompt caching for Opus only   |
+| `DISABLE_PROMPT_CACHING_SONNET` | Disable prompt caching for Sonnet only |
+| `DISABLE_PROMPT_CACHING_HAIKU`  | Disable prompt caching for Haiku only  |
+
+**Limits:**
+
+| Variable                                  | Effect                            | Default        |
+|-------------------------------------------|-----------------------------------|----------------|
+| `MAX_MCP_OUTPUT_TOKENS`                   | Max tokens for MCP server outputs | -              |
+| `CLAUDE_CODE_FILE_READ_MAX_OUTPUT_TOKENS` | Max tokens for file reading       | 25000          |
+| `BASH_DEFAULT_TIMEOUT_MS`                 | Default bash command timeout      | 120000 (2 min) |
+| `BASH_MAX_TIMEOUT_MS`                     | Maximum bash command timeout      | -              |
+| `CLAUDE_CODE_GLOB_TIMEOUT_SECONDS`        | Timeout for glob operations       | -              |
+| `CLAUDE_CODE_MAX_RETRIES`                 | API retry count                   | -              |
+
+**Model Selection:**
+
+| Variable                         | Effect                                           |
+|----------------------------------|--------------------------------------------------|
+| `ANTHROPIC_DEFAULT_OPUS_MODEL`   | Override default Opus model ID                   |
+| `ANTHROPIC_DEFAULT_SONNET_MODEL` | Override default Sonnet model ID                 |
+| `ANTHROPIC_DEFAULT_HAIKU_MODEL`  | Override default Haiku model ID                  |
+| `ANTHROPIC_SMALL_FAST_MODEL`     | Model for fast operations (topic detection, etc) |
+
+**Privacy/Telemetry:**
+
+| Variable                  | Effect                         |
+|---------------------------|--------------------------------|
+| `DISABLE_TELEMETRY`       | Disable Statsig telemetry      |
+| `DISABLE_ERROR_REPORTING` | Disable Sentry error reporting |
+| `DISABLE_COST_WARNINGS`   | Disable cost warnings          |
+
+**Other:**
+
+| Variable                       | Effect                             |
+|--------------------------------|------------------------------------|
+| `DISABLE_INTERLEAVED_THINKING` | Disable extended thinking entirely |
+| `DISABLE_AUTOUPDATER`          | Disable auto-updates               |
+
 ## Claude Code Version Sources
 
 Authoritative sources for checking Claude Code versions:
