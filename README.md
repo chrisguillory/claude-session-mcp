@@ -461,6 +461,16 @@ First response latency depends heavily on MCP configuration. With many MCPs:
 
 Observed: ~5 minutes first response with 108 tools loaded. Reduce MCPs for faster startup.
 
+## Extracting Environment Variables from Binary
+
+```bash
+strings $(which claude) | grep -oE 'process\.env\.[A-Z_0-9]+' | sort -u
+# process.env.ANTHROPIC_API_KEY
+# process.env.CLAUDE_CODE_BLOCKING_LIMIT_OVERRIDE
+# process.env.DISABLE_AUTOUPDATER
+# ... (~416 total in v2.1.14)
+```
+
 ## Claude Code Version Sources
 
 Authoritative sources for checking Claude Code versions:
