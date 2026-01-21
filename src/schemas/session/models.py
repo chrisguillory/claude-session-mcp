@@ -1739,7 +1739,7 @@ class WaitingForTaskData(StrictModel):
 
     type: Literal['waiting_for_task']
     taskDescription: str
-    taskType: Literal['local_bash']
+    taskType: Literal['local_bash', 'local_agent']
 
 
 class AgentProgressData(StrictModel):
