@@ -46,13 +46,21 @@ Create the file if it doesn't exist.
 ## Installation
 
 ```bash
-# Run without installation
+# Install globally (recommended)
+uv tool install git+https://github.com/chrisguillory/claude-session-mcp
+
+# Run without installing
 uvx --from git+https://github.com/chrisguillory/claude-session-mcp claude-session --help
 
-# Or install locally
+# From local clone
 git clone https://github.com/chrisguillory/claude-session-mcp
-cd claude-session-mcp
-uv sync
+cd claude-session-mcp && uv sync
+```
+
+### Upgrading
+
+```bash
+uv tool upgrade claude-session-mcp
 ```
 
 ## Quick Start
@@ -108,13 +116,13 @@ Claude Code session files (`~/.claude/projects/.../*.jsonl`) capture complete co
 
 Other projects working with Claude Code sessions:
 
-| Project | Purpose |
-|---------|---------|
-| [claude-code-transcripts](https://github.com/simonw/claude-code-transcripts) | Convert sessions to browseable HTML (Simon Willison) |
-| [claude-JSONL-browser](https://github.com/withLinda/claude-JSONL-browser) | Web-based session log viewer |
-| [claude-conversation-extractor](https://pypi.org/project/claude-conversation-extractor/) | Export conversations to Markdown |
-| [ccrider](https://github.com/neilberkman/ccrider) | Session analysis with [schema research](https://github.com/neilberkman/ccrider/blob/main/research/schema.md) |
-| [claude_code_session_client](https://github.com/randombet/claude_code_session_client) | Python client for session file parsing |
+| Project                                                                                  | Purpose                                                                                                      |
+|------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------|
+| [claude-code-transcripts](https://github.com/simonw/claude-code-transcripts)             | Convert sessions to browseable HTML (Simon Willison)                                                         |
+| [claude-JSONL-browser](https://github.com/withLinda/claude-JSONL-browser)                | Web-based session log viewer                                                                                 |
+| [claude-conversation-extractor](https://pypi.org/project/claude-conversation-extractor/) | Export conversations to Markdown                                                                             |
+| [ccrider](https://github.com/neilberkman/ccrider)                                        | Session analysis with [schema research](https://github.com/neilberkman/ccrider/blob/main/research/schema.md) |
+| [claude_code_session_client](https://github.com/randombet/claude_code_session_client)    | Python client for session file parsing                                                                       |
 
 *Know of another project? Open an issue or PR.*
 
@@ -269,11 +277,14 @@ claude-session lineage 019b53ff --format json
 Install the MCP server to use archive/restore directly from Claude Code:
 
 ```bash
-# From GitHub (recommended)
-claude mcp add --scope user claude-session -- uvx --refresh --from git+https://github.com/chrisguillory/claude-session-mcp mcp-server
+# If installed globally (see Installation)
+claude mcp add --scope user claude-session -- claude-session-mcp
+
+# From GitHub
+claude mcp add --scope user claude-session -- uvx --refresh --from git+https://github.com/chrisguillory/claude-session-mcp claude-session-mcp
 
 # From local clone
-claude mcp add --scope user claude-session -- uv run --project ~/claude-session-mcp mcp-server
+claude mcp add --scope user claude-session -- uv run --project ~/claude-session-mcp claude-session-mcp
 ```
 
 **Tools:**
@@ -436,10 +447,10 @@ Cache invalidates when: user edits/rewinds message, TTL expires, or content pref
 
 **API-only Features** (not in Claude Code):
 
-| Feature | Status | Notes |
-|---------|--------|-------|
-| Effort control | Beta API | Levels: high/medium/low. Medium = 76% fewer output tokens |
-| Batch API | Production | 50% discount, async (incompatible with interactive CLI) |
+| Feature        | Status     | Notes                                                     |
+|----------------|------------|-----------------------------------------------------------|
+| Effort control | Beta API   | Levels: high/medium/low. Medium = 76% fewer output tokens |
+| Batch API      | Production | 50% discount, async (incompatible with interactive CLI)   |
 
 **Session Startup Overhead**:
 
