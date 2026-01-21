@@ -473,20 +473,31 @@ strings $(which claude) | grep -oE 'process\.env\.[A-Z_0-9]+' | sort -u
 
 ### Verified Working (tested via mitmproxy 2.1.14)
 
-| Variable                              | Effect                           | Values                     |
-|---------------------------------------|----------------------------------|----------------------------|
-| `ANTHROPIC_MODEL`                     | Default model                    | `opus`, `sonnet`, `haiku`  |
-| `CLAUDE_CODE_SUBAGENT_MODEL`          | Model for Task tool subagents    | `opus`, `sonnet`, `haiku`  |
-| `CLAUDE_CODE_MAX_OUTPUT_TOKENS`       | Max tokens per response          | Default: 32000, Max: 64000 |
-| `MAX_THINKING_TOKENS`                 | Enables thinking + sets budget   | Min: 1024, Default: max    |
-| `CLAUDE_CODE_BLOCKING_LIMIT_OVERRIDE` | Bypass client-side context limit | e.g., `206000`             |
+| Variable                              | Effect                           | Min  | Default                       | Max   |
+|---------------------------------------|----------------------------------|------|-------------------------------|-------|
+| `ANTHROPIC_MODEL`                     | Default model                    | -    | `default`                     | -     |
+| `CLAUDE_CODE_SUBAGENT_MODEL`          | Model for Task subagents         | -    | -                             | -     |
+| `CLAUDE_CODE_MAX_OUTPUT_TOKENS`       | Max tokens per response          | 1*   | 32000                         | 64000 |
+| `MAX_THINKING_TOKENS`                 | Thinking budget                  | 1024 | 31999 (interactive), off (-p) | 63999 |
+| `CLAUDE_CODE_BLOCKING_LIMIT_OVERRIDE` | Bypass client-side context limit | -    | ~197000                       | -     |
 
-Set in `~/.claude/settings.json`:
+*No API minimum, but values <100 cause truncation errors.
+
+**Model values:**
+- `ANTHROPIC_MODEL`: Accepts aliases (`opus`, `sonnet`, `haiku`) or full IDs
+- `CLAUDE_CODE_SUBAGENT_MODEL`: Requires full model ID (e.g., `claude-opus-4-5-20251101`)
+
+**Thinking behavior:**
+- Interactive mode: thinking enabled by default at 31999 tokens
+- Print mode (`-p`): thinking disabled unless `MAX_THINKING_TOKENS` is set
+- Formula: `max_tokens = thinking_budget + 1` (model limit 64000)
+
+Set in `~/.claude/settings.json` (takes precedence over inline env vars):
 ```json
 {
   "env": {
     "ANTHROPIC_MODEL": "opus",
-    "CLAUDE_CODE_SUBAGENT_MODEL": "opus"
+    "CLAUDE_CODE_SUBAGENT_MODEL": "claude-opus-4-5-20251101"
   }
 }
 ```
