@@ -471,6 +471,26 @@ strings $(which claude) | grep -oE 'process\.env\.[A-Z_0-9]+' | sort -u
 # ... (~416 total in v2.1.14)
 ```
 
+### Verified Working (tested via mitmproxy 2.1.14)
+
+| Variable                              | Effect                           | Values                     |
+|---------------------------------------|----------------------------------|----------------------------|
+| `ANTHROPIC_MODEL`                     | Default model                    | `opus`, `sonnet`, `haiku`  |
+| `CLAUDE_CODE_SUBAGENT_MODEL`          | Model for Task tool subagents    | `opus`, `sonnet`, `haiku`  |
+| `CLAUDE_CODE_MAX_OUTPUT_TOKENS`       | Max tokens per response          | Default: 32000, Max: 64000 |
+| `MAX_THINKING_TOKENS`                 | Enables thinking + sets budget   | Min: 1024, Default: max    |
+| `CLAUDE_CODE_BLOCKING_LIMIT_OVERRIDE` | Bypass client-side context limit | e.g., `206000`             |
+
+Set in `~/.claude/settings.json`:
+```json
+{
+  "env": {
+    "ANTHROPIC_MODEL": "opus",
+    "CLAUDE_CODE_SUBAGENT_MODEL": "opus"
+  }
+}
+```
+
 ### Deprecated/Non-functional
 
 | Variable | Status | Notes |
