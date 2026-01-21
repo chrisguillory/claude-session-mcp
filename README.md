@@ -473,15 +473,17 @@ strings $(which claude) | grep -oE 'process\.env\.[A-Z_0-9]+' | sort -u
 
 ### Verified Working (tested via mitmproxy 2.1.14)
 
-| Variable                              | Effect                           | Min  | Default                       | Max   |
-|---------------------------------------|----------------------------------|------|-------------------------------|-------|
-| `ANTHROPIC_MODEL`                     | Default model                    | -    | `default`                     | -     |
-| `CLAUDE_CODE_SUBAGENT_MODEL`          | Model for Task subagents         | -    | -                             | -     |
-| `CLAUDE_CODE_MAX_OUTPUT_TOKENS`       | Max tokens per response          | 1*   | 32000                         | 64000 |
-| `MAX_THINKING_TOKENS`                 | Thinking budget                  | 1024 | 31999 (interactive), off (-p) | 63999 |
-| `CLAUDE_CODE_BLOCKING_LIMIT_OVERRIDE` | Bypass client-side context limit | -    | ~197000                       | -     |
+| Variable                               | Effect                           | Min  | Default                       | Max   |
+|----------------------------------------|----------------------------------|------|-------------------------------|-------|
+| `ANTHROPIC_MODEL`                      | Default model                    | -    | `default`                     | -     |
+| `CLAUDE_CODE_SUBAGENT_MODEL`           | Model for Task subagents         | -    | -                             | -     |
+| `CLAUDE_CODE_MAX_OUTPUT_TOKENS`        | Max tokens per response          | 1*   | 32000                         | 64000 |
+| `MAX_THINKING_TOKENS`                  | Thinking budget                  | 1024 | 31999 (interactive), off (-p) | 63999 |
+| `CLAUDE_CODE_BLOCKING_LIMIT_OVERRIDE`  | Bypass client-side context limit | -    | ~197000                       | -     |
+| `CLAUDE_CODE_MAX_TOOL_USE_CONCURRENCY` | Parallel tool execution limit†   | -    | 10                            | -     |
 
 *No API minimum, but values <100 cause truncation errors.
+†Undocumented; found in binary via `parseInt(process.env.CLAUDE_CODE_MAX_TOOL_USE_CONCURRENCY||"",10)||10`
 
 **Model values:**
 - `ANTHROPIC_MODEL`: Accepts aliases (`opus`, `sonnet`, `haiku`) or full IDs
