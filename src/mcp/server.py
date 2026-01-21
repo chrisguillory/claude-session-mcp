@@ -17,20 +17,22 @@ Example:
 from __future__ import annotations
 
 import contextlib
+import json
 import os
 import pathlib
 import subprocess
-import sys
 import tempfile
-import uuid
+import time
 from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any, Literal
 
 import attrs
+import pydantic
 from mcp.server.fastmcp import Context, FastMCP
 
 from src.mcp.utils import DualLogger
+from src.schemas.claude_workspace import SessionDatabase
 from src.schemas.operations.archive import ArchiveMetadata
 from src.schemas.operations.context import SessionContext
 from src.schemas.operations.delete import DeleteResult
@@ -92,9 +94,8 @@ async def lifespan(mcp_server: FastMCP) -> AsyncIterator[None]:
     claude_context = _find_claude_context()
     project_path = claude_context.project_dir
 
-    # Discover session ID via marker search
-    session_marker = f'SESSION_MARKER_{uuid.uuid4()}'
-    session_id = _discover_session_id(session_marker)
+    # Discover session ID from claude-workspace sessions.json
+    session_id = _discover_session_id(claude_context.claude_pid)
 
     # Create temp directory (cleaned up on exit)
     temp_dir = tempfile.TemporaryDirectory(prefix='claude-session-')
@@ -735,66 +736,59 @@ def _find_claude_context() -> ClaudeContext:
     raise RuntimeError('Could not find Claude process in parent tree')
 
 
-def _discover_session_id(session_marker: str) -> str:
+def _discover_session_id(claude_pid: int) -> str:
     """
-    Discover Claude Code session ID via self-referential marker search.
+    Discover Claude Code session ID from claude-workspace sessions.json.
 
-    Workaround for lack of official session discovery API. Writes a unique marker
-    to stdout, then searches Claude's debug logs for it to find the session ID.
+    Looks up the active session matching the given Claude PID in the sessions
+    database maintained by claude-workspace hooks.
 
     Args:
-        session_marker: Unique marker string to search for
+        claude_pid: PID of the Claude process (from _find_claude_context)
 
     Returns:
         Session ID (UUID string)
 
     Raises:
-        RuntimeError: If debug directory doesn't exist or session ID cannot be found
+        RuntimeError: If sessions.json doesn't exist, no matching session found,
+                      or multiple active sessions match the PID
     """
-    import time
+    sessions_file = pathlib.Path.home() / '.claude-workspace' / 'sessions.json'
 
-    # Emit marker (will appear in Claude's debug logs)
-    print(session_marker, file=sys.stderr, flush=True)
-
-    # Search debug logs for the marker (with retry for timing)
-    debug_dir = pathlib.Path.home() / '.claude' / 'debug'
-    if not debug_dir.exists():
-        raise RuntimeError(f'Claude debug log directory not found: {debug_dir}')
-
-    # Retry loop - Claude Code may not have flushed the marker to disk yet
+    # Retry loop - SessionStart hook may not have finished writing yet
     max_retries = 10
     retry_delay = 0.1  # 100ms between retries
 
     for attempt in range(max_retries):
-        result = subprocess.run(
-            [
-                'rg',
-                '-l',
-                '--fixed-strings',
-                '--glob',
-                '!latest',
-                session_marker,
-                debug_dir.as_posix(),
-            ],
-            capture_output=True,
-            text=True,
-        )
+        if not sessions_file.exists():
+            time.sleep(retry_delay)
+            continue
 
-        if result.stdout.strip():
-            break  # Found it
+        with sessions_file.open() as f:
+            data = json.load(f)
 
+        adapter = pydantic.TypeAdapter(SessionDatabase)
+        db = adapter.validate_python(data)
+
+        # Find active sessions matching our Claude PID
+        matching = [s for s in db.sessions if s.state == 'active' and s.metadata.claude_pid == claude_pid]
+
+        if len(matching) == 1:
+            return matching[0].session_id
+
+        if len(matching) > 1:
+            # Multiple active sessions with same PID - shouldn't happen
+            session_ids = [s.session_id for s in matching]
+            raise RuntimeError(f'Multiple active sessions found for Claude PID {claude_pid}: {session_ids}')
+
+        # No match yet - hook may still be writing
         time.sleep(retry_delay)
-    else:
-        raise RuntimeError(
-            f'Could not find session marker in any debug log files in {debug_dir} after {max_retries} attempts'
-        )
 
-    # rg found the marker - extract session ID from first matching file
-    # Format: ~/.claude/debug/{session_id}.log
-    log_file = pathlib.Path(result.stdout.strip().split('\n')[0])
-    session_id = log_file.stem
-
-    return session_id
+    # All retries exhausted
+    raise RuntimeError(
+        f'Could not find active session for Claude PID {claude_pid} in {sessions_file} '
+        f'after {max_retries} attempts. Ensure claude-workspace SessionStart hook is configured.'
+    )
 
 
 def _get_github_token() -> str | None:
