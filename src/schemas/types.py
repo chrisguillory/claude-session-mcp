@@ -11,48 +11,11 @@ Layering:
 
 from __future__ import annotations
 
-import os
 from collections.abc import Sequence
 from datetime import datetime
 from typing import Annotated, Any, Literal
 
 import pydantic
-
-# ==============================================================================
-# Permissive Mode Configuration
-# ==============================================================================
-
-
-def get_extra_mode() -> Literal['allow', 'forbid']:
-    """
-    Get the Pydantic 'extra' field handling mode based on environment.
-
-    Returns 'allow' if CLAUDE_SESSION_PERMISSIVE=true, otherwise 'forbid'.
-
-    Permissive Mode:
-        When enabled, Pydantic models accept unknown fields without validation
-        errors. Unknown fields are stored in __pydantic_extra__ and preserved
-        during serialization (model_dump includes them).
-
-        This is useful for archive/restore operations where we want to capture
-        session data verbatim, even if Claude Code has introduced new fields
-        that our models don't yet define.
-
-    Usage:
-        Set the environment variable before the command:
-
-            CLAUDE_SESSION_PERMISSIVE=true claude-session archive ...
-
-    Trade-offs:
-        - Permissive mode sacrifices early schema change detection for resilience
-        - Strict mode (default) fails fast on unknown fields, acting as a canary
-          for Claude Code schema changes
-        - Use validate_models.py for offline schema validation regardless of mode
-    """
-    if os.environ.get('CLAUDE_SESSION_PERMISSIVE', '').lower() == 'true':
-        return 'allow'
-    return 'forbid'
-
 
 # ==============================================================================
 # Base Strict Model (Foundation)
@@ -63,12 +26,8 @@ class BaseStrictModel(pydantic.BaseModel):
     """
     Foundation strict model - domain packages inherit from this.
 
-    By default, uses extra='forbid' to reject unknown fields - any field not
-    modeled causes immediate validation failure (fail-fast).
-
-    In permissive mode (CLAUDE_SESSION_PERMISSIVE=true), uses extra='allow'
-    to accept unknown fields for resilient archive/restore operations.
-    See get_extra_mode() for details.
+    Uses extra='forbid' to reject unknown fields - any field not modeled
+    causes immediate validation failure (fail-fast).
 
     Domain packages (session/, cc_internal_api/) should define their own
     StrictModel that inherits from this, enabling domain-specific customization
@@ -76,7 +35,7 @@ class BaseStrictModel(pydantic.BaseModel):
     """
 
     model_config = pydantic.ConfigDict(
-        extra=get_extra_mode(),
+        extra='forbid',  # Reject unknown fields (fail-fast)
         strict=True,  # Strict type coercion
         frozen=True,  # Immutable after creation
     )
