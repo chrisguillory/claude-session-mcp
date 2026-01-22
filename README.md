@@ -506,10 +506,10 @@ Set in `~/.claude/settings.json` (takes precedence over inline env vars):
 
 ### Deprecated/Non-functional
 
-| Variable | Status | Notes |
-|----------|--------|-------|
-| `CLAUDE_CODE_EFFORT_LEVEL` | No effect | Present in binary but does not modify API requests (tested 2.1.14) |
-| `ultrathink` | Deprecated | "Ultrathink no longer does anything. Thinking budget is now max by default." |
+| Variable                   | Status     | Notes                                                                        |
+|----------------------------|------------|------------------------------------------------------------------------------|
+| `CLAUDE_CODE_EFFORT_LEVEL` | No effect  | Present in binary but does not modify API requests (tested 2.1.14)           |
+| `ultrathink`               | Deprecated | "Ultrathink no longer does anything. Thinking budget is now max by default." |
 
 ### Additional Useful Variables (from Perplexity research)
 
