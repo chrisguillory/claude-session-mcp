@@ -487,7 +487,7 @@ strings $(which claude) | grep -oE 'process\.env\.[A-Z_0-9]+' | sort -u
 
 **Model values:**
 - `ANTHROPIC_MODEL`: Accepts aliases (`opus`, `sonnet`, `haiku`) or full IDs
-- `CLAUDE_CODE_SUBAGENT_MODEL`: Requires full model ID (e.g., `claude-opus-4-5-20251101`)
+- `CLAUDE_CODE_SUBAGENT_MODEL`: Requires full model ID (e.g., `claude-opus-4-5-20251101`). Overrides default model for all subagents including Explore (normally Haiku) - verified via mitmproxy.
 
 **Thinking behavior:**
 - Interactive mode: thinking enabled by default at 31999 tokens
