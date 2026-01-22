@@ -21,6 +21,7 @@ CLAUDE CODE VERSION COMPATIBILITY:
 - Schema v0.2.0: Added sourceToolAssistantUUID to UserRecord, TurnDurationSystemRecord for Claude Code 2.1.1+
 - Schema v0.2.4: Added ProgressRecord (hook/mcp/bash/task progress), MicrocompactBoundarySystemRecord,
                  allowedPrompts to ExitPlanModeToolInput, fixed MCPSearchToolInput max_results type (2.1.9+)
+- Schema v0.2.5: Added permissionMode to UserRecord, apiError to AssistantRecord (2.1.15+)
 - If validation fails, Claude Code schema may have changed - update models accordingly
 
 NEW FIELDS IN CLAUDE CODE 2.0.51+ (Schema v0.1.3):
@@ -90,11 +91,11 @@ from src.schemas.types import BaseStrictModel, EmptySequence, ModelId, Permissiv
 # Schema Version
 # ==============================================================================
 
-SCHEMA_VERSION = '0.2.4'
+SCHEMA_VERSION = '0.2.5'
 CLAUDE_CODE_MIN_VERSION = '2.0.35'
-CLAUDE_CODE_MAX_VERSION = '2.1.9'
-LAST_VALIDATED = '2026-01-16'
-VALIDATION_RECORD_COUNT = 423_332
+CLAUDE_CODE_MAX_VERSION = '2.1.15'
+LAST_VALIDATED = '2026-01-22'
+VALIDATION_RECORD_COUNT = 438_058
 
 
 # ==============================================================================
@@ -1425,6 +1426,9 @@ class UserRecord(BaseRecord):
         None,
         description='UUID of the assistant message that created the tool use this record responds to',
     )
+    permissionMode: Literal['default', 'acceptEdits', 'plan'] | None = pydantic.Field(
+        None, description='Permission mode for the request (Claude Code 2.1.15+)'
+    )
 
 
 # ==============================================================================
@@ -1461,6 +1465,9 @@ class AssistantRecord(BaseRecord):
     version: str | None = pydantic.Field(None, description='Claude Code version (present in agent records)')
     gitBranch: str | None = pydantic.Field(None, description='Git branch (present in agent records)')
     isApiErrorMessage: bool | None = pydantic.Field(None, description='Indicates this message represents an API error')
+    apiError: Literal['max_output_tokens'] | None = pydantic.Field(
+        None, description='API error code (Claude Code 2.1.15+)'
+    )
     error: Literal['rate_limit', 'unknown', 'invalid_request', 'authentication_failed'] | None = pydantic.Field(
         None, description='Error type for API error messages'
     )
