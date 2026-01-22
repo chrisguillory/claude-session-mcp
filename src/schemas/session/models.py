@@ -22,6 +22,7 @@ CLAUDE CODE VERSION COMPATIBILITY:
 - Schema v0.2.4: Added ProgressRecord (hook/mcp/bash/task progress), MicrocompactBoundarySystemRecord,
                  allowedPrompts to ExitPlanModeToolInput, fixed MCPSearchToolInput max_results type (2.1.9+)
 - Schema v0.2.5: Added permissionMode to UserRecord, apiError to AssistantRecord (2.1.15+)
+- Schema v0.2.6: Added StopHookSummarySystemRecord, resume field to AgentProgressData (2.1.14+)
 - If validation fails, Claude Code schema may have changed - update models accordingly
 
 NEW FIELDS IN CLAUDE CODE 2.0.51+ (Schema v0.1.3):
@@ -91,7 +92,7 @@ from src.schemas.types import BaseStrictModel, EmptySequence, ModelId, Permissiv
 # Schema Version
 # ==============================================================================
 
-SCHEMA_VERSION = '0.2.5'
+SCHEMA_VERSION = '0.2.6'
 CLAUDE_CODE_MIN_VERSION = '2.0.35'
 CLAUDE_CODE_MAX_VERSION = '2.1.15'
 LAST_VALIDATED = '2026-01-22'
@@ -1426,7 +1427,7 @@ class UserRecord(BaseRecord):
         None,
         description='UUID of the assistant message that created the tool use this record responds to',
     )
-    permissionMode: Literal['default', 'acceptEdits', 'plan'] | None = pydantic.Field(
+    permissionMode: Literal['default', 'acceptEdits', 'plan', 'bypassPermissions'] | None = pydantic.Field(
         None, description='Permission mode for the request (Claude Code 2.1.15+)'
     )
 
@@ -1615,6 +1616,34 @@ class TurnDurationSystemRecord(BaseRecord):
     slug: str | None = None
 
 
+class HookInfo(StrictModel):
+    """Information about a hook execution."""
+
+    command: str
+
+
+class StopHookSummarySystemRecord(BaseRecord):
+    """System record for stop hook summary (subtype=stop_hook_summary, Claude Code 2.1.14+)."""
+
+    type: Literal['system']
+    cwd: PathField
+    parentUuid: str | None
+    subtype: Literal['stop_hook_summary']
+    hookCount: int
+    hookInfos: Sequence[HookInfo]
+    hookErrors: Sequence[str]  # Empty sequence observed so far
+    preventedContinuation: bool
+    stopReason: str  # Can be empty string
+    hasOutput: bool
+    level: Literal['info', 'error', 'warning', 'suggestion'] | None = None
+    isSidechain: bool | None = None
+    userType: str | None = None
+    version: str | None = None
+    gitBranch: str | None = None
+    toolUseID: str | None = None  # Tool use ID if triggered by tool
+    slug: str | None = None  # Human-readable session slug
+
+
 # Union of system subtype records
 SystemSubtypeRecord = Annotated[
     LocalCommandSystemRecord
@@ -1622,7 +1651,8 @@ SystemSubtypeRecord = Annotated[
     | MicrocompactBoundarySystemRecord
     | ApiErrorSystemRecord
     | InformationalSystemRecord
-    | TurnDurationSystemRecord,
+    | TurnDurationSystemRecord
+    | StopHookSummarySystemRecord,
     pydantic.Field(discriminator='subtype'),
 ]
 
@@ -1749,6 +1779,21 @@ class WaitingForTaskData(StrictModel):
     taskType: Literal['local_bash', 'local_agent']
 
 
+class SearchResultsReceivedData(StrictModel):
+    """Progress data for web search results received (Claude Code 2.1.9+)."""
+
+    type: Literal['search_results_received']
+    resultCount: int
+    query: str
+
+
+class QueryUpdateData(StrictModel):
+    """Progress data for search query update (Claude Code 2.1.9+)."""
+
+    type: Literal['query_update']
+    query: str
+
+
 class AgentProgressData(StrictModel):
     """Progress data for agent/subagent execution."""
 
@@ -1759,6 +1804,7 @@ class AgentProgressData(StrictModel):
     message: Mapping[str, Any]  # check_schema_typing.py: loose-typing
     # TODO: Remove "loose" typing below
     normalizedMessages: Sequence[Mapping[str, Any]]  # check_schema_typing.py: loose-typing
+    resume: str | None = None  # Agent resume ID (Claude Code 2.1.15+)
 
 
 # Discriminated union of progress data types
@@ -1770,7 +1816,9 @@ ProgressData = Annotated[
     | McpProgressFailedData
     | McpProgressStartedData
     | BashProgressData
-    | WaitingForTaskData,
+    | WaitingForTaskData
+    | SearchResultsReceivedData  # Web search progress (Claude Code 2.1.9+)
+    | QueryUpdateData,  # Search query update (fewest fields - must be last)
     pydantic.Field(union_mode='left_to_right'),
 ]
 
@@ -1812,6 +1860,7 @@ SessionRecord = Annotated[
     | ApiErrorSystemRecord  # Must be before SystemRecord!
     | InformationalSystemRecord  # Must be before SystemRecord!
     | TurnDurationSystemRecord  # Must be before SystemRecord!
+    | StopHookSummarySystemRecord  # Must be before SystemRecord!
     | SystemRecord
     | FileHistorySnapshotRecord
     | QueueOperationRecord
