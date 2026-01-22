@@ -565,11 +565,21 @@ def _parse_body(content: bytes | None, content_type: str) -> dict[str, Any]:
 
     # SSE streaming
     if 'text/event-stream' in ct:
-        return {
+        events = _parse_sse_events(content)
+        result: dict[str, Any] = {
             'type': 'sse',
-            'events': _parse_sse_events(content),
+            'events': events,
             'size': size,
         }
+        # Concatenate text_delta events for readability
+        text_deltas = [
+            e.get('parsed_data', {}).get('delta', {}).get('text', '')
+            for e in events
+            if e.get('parsed_data', {}).get('delta', {}).get('type') == 'text_delta'
+        ]
+        if text_deltas:
+            result['concatenated_text'] = ''.join(text_deltas)
+        return result
 
     # JSON
     if 'application/json' in ct:
