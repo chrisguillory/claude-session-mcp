@@ -8,7 +8,6 @@ Archive and restore Claude Code sessions across machines with full conversation 
 
 ```json
 {
-  "cleanupPeriodDays": 99999
 }
 ```
 
@@ -509,6 +508,7 @@ Set in `~/.claude/settings.json` (takes precedence over inline env vars):
 | Variable                   | Status     | Notes                                                                        |
 |----------------------------|------------|------------------------------------------------------------------------------|
 | `CLAUDE_CODE_EFFORT_LEVEL` | No effect  | Present in binary but does not modify API requests (tested 2.1.14)           |
+| `ENABLE_COMMIT_ATTRIBUTION`| No effect  | Does not disable Co-Authored-By line; use `attribution` setting instead     |
 | `ultrathink`               | Deprecated | "Ultrathink no longer does anything. Thinking budget is now max by default." |
 
 ### Additional Useful Variables (from Perplexity research)
