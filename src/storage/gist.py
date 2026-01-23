@@ -2,10 +2,15 @@
 GitHub Gist storage backend for session archives.
 
 Provides async storage backend that saves/loads archives to/from GitHub Gists.
+
+Binary files (like zstd-compressed archives) are automatically base64-encoded
+on save and decoded on load. The encoded files have a `.b64` suffix.
 """
 
 from __future__ import annotations
 
+import base64
+import binascii
 from typing import Literal
 
 import httpx
@@ -76,15 +81,13 @@ class GistStorage:
                 f'Consider splitting the archive or using local storage.'
             )
 
-        # Decode to text (Gists are text-based)
+        # Gists are text-based. Try UTF-8 first, fall back to base64 for binary.
         try:
             content = data.decode('utf-8')
         except UnicodeDecodeError:
-            raise ValueError(
-                'Binary files not supported by GitHub Gists. '
-                'Gists only support UTF-8 text files. '
-                'Use JSON format instead of compressed (.zst).'
-            )
+            # Binary data (e.g., zstd compressed) - encode as base64
+            content = base64.b64encode(data).decode('ascii')
+            filename = filename + '.b64'
 
         # Create or update gist
         if self.gist_id:
@@ -161,7 +164,9 @@ class GistStorage:
 
                 response.raise_for_status()
                 gist_data = response.json()
-                return filename in gist_data.get('files', {})
+                files = gist_data.get('files', {})
+                # Check both the exact filename and the .b64 variant (binary files get .b64 suffix on save)
+                return filename in files or (filename + '.b64') in files
         except httpx.HTTPError:
             return False
 
@@ -214,4 +219,10 @@ class GistStorage:
             else:
                 content = file_data['content']
 
+            # Decode base64 if the file was binary-encoded on save
+            if filename.endswith('.b64'):
+                try:
+                    return base64.b64decode(content)
+                except binascii.Error as e:
+                    raise ValueError(f"Failed to decode base64 content from '{filename}': {e}") from e
             return content.encode('utf-8')

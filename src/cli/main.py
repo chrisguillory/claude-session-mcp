@@ -143,16 +143,6 @@ async def _archive_async(
                 typer.echo('  4. Copy the token')
                 raise typer.Exit(1)
 
-            # Warn about compression with Gists
-            if format == 'zst':
-                typer.secho(
-                    'Warning: Compressed format (.zst) not recommended for Gists.',
-                    fg=typer.colors.YELLOW,
-                )
-                typer.echo('Gists only support UTF-8 text. Binary data will be rejected.')
-                typer.echo('Consider using --format json instead.')
-                typer.echo()
-
         # Use the resolved full session ID (supports prefix matching)
         resolved_session_id = session_info.session_id
 
@@ -169,9 +159,10 @@ async def _archive_async(
             # Create storage backend
             storage: GistStorage | LocalFileSystemStorage
             if use_gist:
-                # Generate filename for Gist
+                # Generate filename for Gist with correct extension
                 timestamp = datetime.now(UTC).strftime('%Y%m%d_%H%M%S')
-                filename = f'session-{resolved_session_id[:8]}-{timestamp}.json'
+                ext = '.json.zst' if format == 'zst' else '.json'
+                filename = f'session-{resolved_session_id[:8]}-{timestamp}{ext}'
 
                 if token is None:
                     raise typer.BadParameter('GitHub token required for Gist storage')
@@ -275,11 +266,13 @@ async def _restore_async(
                 response.raise_for_status()
                 gist_data = response.json()
 
-                # Find archive file
+                # Find archive file (including base64-encoded variants)
                 files = gist_data['files']
                 archive_file = None
                 for filename in files:
-                    if filename.endswith('.json') or filename.endswith('.json.zst'):
+                    # Strip .b64 suffix for format detection
+                    base_name = filename[:-4] if filename.endswith('.b64') else filename
+                    if base_name.endswith('.json') or base_name.endswith('.json.zst'):
                         archive_file = filename
                         break
 
@@ -292,7 +285,9 @@ async def _restore_async(
             await logger.info(f'Downloading {archive_file}...')
             data = await storage.load(archive_file)
 
-            with tempfile.NamedTemporaryFile(suffix=f'-{archive_file}', delete=False) as temp_file:
+            # Use logical filename (without .b64) so restore service detects format correctly
+            logical_filename = archive_file[:-4] if archive_file.endswith('.b64') else archive_file
+            with tempfile.NamedTemporaryFile(suffix=f'-{logical_filename}', delete=False) as temp_file:
                 temp_file.write(data)
                 archive_path = Path(temp_file.name)
 

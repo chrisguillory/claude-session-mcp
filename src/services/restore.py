@@ -7,6 +7,8 @@ path translation for cross-machine restoration.
 
 from __future__ import annotations
 
+import base64
+import binascii
 import json
 import uuid
 from collections.abc import Mapping, Sequence
@@ -203,11 +205,13 @@ class SessionRestoreService:
             if in_place:
                 await logger.info('In-place mode: restoring to original paths with original IDs')
 
-        # Detect format and load
-        if archive_path.endswith('.zst'):
-            archive = await self._load_zst_archive(archive_file, logger)
+        # Detect format and load (strip .b64 suffix for format detection)
+        logical_path = archive_path[:-4] if archive_path.endswith('.b64') else archive_path
+        is_base64 = archive_path.endswith('.b64')
+        if logical_path.endswith('.zst'):
+            archive = await self._load_zst_archive(archive_file, is_base64, logger)
         else:
-            archive = await self._load_json_archive(archive_file, logger)
+            archive = await self._load_json_archive(archive_file, is_base64, logger)
 
         # Path translation is independent of in_place mode - paths should be
         # translated if they differ, regardless of whether IDs are preserved
@@ -439,10 +443,20 @@ class SessionRestoreService:
             agent_files=agent_files,
         )
 
-    async def _load_json_archive(self, archive_file: Path, logger: LoggerProtocol | None) -> SessionArchive:
-        """Load archive from JSON file."""
-        with open(archive_file, encoding='utf-8') as f:
-            data = json.load(f)
+    async def _load_json_archive(
+        self, archive_file: Path, is_base64: bool, logger: LoggerProtocol | None
+    ) -> SessionArchive:
+        """Load archive from JSON file (optionally base64-encoded)."""
+        if is_base64:
+            with open(archive_file, encoding='utf-8') as f:
+                try:
+                    content = base64.b64decode(f.read())
+                except binascii.Error as e:
+                    raise ValueError(f"Failed to decode base64 content from '{archive_file}': {e}") from e
+            data = json.loads(content)
+        else:
+            with open(archive_file, encoding='utf-8') as f:
+                data = json.load(f)
 
         # Convert records from dicts to SessionRecord objects
         for filename, records in data['files'].items():
@@ -450,11 +464,22 @@ class SessionRestoreService:
 
         return SessionArchive(**data)
 
-    async def _load_zst_archive(self, archive_file: Path, logger: LoggerProtocol | None) -> SessionArchive:
-        """Load archive from Zstandard compressed file."""
-        dctx = zstandard.ZstdDecompressor()
+    async def _load_zst_archive(
+        self, archive_file: Path, is_base64: bool, logger: LoggerProtocol | None
+    ) -> SessionArchive:
+        """Load archive from Zstandard compressed file (optionally base64-encoded)."""
         with open(archive_file, 'rb') as f:
-            decompressed = dctx.decompress(f.read())
+            content = f.read()
+
+        # Decode base64 if the file was downloaded from a Gist
+        if is_base64:
+            try:
+                content = base64.b64decode(content)
+            except binascii.Error as e:
+                raise ValueError(f"Failed to decode base64 content from '{archive_file}': {e}") from e
+
+        dctx = zstandard.ZstdDecompressor()
+        decompressed = dctx.decompress(content)
 
         data = json.loads(decompressed)
 

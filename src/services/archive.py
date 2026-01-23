@@ -249,9 +249,10 @@ class SessionArchiveService:
 
             await log.info(f'Output path: {output_file}')
         else:
-            # Use temp directory (default)
+            # Use temp directory (default) with correct extension for format
             timestamp = datetime.now(UTC).strftime('%Y%m%d_%H%M%S')
-            filename = f'session-{self.session_id[:8]}-{timestamp}.json'
+            ext = '.json.zst' if format_param == 'zst' else '.json'
+            filename = f'session-{self.session_id[:8]}-{timestamp}{ext}'
             output_file = self.temp_dir / filename
             await log.info(f'Using temp file: {output_file}')
 

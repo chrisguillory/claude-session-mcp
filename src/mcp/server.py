@@ -629,11 +629,11 @@ def register_tools(state: ServerState) -> None:
             claude_pid=archive_claude_pid,  # Target session's PID (not current session's PID)
         )
 
-        # Create archive (force JSON format - zst not supported by Gist)
+        # Create archive (zst for better compression - auto base64-encoded for Gist)
         metadata = await archive_service.create_archive(
             storage=storage,
             output_path=None,  # Let storage generate path
-            format_param='json',  # Always JSON for Gist
+            format_param='zst',  # Zstd compression (6x smaller than JSON)
             logger=logger,
         )
 
@@ -648,7 +648,7 @@ def register_tools(state: ServerState) -> None:
             gist_url=metadata.file_path,  # GistStorage returns html_url as file_path
             gist_id=final_gist_id,
             session_id=target_id,
-            format='json',
+            format=metadata.format,
             size_mb=metadata.size_mb,
             session_records=metadata.session_records,
             agent_records=metadata.agent_records,
