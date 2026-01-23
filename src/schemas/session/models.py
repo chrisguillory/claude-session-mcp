@@ -22,7 +22,8 @@ CLAUDE CODE VERSION COMPATIBILITY:
 - Schema v0.2.4: Added ProgressRecord (hook/mcp/bash/task progress), MicrocompactBoundarySystemRecord,
                  allowedPrompts to ExitPlanModeToolInput, fixed MCPSearchToolInput max_results type (2.1.9+)
 - Schema v0.2.5: Added permissionMode to UserRecord, apiError to AssistantRecord (2.1.15+)
-- Schema v0.2.6: Added StopHookSummarySystemRecord, resume field to AgentProgressData (2.1.14+)
+- Schema v0.2.6: Added StopHookSummarySystemRecord, resume field to AgentProgressData (2.1.14+),
+                 TaskCreate/TaskUpdate/TaskList tool inputs and results (2.1.17+)
 - If validation fails, Claude Code schema may have changed - update models accordingly
 
 NEW FIELDS IN CLAUDE CODE 2.0.51+ (Schema v0.1.3):
@@ -94,9 +95,9 @@ from src.schemas.types import BaseStrictModel, EmptySequence, ModelId, Permissiv
 
 SCHEMA_VERSION = '0.2.6'
 CLAUDE_CODE_MIN_VERSION = '2.0.35'
-CLAUDE_CODE_MAX_VERSION = '2.1.15'
+CLAUDE_CODE_MAX_VERSION = '2.1.17'
 LAST_VALIDATED = '2026-01-22'
-VALIDATION_RECORD_COUNT = 438_058
+VALIDATION_RECORD_COUNT = 438_995
 
 
 # ==============================================================================
@@ -392,6 +393,57 @@ class TaskToolInput(StrictModel):
 
 
 # ==============================================================================
+# TaskCreate Tool Input (Claude Code 2.1.17+)
+# ==============================================================================
+
+
+class TaskCreateToolInput(StrictModel):
+    """Input for TaskCreate tool - creates a new task in the task list.
+
+    Fields:
+        subject: Brief title for the task (imperative form, e.g., "Run tests")
+        description: Detailed description of what needs to be done
+        activeForm: Present continuous form shown in spinner (e.g., "Running tests")
+    """
+
+    subject: str
+    description: str
+    activeForm: str
+
+
+# ==============================================================================
+# TaskUpdate Tool Input (Claude Code 2.1.17+)
+# ==============================================================================
+
+
+class TaskUpdateToolInput(StrictModel):
+    """Input for TaskUpdate tool - updates an existing task.
+
+    Fields:
+        taskId: ID of the task to update (required)
+        status: New status (pending, in_progress, completed)
+        owner: Agent/worker name to assign the task to
+        addBlockedBy: Task IDs that block this task
+    """
+
+    taskId: str
+    status: Literal['pending', 'in_progress', 'completed'] | None = None
+    owner: str | None = None
+    addBlockedBy: Sequence[str] | None = None
+
+
+# ==============================================================================
+# TaskList Tool Input (Claude Code 2.1.17+)
+# ==============================================================================
+
+
+class TaskListToolInput(StrictModel):
+    """Input for TaskList tool - lists all tasks (no parameters)."""
+
+    pass
+
+
+# ==============================================================================
 # TodoWrite Tool Input (3,186x occurrences)
 # ==============================================================================
 
@@ -625,6 +677,7 @@ ToolInput = Annotated[
     | ReadToolInput  # file_path required
     # Multi-field tools
     | TaskToolInput  # prompt, description, subagent_type required
+    | TaskCreateToolInput  # subject, description required (2.1.17+)
     | BashToolInput  # command required (description optional since some old records lack it)
     | GrepToolInput  # pattern required, has custom model_config
     | GlobToolInput  # pattern required
@@ -637,12 +690,14 @@ ToolInput = Annotated[
     # Single-field tools
     | AgentOutputToolInput  # agentId required
     | TaskOutputToolInput  # task_id required
+    | TaskUpdateToolInput  # taskId required (2.1.17+)
     | BashOutputToolInput  # bash_id required
     | KillShellToolInput  # shell_id required
     | SkillToolInput  # skill required
     # Optional-only fields (must be near end)
     | ExitPlanModeToolInput  # plan optional, launchSwarm optional
     | ListMcpResourcesToolInput  # server optional
+    | TaskListToolInput  # No fields (2.1.17+)
     | EnterPlanModeToolInput  # No fields - must be last before fallback!
     | MCPToolInput,  # Fallback for MCP tools (PermissiveModel for observability)
     pydantic.Field(union_mode='left_to_right'),
@@ -1097,6 +1152,40 @@ class TaskToolResult(StrictModel):
 
 
 # ==============================================================================
+# TaskCreate/TaskUpdate/TaskList Result Structures (Claude Code 2.1.17+)
+# ==============================================================================
+
+
+class TaskListItem(StrictModel):
+    """A task item in TaskList results."""
+
+    id: str
+    subject: str
+    status: Literal['pending', 'in_progress', 'completed']
+    blockedBy: Sequence[str]
+    owner: str | None = None  # Only present when task is assigned
+
+
+class TaskListToolResult(StrictModel):
+    """Result from TaskList tool - list of all tasks."""
+
+    tasks: Sequence[TaskListItem]
+
+
+class TaskSingleItem(StrictModel):
+    """A task item in TaskCreate/TaskUpdate results (minimal fields)."""
+
+    id: str
+    subject: str
+
+
+class TaskSingleToolResult(StrictModel):
+    """Result from TaskCreate/TaskUpdate - single task confirmation."""
+
+    task: TaskSingleItem
+
+
+# ==============================================================================
 # AskUserQuestion Structures
 # ==============================================================================
 
@@ -1348,6 +1437,8 @@ ToolResult = Annotated[
     | TaskOutputPollingResult  # Polling async task
     | AsyncTaskLaunchResult  # Launched async task
     | AgentsRetrievalResult  # Multi-agent polling
+    | TaskListToolResult  # TaskList result (2.1.17+)
+    | TaskSingleToolResult  # TaskCreate/TaskUpdate result (2.1.17+)
     | AskUserQuestionToolResult
     | WebSearchNestedResult  # Nested structure variant (more specific - has tool_use_id in results)
     | WebSearchToolResult  # Simple structure
