@@ -24,6 +24,7 @@ CLAUDE CODE VERSION COMPATIBILITY:
 - Schema v0.2.5: Added permissionMode to UserRecord, apiError to AssistantRecord (2.1.15+)
 - Schema v0.2.6: Added StopHookSummarySystemRecord, resume field to AgentProgressData (2.1.14+),
                  TaskCreate/TaskUpdate/TaskList tool inputs and results (2.1.17+)
+- Schema v0.2.7: Added SimpleThinkingMetadata, McpMeta, MCPStructuredContent, Task tool mode field (2.1.19+)
 - If validation fails, Claude Code schema may have changed - update models accordingly
 
 NEW FIELDS IN CLAUDE CODE 2.0.51+ (Schema v0.1.3):
@@ -87,17 +88,17 @@ from typing import Annotated, Any, Literal
 import pydantic
 
 from src.schemas.session.markers import PathField, PathListField
-from src.schemas.types import BaseStrictModel, EmptySequence, ModelId, PermissiveModel
+from src.schemas.types import BaseStrictModel, EmptyDict, EmptySequence, ModelId, PermissiveModel
 
 # ==============================================================================
 # Schema Version
 # ==============================================================================
 
-SCHEMA_VERSION = '0.2.6'
+SCHEMA_VERSION = '0.2.7'
 CLAUDE_CODE_MIN_VERSION = '2.0.35'
-CLAUDE_CODE_MAX_VERSION = '2.1.17'
-LAST_VALIDATED = '2026-01-22'
-VALIDATION_RECORD_COUNT = 438_995
+CLAUDE_CODE_MAX_VERSION = '2.1.19'
+LAST_VALIDATED = '2026-01-24'
+VALIDATION_RECORD_COUNT = 221_695
 
 
 # ==============================================================================
@@ -382,6 +383,7 @@ class TaskToolInput(StrictModel):
         run_in_background: Run asynchronously, check with TaskOutput
         model: Override model (e.g., "haiku", "sonnet")
         resume: Agent ID to resume from previous execution
+        mode: Permission mode for the agent (Claude Code 2.1.19+)
     """
 
     prompt: str
@@ -390,6 +392,7 @@ class TaskToolInput(StrictModel):
     run_in_background: bool | None = None
     model: str | None = None
     resume: str | None = None
+    mode: Literal['default', 'bypassPermissions'] | None = None  # Permission mode (2.1.19+)
 
 
 # ==============================================================================
@@ -931,11 +934,26 @@ class ThinkingTrigger(StrictModel):
 
 
 class ThinkingMetadata(StrictModel):
-    """Thinking configuration metadata."""
+    """Thinking configuration metadata (full format, pre-2.1.19).
+
+    This is the original format with level/disabled/triggers configuration.
+    See also SimpleThinkingMetadata for the newer simplified format.
+    """
 
     level: Literal['none', 'low', 'medium', 'high']  # Strict validation
     disabled: bool
     triggers: Sequence[str | ThinkingTrigger]  # Can be strings or trigger objects
+
+
+class SimpleThinkingMetadata(StrictModel):
+    """Simplified thinking metadata (Claude Code 2.1.19+).
+
+    New format that only specifies max thinking tokens without
+    the full level/disabled/triggers configuration.
+    See also ThinkingMetadata for the original full format.
+    """
+
+    maxThinkingTokens: int
 
 
 # ==============================================================================
@@ -1021,6 +1039,59 @@ class EmptyError(StrictModel):
     """Empty error object for unknown/unspecified API errors (Claude Code 2.0.76+)."""
 
     pass
+
+
+# ==============================================================================
+# MCP Metadata (Claude Code 2.1.19+)
+# ==============================================================================
+
+
+class MCPStructuredContent(PermissiveModel):
+    """Permissive model for MCP tool structured content (in mcpMeta.structuredContent).
+
+    MCP tools are third-party integrations with varying result schemas. We
+    intentionally do not model their specific fields because:
+    1. There are 64+ different MCP tools with different result structures
+    2. They are user-configured and can change without Claude Code updates
+    3. Their schemas are defined by external MCP servers
+
+    NOTE: This is the NEW location for structured MCP content (Claude Code 2.1.19+).
+    The same data also appears in tool_result.content as a JSON string. See also
+    MCPToolResult which handles the toolUseResult field.
+
+    Uses PermissiveModel to accept any fields while maintaining type observability.
+    """
+
+    pass
+
+
+class McpMeta(StrictModel):
+    """MCP tool metadata wrapper (Claude Code 2.1.19+).
+
+    New in 2.1.19: Claude Code extracts structured content from MCP tool
+    results that return valid JSON and surfaces it here for easier access.
+
+    DUPLICATION: The same data appears both here (as parsed dict) AND in
+    tool_result.content (as JSON string). This is a convenience feature
+    for programmatic access without parsing.
+
+    NOT BACKFILLED: Old sessions retain the old format (mcpMeta=None).
+    When you resume an old session, new tool calls get mcpMeta but old
+    records are not updated. Both patterns can coexist in the same file.
+
+    Only populated for MCP tools returning JSON - tools returning plain text
+    (like Perplexity) do not populate this field.
+    """
+
+    model_config = pydantic.ConfigDict(
+        extra='forbid',
+        strict=True,
+        frozen=True,
+        populate_by_name=True,  # Allow field access by both name and alias
+    )
+
+    meta: EmptyDict | None = pydantic.Field(None, alias='_meta')  # Always {} when present
+    structuredContent: MCPStructuredContent | None = None
 
 
 # ==============================================================================
@@ -1492,8 +1563,8 @@ class UserRecord(BaseRecord):
         None, description='Agent ID for subprocess/agent records (references agent-{agentId}.jsonl)'
     )
     isMeta: bool | None = pydantic.Field(None, description='Indicates meta messages (system-level information)')
-    thinkingMetadata: ThinkingMetadata | None = pydantic.Field(
-        None, description='Extended thinking configuration (Claude 3.7+)'
+    thinkingMetadata: ThinkingMetadata | SimpleThinkingMetadata | None = pydantic.Field(
+        None, description='Extended thinking configuration (Claude 3.7+, simplified format in 2.1.19+)'
     )
     isVisibleInTranscriptOnly: bool | None = pydantic.Field(
         None, description='Message visible only in transcript, not in session history'
@@ -1520,6 +1591,9 @@ class UserRecord(BaseRecord):
     )
     permissionMode: Literal['default', 'acceptEdits', 'plan', 'bypassPermissions'] | None = pydantic.Field(
         None, description='Permission mode for the request (Claude Code 2.1.15+)'
+    )
+    mcpMeta: McpMeta | None = pydantic.Field(
+        None, description='MCP tool structured content metadata (Claude Code 2.1.19+)'
     )
 
 
