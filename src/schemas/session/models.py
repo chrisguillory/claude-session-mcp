@@ -380,6 +380,7 @@ class TaskToolInput(StrictModel):
         prompt: Task instructions for the subagent (required)
         subagent_type: Agent type - "Explore", "general-purpose", etc. (required)
         description: Human-readable task description for UI (usually present but optional)
+        allowed_tools: Tools to grant the subagent (e.g., ["Write", "Bash"])
         run_in_background: Run asynchronously, check with TaskOutput
         model: Override model (e.g., "haiku", "sonnet")
         resume: Agent ID to resume from previous execution
@@ -389,6 +390,7 @@ class TaskToolInput(StrictModel):
     prompt: str
     subagent_type: str
     description: str | None = None  # Usually present but some early records lack it
+    allowed_tools: Sequence[str] | None = None  # Tools to grant the subagent
     run_in_background: bool | None = None
     model: str | None = None
     resume: str | None = None
@@ -425,12 +427,14 @@ class TaskUpdateToolInput(StrictModel):
     Fields:
         taskId: ID of the task to update (required)
         status: New status (pending, in_progress, completed)
+        description: New description for the task
         owner: Agent/worker name to assign the task to
         addBlockedBy: Task IDs that block this task
     """
 
     taskId: str
     status: Literal['pending', 'in_progress', 'completed'] | None = None
+    description: str | None = None  # Updated task description
     owner: str | None = None
     addBlockedBy: Sequence[str] | None = None
 
@@ -628,6 +632,40 @@ class ReadMcpResourceToolInput(StrictModel):
 
 
 # ==============================================================================
+# LSP Tool Input (Language Server Protocol operations)
+# ==============================================================================
+
+
+LSPOperation = Literal[
+    'goToDefinition',
+    'findReferences',
+    'hover',
+    'documentSymbol',
+    'workspaceSymbol',
+    'goToImplementation',
+    'prepareCallHierarchy',
+    'incomingCalls',
+    'outgoingCalls',
+]
+
+
+class LSPToolInput(StrictModel):
+    """Input for LSP tool - Language Server Protocol operations.
+
+    Fields:
+        operation: LSP operation to perform
+        filePath: Path to the file to operate on
+        line: Line number (1-based as shown in editors)
+        character: Character offset (1-based as shown in editors)
+    """
+
+    operation: LSPOperation
+    filePath: PathField
+    line: int
+    character: int
+
+
+# ==============================================================================
 # MCPSearch Tool Input
 # ==============================================================================
 
@@ -690,6 +728,7 @@ ToolInput = Annotated[
     | TodoWriteToolInput  # todos required
     | WebSearchToolInput  # query required
     | MCPSearchToolInput  # query required (new in 2.1.4)
+    | LSPToolInput  # operation, filePath, line, character required (ENABLE_LSP_TOOL=1)
     # Single-field tools
     | AgentOutputToolInput  # agentId required
     | TaskOutputToolInput  # task_id required
