@@ -50,7 +50,7 @@ class SessionMetadata(pydantic.BaseModel):
     This metadata is populated when the SessionStart hook fires:
     - claude_pid: Found via process tree walking from the hook process
     - process_created_at: When OS created Claude process (from psutil)
-    - session_ended_at: Timestamp when SessionEnd hook executed (if session ended)
+    - session_ended_at: Timestamp when SessionEnd hook executed (clean exit only)
     - session_end_reason: Why session ended (prompt_input_exit, clear, logout, other)
     - parent_id: Extracted from transcript file for compacted sessions
     - crash_detected_at: When crash detection identified an orphaned session
@@ -61,9 +61,9 @@ class SessionMetadata(pydantic.BaseModel):
     model_config = pydantic.ConfigDict(extra='forbid', strict=True)
 
     claude_pid: int
-    process_created_at: JsonDatetime | None = None
-    session_ended_at: JsonDatetime | None = None
-    session_end_reason: str | None = None
+    process_created_at: JsonDatetime | None = None  # When OS created Claude process (from psutil)
+    session_ended_at: JsonDatetime | None = None  # When SessionEnd hook fired (clean exit)
+    session_end_reason: str | None = None  # Why session ended (prompt_input_exit, clear, logout, other)
     parent_id: str | None = None
     crash_detected_at: JsonDatetime | None = None
     startup_model: str | None = None

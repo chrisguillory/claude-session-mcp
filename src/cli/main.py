@@ -644,14 +644,19 @@ async def _info_async(
         typer.secho('  Lineage: tracked', fg=typer.colors.CYAN)
     typer.echo()
 
-    # Temporal section
+    # Temporal section - Authoritative timestamps
     typer.secho('Timestamps:', bold=True)
+    if context.first_message_at:
+        typer.echo(f'  First Message: {context.first_message_at}')
     if context.process_created_at:
-        typer.echo(f'  Process created: {context.process_created_at}')
+        typer.echo(f'  Process Created: {context.process_created_at}')
     if context.session_ended_at:
-        typer.echo(f'  Session ended: {context.session_ended_at}')
-    if context.created_at:
-        typer.echo(f'  Created (UUIDv7): {context.created_at}')
+        reason_suffix = f' ({context.session_end_reason})' if context.session_end_reason else ''
+        typer.echo(f'  Session Ended: {context.session_ended_at}{reason_suffix}')
+    if context.crash_detected_at:
+        typer.secho(f'  Crash Detected: {context.crash_detected_at}', fg=typer.colors.RED)
+    if context.cloned_at:
+        typer.secho(f'  Cloned: {context.cloned_at}', fg=typer.colors.CYAN)
     typer.echo()
 
     # Files section

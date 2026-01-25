@@ -12,15 +12,17 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 
+import psutil
 import pydantic
 
 from src.schemas.claude_workspace import Session, SessionDatabase
 from src.schemas.operations.context import SessionContext
 from src.schemas.operations.discovery import SessionInfo
 from src.services.artifacts import extract_custom_title_from_file
-from src.services.delete import get_restoration_timestamp, is_native_session
+from src.services.delete import is_native_session
 from src.services.discovery import SessionDiscoveryService
 from src.services.lineage import LineageService, get_machine_id
 
@@ -46,6 +48,7 @@ class CurrentSessionContext:
     temp_dir: str
 
 
+# noinspection PyMethodMayBeStatic
 class SessionInfoService:
     """
     Service for retrieving comprehensive session context.
@@ -97,12 +100,16 @@ class SessionInfoService:
         # Load claude-workspace session data if available
         workspace_session = self._load_workspace_session(full_session_id)
 
-        # Check lineage
-        has_lineage = self.lineage.get_entry(full_session_id) is not None
+        # Check lineage and get cloned_at timestamp
+        lineage_entry = self.lineage.get_entry(full_session_id)
+        has_lineage = lineage_entry is not None
+        cloned_at = lineage_entry.cloned_at if lineage_entry else None
 
         # Compute characteristics
         native = is_native_session(full_session_id)
-        created_at = None if native else get_restoration_timestamp(full_session_id)
+
+        # Get authoritative timestamps
+        first_message_at = self._get_first_message_timestamp(session_file)
 
         # Extract custom title from session file
         custom_title = extract_custom_title_from_file(session_file)
@@ -131,14 +138,21 @@ class SessionInfoService:
             workspace_version=workspace_session.metadata.claude_version if workspace_session else None,
         )
 
+        # Get process_created_at with fallback
+        process_created_at_fallback = workspace_session.metadata.process_created_at if workspace_session else None
+        process_created_at = self._get_process_created_at(claude_pid, process_created_at_fallback)
+
         return SessionContext(
             # Identity
             session_id=full_session_id,
             custom_title=custom_title,
-            # Temporal
-            process_created_at=workspace_session.metadata.process_created_at if workspace_session else None,
+            # Temporal - Authoritative timestamps
+            first_message_at=first_message_at,
+            process_created_at=process_created_at,
             session_ended_at=workspace_session.metadata.session_ended_at if workspace_session else None,
-            created_at=created_at,
+            session_end_reason=workspace_session.metadata.session_end_reason if workspace_session else None,
+            crash_detected_at=workspace_session.metadata.crash_detected_at if workspace_session else None,
+            cloned_at=cloned_at,
             # Paths
             project_path=str(project_path),
             session_file=str(session_file),
@@ -232,6 +246,68 @@ class SessionInfoService:
 
         # Lowest fallback: workspace sessions.json
         return workspace_version
+
+    def _get_first_message_timestamp(self, session_file: Path) -> datetime | None:
+        """
+        Extract the first timestamp from a session JSONL file.
+
+        Scans for the first record with a 'timestamp' field, skipping records
+        without timestamps (like summary and custom-title records).
+
+        Args:
+            session_file: Path to the session JSONL file
+
+        Returns:
+            datetime of first timestamped record, or None if not found
+        """
+        if not session_file.exists():
+            return None
+
+        with session_file.open() as f:
+            for line in f:
+                if not (line := line.strip()):
+                    continue
+
+                # Parse JSON - fail fast on errors (no swallowing)
+                record = json.loads(line)
+
+                # Look for timestamp field (not all records have it)
+                timestamp_str = record.get('timestamp')
+                if timestamp_str is not None:
+                    # Parse ISO 8601 timestamp
+                    return datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+
+        return None
+
+    def _get_process_created_at(
+        self,
+        pid: int | None,
+        fallback: datetime | None,
+    ) -> datetime | None:
+        """
+        Get process creation time from OS (authoritative).
+
+        Uses psutil directly when process is running.
+        Falls back to sessions.json cached value when process is gone.
+
+        Args:
+            pid: Process ID to query (may be None)
+            fallback: Cached value from sessions.json to use if process gone
+
+        Returns:
+            datetime of process creation (local timezone), or None if not available
+        """
+        if pid is None:
+            return fallback
+
+        try:
+            proc = psutil.Process(pid)
+            create_time = proc.create_time()
+            # Note: AccessDenied not caught per fail-fast policy - handle if observed
+            return datetime.fromtimestamp(create_time, UTC).astimezone()
+        except psutil.NoSuchProcess:
+            # Process gone - use cached fallback from sessions.json
+            return fallback
 
     def _load_workspace_session(self, session_id: str) -> Session | None:
         """

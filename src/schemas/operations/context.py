@@ -40,10 +40,13 @@ class SessionContext(StrictModel):
     session_id: str
     custom_title: str | None = None  # User-defined session name from /rename
 
-    # Temporal
-    process_created_at: JsonDatetime | None  # From claude-workspace sessions.json
-    session_ended_at: JsonDatetime | None  # From claude-workspace sessions.json
-    created_at: JsonDatetime | None  # UUIDv7 embedded timestamp for cloned/restored sessions
+    # Temporal - Authoritative timestamps (each has one source)
+    first_message_at: JsonDatetime | None = None  # First record timestamp from JSONL
+    process_created_at: JsonDatetime | None = None  # From psutil (live) or sessions.json (fallback)
+    session_ended_at: JsonDatetime | None = None  # SessionEnd hook only (clean exit)
+    session_end_reason: str | None = None  # SessionEnd hook only
+    crash_detected_at: JsonDatetime | None = None  # Crash detection only
+    cloned_at: JsonDatetime | None = None  # From lineage.json (cloned sessions only)
 
     # Paths
     project_path: str  # Working directory / project root
