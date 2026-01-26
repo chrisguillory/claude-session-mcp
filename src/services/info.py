@@ -136,8 +136,8 @@ class SessionInfoService:
             session_id=full_session_id,
             custom_title=custom_title,
             # Temporal
-            started_at=workspace_session.metadata.started_at if workspace_session else None,
-            ended_at=workspace_session.metadata.ended_at if workspace_session else None,
+            process_created_at=workspace_session.metadata.process_created_at if workspace_session else None,
+            session_ended_at=workspace_session.metadata.session_ended_at if workspace_session else None,
             created_at=created_at,
             # Paths
             project_path=str(project_path),

@@ -646,10 +646,10 @@ async def _info_async(
 
     # Temporal section
     typer.secho('Timestamps:', bold=True)
-    if context.started_at:
-        typer.echo(f'  Started: {context.started_at}')
-    if context.ended_at:
-        typer.echo(f'  Ended: {context.ended_at}')
+    if context.process_created_at:
+        typer.echo(f'  Process created: {context.process_created_at}')
+    if context.session_ended_at:
+        typer.echo(f'  Session ended: {context.session_ended_at}')
     if context.created_at:
         typer.echo(f'  Created (UUIDv7): {context.created_at}')
     typer.echo()

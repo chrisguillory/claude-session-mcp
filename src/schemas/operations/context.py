@@ -41,8 +41,8 @@ class SessionContext(StrictModel):
     custom_title: str | None = None  # User-defined session name from /rename
 
     # Temporal
-    started_at: JsonDatetime | None  # From claude-workspace sessions.json
-    ended_at: JsonDatetime | None  # From claude-workspace sessions.json
+    process_created_at: JsonDatetime | None  # From claude-workspace sessions.json
+    session_ended_at: JsonDatetime | None  # From claude-workspace sessions.json
     created_at: JsonDatetime | None  # UUIDv7 embedded timestamp for cloned/restored sessions
 
     # Paths
