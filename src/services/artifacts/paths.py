@@ -10,7 +10,14 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
-from src.schemas.session import AssistantRecord, SessionRecord, UserRecord
+from src.schemas.session import (
+    ErrorAgentAssistantRecord,
+    ErrorMainAssistantRecord,
+    NormalAgentAssistantRecord,
+    NormalMainAssistantRecord,
+    SessionRecord,
+    UserRecord,
+)
 
 __all__ = ['MissingCwdError', 'extract_source_project_path']
 
@@ -53,7 +60,19 @@ def extract_source_project_path(
     """
     for records in files_data.values():
         for record in records:
-            if isinstance(record, (UserRecord, AssistantRecord)) and record.cwd:
+            if (
+                isinstance(
+                    record,
+                    (
+                        UserRecord,
+                        NormalMainAssistantRecord,
+                        ErrorMainAssistantRecord,
+                        NormalAgentAssistantRecord,
+                        ErrorAgentAssistantRecord,
+                    ),
+                )
+                and record.cwd
+            ):
                 return Path(record.cwd)
 
     raise MissingCwdError(

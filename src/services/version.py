@@ -19,10 +19,13 @@ import psutil
 
 from src.schemas.session import (
     ApiErrorSystemRecord,
-    AssistantRecord,
     CompactBoundarySystemRecord,
+    ErrorAgentAssistantRecord,
+    ErrorMainAssistantRecord,
     InformationalSystemRecord,
     LocalCommandSystemRecord,
+    NormalAgentAssistantRecord,
+    NormalMainAssistantRecord,
     SessionRecord,
     TurnDurationSystemRecord,
     UserRecord,
@@ -31,7 +34,10 @@ from src.schemas.session import (
 # All record types that have a version field
 VERSION_RECORD_TYPES = (
     UserRecord,
-    AssistantRecord,
+    NormalMainAssistantRecord,
+    ErrorMainAssistantRecord,
+    NormalAgentAssistantRecord,
+    ErrorAgentAssistantRecord,
     LocalCommandSystemRecord,
     CompactBoundarySystemRecord,
     ApiErrorSystemRecord,

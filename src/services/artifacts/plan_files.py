@@ -23,9 +23,12 @@ from pathlib import Path
 
 from src.schemas.session import (
     ApiErrorSystemRecord,
-    AssistantRecord,
     CompactBoundarySystemRecord,
+    ErrorAgentAssistantRecord,
+    ErrorMainAssistantRecord,
     LocalCommandSystemRecord,
+    NormalAgentAssistantRecord,
+    NormalMainAssistantRecord,
     SessionRecord,
     UserRecord,
 )
@@ -33,7 +36,10 @@ from src.schemas.session import (
 # Record types that have the slug field
 SLUG_RECORD_TYPES = (
     UserRecord,
-    AssistantRecord,
+    NormalMainAssistantRecord,
+    ErrorMainAssistantRecord,
+    NormalAgentAssistantRecord,
+    ErrorAgentAssistantRecord,
     LocalCommandSystemRecord,
     CompactBoundarySystemRecord,
     ApiErrorSystemRecord,

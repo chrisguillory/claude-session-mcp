@@ -71,9 +71,31 @@ Key findings from analyzing real session files:
 
 Important pattern for unused/reserved fields:
 - Fields that are present in JSON but ALWAYS null are typed as None (not Any | None)
-- This includes: AssistantRecord.stopReason, Message.container
 - These are reserved/future fields in the Claude API schema but currently unpopulated
 - Using None type prevents accidental usage and makes the schema more accurate
+
+LOW-INCIDENCE FIELDS TRACKING (run scripts/analyze_lazy_defaults.py --output-docstring):
+Last analyzed: 2026-01-27 (241,856 records across 1,661 sessions)
+
+Always-null fields (migration candidates):
+- message:assistant.container: 1.4% present, ALWAYS NULL - migration: v0.2.8_remove_null_message_container
+
+UserRecord low-incidence fields (<5% presence, have actual values):
+- sourceToolUseID: 0.01% - Links tool result to initiating tool_use (2.0.76+)
+- imagePasteIds: 0.14% - IDs of pasted images in message
+- mcpMeta: 0.41% - MCP structured content metadata (2.1.19+)
+- isVisibleInTranscriptOnly: 0.59% - Transcript-only visibility flag
+- isCompactSummary: 0.59% - Marks compacted session summaries
+- permissionMode: 2.47% - Request permission mode (2.1.15+)
+- isMeta: 3.05% - Meta/system-level message indicator
+
+AssistantRecord low-incidence fields (bifurcated in v0.2.8):
+- error: 1.21% - Error type for API errors (ErrorMainAssistantRecord)
+- isApiErrorMessage: 1.36% - API error flag (ErrorMainAssistantRecord)
+- agentId: ~10% - Agent ID (AgentAssistantRecord variants)
+
+TokenUsage low-incidence fields:
+- server_tool_use: 1.42% - Server-side tool use tracking (WebSearch/WebFetch)
 
 Round-trip serialization:
 - Use model_dump(exclude_unset=True, mode='json') to preserve original JSON structure
@@ -87,14 +109,14 @@ from typing import Annotated, Any, Literal
 
 import pydantic
 
-from src.schemas.session.markers import PathField, PathListField
+from src.schemas.session.markers import PathField
 from src.schemas.types import BaseStrictModel, EmptyDict, EmptySequence, ModelId, PermissiveModel
 
 # ==============================================================================
 # Schema Version
 # ==============================================================================
 
-SCHEMA_VERSION = '0.2.7'
+SCHEMA_VERSION = '0.2.8'
 CLAUDE_CODE_MIN_VERSION = '2.0.35'
 CLAUDE_CODE_MAX_VERSION = '2.1.19'
 LAST_VALIDATED = '2026-01-24'
@@ -706,6 +728,44 @@ class MCPToolInput(PermissiveModel):
     pass
 
 
+# Known built-in tool names from Claude Code
+# These correspond to the ToolInput types (minus "ToolInput" suffix)
+# NOTE: Some tools have been renamed but old sessions may contain legacy names
+BuiltinToolName = Literal[
+    # Current tools (Claude Code 2.1.x)
+    'AskUserQuestion',
+    'Bash',
+    'Edit',
+    'EnterPlanMode',
+    'ExitPlanMode',
+    'Glob',
+    'Grep',
+    'LSP',
+    'ListMcpResourcesTool',
+    'NotebookEdit',
+    'Read',
+    'ReadMcpResourceTool',
+    'Skill',
+    'Task',
+    'TaskCreate',
+    'TaskGet',
+    'TaskList',
+    'TaskOutput',
+    'TaskStop',
+    'TaskUpdate',
+    'ToolSearch',
+    'WebFetch',
+    'WebSearch',
+    'Write',
+    # Legacy tools (may appear in older sessions)
+    'AgentOutput',  # Replaced by TaskOutput
+    'BashOutput',  # Replaced by TaskOutput
+    'KillShell',  # Replaced by TaskStop
+    'MCPSearch',  # Renamed to ToolSearch
+    'TodoWrite',  # Replaced by TaskCreate/TaskUpdate/TaskList
+]
+
+
 # Union of tool inputs (typed models first, PermissiveModel fallback for MCP tools)
 # NOTE: Order matters! More specific (more required fields) should come first.
 # Models with no required fields must come last before fallback.
@@ -826,6 +886,34 @@ class ToolUseContent(StrictModel):
 
         return v
 
+    @property
+    def mcp_info(self) -> tuple[str, str]:
+        """Parse MCP tool name into (server, operation) components.
+
+        Returns:
+            Tuple of (server, operation).
+
+        Raises:
+            ValueError: If this is not an MCP tool.
+
+        Example:
+            # for 'mcp__perplexity__perplexity_research'
+            ('perplexity', 'perplexity_research')
+        """
+        if not isinstance(self.input, MCPToolInput):
+            raise ValueError(f'Tool {self.name} is not an MCP tool (input type: {type(self.input).__name__})')
+
+        if not self.name.startswith('mcp__'):
+            raise ValueError(f'MCP tool name does not start with mcp__: {self.name}')
+
+        # Remove 'mcp__' prefix and split on first '__' separator
+        rest = self.name.removeprefix('mcp__')
+        if '__' not in rest:
+            raise ValueError(f'Malformed MCP tool name: {self.name} (expected mcp__server__operation)')
+
+        server, operation = rest.split('__')
+        return server, operation
+
 
 class ToolReferenceContent(StrictModel):
     """Tool reference content block from MCPSearch tool results (Claude Code 2.1.4+).
@@ -854,7 +942,19 @@ class ToolResultContent(StrictModel):
     is_error: bool | None = None
 
 
-# Discriminated union of all message content types
+# Content types that appear in user messages
+UserMessageContent = Annotated[
+    TextContent | ToolResultContent | ImageContent | DocumentContent,
+    pydantic.Field(discriminator='type'),
+]
+
+# Content types that appear in assistant messages
+AssistantMessageContent = Annotated[
+    ThinkingContent | TextContent | ToolUseContent,
+    pydantic.Field(discriminator='type'),
+]
+
+# Combined union for backwards compatibility
 MessageContent = Annotated[
     ThinkingContent | TextContent | ToolUseContent | ToolResultContent | ImageContent | DocumentContent,
     pydantic.Field(discriminator='type'),
@@ -885,38 +985,47 @@ class ContextManagement(StrictModel):
 
 
 # ==============================================================================
-# Message Structure
+# Message Structure (Bifurcated by Role)
 # ==============================================================================
 
+# Stop reason values for assistant messages
+StopReason = Literal['tool_use', 'stop_sequence', 'end_turn', 'refusal', 'model_context_window_exceeded']
 
-class Message(StrictModel):
-    """A message within a record."""
 
-    role: Literal['user', 'assistant']
-    content: Sequence[MessageContent] | str
-    # Additional fields that may appear in assistant messages (nested API response)
-    type: Literal['message'] | None = pydantic.Field(
-        None, description='Message type indicator (present in agent/subprocess responses)'
-    )
-    model: ModelId | None = pydantic.Field(
-        None, description='Claude model identifier (e.g., claude-sonnet-4-5-20250929)'
-    )
-    id: str | None = pydantic.Field(None, description='Message ID from Claude API')
-    stop_reason: Literal['tool_use', 'stop_sequence', 'end_turn', 'refusal', 'model_context_window_exceeded'] | None = (
-        pydantic.Field(None, description='Reason why the model stopped generating')
-    )
-    stop_sequence: str | None = pydantic.Field(
-        None, description='The actual stop sequence string that triggered stopping'
-    )
-    usage: TokenUsage | None = pydantic.Field(
-        None, description='Token usage information (present in nested API responses)'
-    )
-    container: None = pydantic.Field(
-        None, description='Reserved for future use', json_schema_extra={'status': 'reserved'}
-    )
-    context_management: ContextManagement | None = pydantic.Field(
-        None, description='Context management metadata (Claude Code 2.0.51+)'
-    )
+class UserMessage(StrictModel):
+    """User message - simple content only.
+
+    User messages contain only role and content. No assistant-specific fields.
+    """
+
+    role: Literal['user']
+    content: Sequence[UserMessageContent] | str
+
+
+class AssistantMessage(StrictModel):
+    """Assistant message with API response metadata.
+
+    Assistant messages always include full API response metadata.
+    All fields are required (though some values can be null).
+    """
+
+    role: Literal['assistant']
+    content: Sequence[AssistantMessageContent]
+    type: Literal['message']
+    model: ModelId
+    id: str
+    stop_reason: StopReason | None  # Value can be null, but field is always present
+    stop_sequence: str | None  # Value can be null, but field is always present
+    usage: TokenUsage
+    container: None = None  # Always null when present (~1.6%)
+    context_management: ContextManagement | None = None  # Optional (~20%)
+
+
+# Discriminated union of message types
+Message = Annotated[
+    UserMessage | AssistantMessage,
+    pydantic.Field(discriminator='role'),
+]
 
 
 # ==============================================================================
@@ -1231,14 +1340,41 @@ class EditToolResult(StrictModel):
     structuredPatch: Sequence[PatchHunk]
 
 
-class WriteToolResult(StrictModel):
-    """Result from Write tool execution."""
+class WriteCreateToolResult(StrictModel):
+    """Result from Write tool - file creation.
 
-    type: Literal['create', 'update']
+    When creating a new file:
+    - structuredPatch is always empty
+    - originalFile is always null
+    """
+
+    type: Literal['create']
     filePath: PathField
     content: str
-    structuredPatch: Sequence[PatchHunk] | None = None
-    originalFile: str | None = None  # Present but always None for 'create' type
+    structuredPatch: EmptySequence  # Always [] for create
+    originalFile: None  # Always null for create
+
+
+class WriteUpdateToolResult(StrictModel):
+    """Result from Write tool - file update.
+
+    When updating an existing file:
+    - structuredPatch contains the diff hunks
+    - originalFile contains the original content
+    """
+
+    type: Literal['update']
+    filePath: PathField
+    content: str
+    structuredPatch: Sequence[PatchHunk]  # Always has data for update
+    originalFile: str  # Always has data for update
+
+
+# Discriminated union of WriteToolResult variants
+WriteToolResult = Annotated[
+    WriteCreateToolResult | WriteUpdateToolResult,
+    pydantic.Field(discriminator='type'),
+]
 
 
 class TodoToolResult(StrictModel):
@@ -1406,7 +1542,7 @@ class BackgroundTask(StrictModel):
 class TaskOutputPollingResult(StrictModel):
     """Result from TaskOutput tool - polling background task state."""
 
-    retrieval_status: Literal['not_ready', 'success']
+    retrieval_status: Literal['not_ready', 'success', 'timeout']
     task: BackgroundTask
 
 
@@ -1592,12 +1728,6 @@ class UserRecord(BaseRecord):
     version: str
     gitBranch: str
     message: Message
-    projectPaths: PathListField | None = pydantic.Field(
-        None, description='Additional project paths beyond cwd (each path will be translated)'
-    )
-    budgetTokens: int | None = pydantic.Field(None, description='Token budget limit for this request')
-    skills: None = pydantic.Field(None, description='Reserved for future use', json_schema_extra={'status': 'reserved'})
-    mcp: None = pydantic.Field(None, description='Reserved for future use', json_schema_extra={'status': 'reserved'})
     agentId: str | None = pydantic.Field(
         None, description='Agent ID for subprocess/agent records (references agent-{agentId}.jsonl)'
     )
@@ -1641,42 +1771,82 @@ class UserRecord(BaseRecord):
 # ==============================================================================
 
 
-class AssistantRecord(BaseRecord):
-    """Assistant message record."""
+class _AssistantRecordBase(BaseRecord):
+    """Base fields shared by all assistant record types (no error fields)."""
 
     type: Literal['assistant']
     cwd: PathField
     parentUuid: str | None = pydantic.Field(..., description='UUID of parent record (null for root agent records)')
     message: Message
-    # Note: usage/stopReason are optional for agent records (nested in message instead)
-    usage: TokenUsage | None = pydantic.Field(
-        None, description='Token usage for this request (null for agent records - usage in message instead)'
-    )
-    stopReason: None = pydantic.Field(
-        None, description='Reserved for future use', json_schema_extra={'status': 'reserved'}
-    )
-    model: ModelId | None = pydantic.Field(
-        None, description='Claude model identifier (null for agent records - model in message instead)'
-    )
-    requestDuration: int | None = pydantic.Field(None, description='Request duration in milliseconds')
     requestId: str | None = pydantic.Field(None, description='Claude API request ID')
-    agentId: str | None = pydantic.Field(
-        None, description='Agent ID for subprocess/agent records (references agent-{agentId}.jsonl)'
-    )
-    isSidechain: bool | None = pydantic.Field(
-        None, description='Indicates sidechain/subprocess execution (present in agent records)'
-    )
-    userType: str | None = pydantic.Field(None, description='User type (present in agent records)')
-    version: str | None = pydantic.Field(None, description='Claude Code version (present in agent records)')
-    gitBranch: str | None = pydantic.Field(None, description='Git branch (present in agent records)')
-    isApiErrorMessage: bool | None = pydantic.Field(None, description='Indicates this message represents an API error')
-    apiError: Literal['max_output_tokens'] | None = pydantic.Field(
-        None, description='API error code (Claude Code 2.1.15+)'
-    )
-    error: Literal['rate_limit', 'unknown', 'invalid_request', 'authentication_failed'] | None = pydantic.Field(
-        None, description='Error type for API error messages'
-    )
+    userType: Literal['external'] = pydantic.Field(..., description='User type')
+    version: str = pydantic.Field(..., description='Claude Code version')
+    gitBranch: str = pydantic.Field(..., description='Git branch')
     slug: str | None = pydantic.Field(None, description='Human-readable session slug (Claude Code 2.0.51+)')
+
+
+# Error type for API errors
+ApiErrorType = Literal['rate_limit', 'unknown', 'invalid_request', 'authentication_failed']
+
+
+# =============================================================================
+# Main Session Records (isSidechain=False)
+# =============================================================================
+
+
+class NormalMainAssistantRecord(_AssistantRecordBase):
+    """Normal assistant record from main session file (no API error)."""
+
+    isSidechain: Literal[False] = pydantic.Field(..., description='False for main session records')
+
+
+class ErrorMainAssistantRecord(_AssistantRecordBase):
+    """Error assistant record from main session file (API error or synthetic)."""
+
+    isSidechain: Literal[False] = pydantic.Field(..., description='False for main session records')
+    isApiErrorMessage: bool = pydantic.Field(..., description='Indicates this message represents an API error')
+    error: ApiErrorType | None = pydantic.Field(None, description='Error type for API error messages')
+
+
+# =============================================================================
+# Agent Session Records (isSidechain=True)
+# =============================================================================
+
+
+class NormalAgentAssistantRecord(_AssistantRecordBase):
+    """Normal assistant record from agent session file (no API error)."""
+
+    isSidechain: Literal[True] = pydantic.Field(..., description='True for agent/subprocess records')
+    agentId: str = pydantic.Field(..., description='Agent ID (references agent-{agentId}.jsonl)')
+
+
+class ErrorAgentAssistantRecord(_AssistantRecordBase):
+    """Error assistant record from agent session file (API error or synthetic)."""
+
+    isSidechain: Literal[True] = pydantic.Field(..., description='True for agent/subprocess records')
+    agentId: str = pydantic.Field(..., description='Agent ID (references agent-{agentId}.jsonl)')
+    isApiErrorMessage: bool = pydantic.Field(..., description='Indicates this message represents an API error')
+    error: ApiErrorType | None = pydantic.Field(None, description='Error type for API error messages')
+
+
+# =============================================================================
+# Combined AssistantRecord Union (validated left-to-right)
+# =============================================================================
+
+# Type aliases for convenience (used in isinstance checks and type hints)
+MainAssistantRecord = NormalMainAssistantRecord | ErrorMainAssistantRecord
+AgentAssistantRecord = NormalAgentAssistantRecord | ErrorAgentAssistantRecord
+
+# Full union - order matters! Normal variants (stricter) before Error variants
+# With extra='forbid':
+# - NormalMainAssistantRecord fails if JSON has isApiErrorMessage or agentId
+# - ErrorMainAssistantRecord succeeds if JSON has isApiErrorMessage but no agentId
+# - NormalAgentAssistantRecord fails if JSON has isApiErrorMessage
+# - ErrorAgentAssistantRecord succeeds if JSON has isApiErrorMessage and agentId
+AssistantRecord = Annotated[
+    NormalMainAssistantRecord | ErrorMainAssistantRecord | NormalAgentAssistantRecord | ErrorAgentAssistantRecord,
+    pydantic.Field(union_mode='left_to_right'),
+]
 
 
 # ==============================================================================
@@ -1774,10 +1944,10 @@ class ApiErrorSystemRecord(BaseRecord):
     parentUuid: str | None
     subtype: Literal['api_error']
     level: Literal['error', 'warning'] | None = None
-    isSidechain: bool | None = None  # Optional for api_error
-    userType: str | None = None  # Optional for api_error
-    version: str | None = None  # Optional for api_error
-    gitBranch: str | None = None  # Optional for api_error
+    isSidechain: bool  # Always present and non-null in api_error records
+    userType: Literal['external']  # Always 'external' in api_error records
+    version: str  # Always present (Claude Code version)
+    gitBranch: str  # Always present (may be empty string)
     slug: str | None = pydantic.Field(None, description='Human-readable session slug (Claude Code 2.0.51+)')
     cause: ConnectionError | None = None  # Connection error details (for network failures)
     error: (

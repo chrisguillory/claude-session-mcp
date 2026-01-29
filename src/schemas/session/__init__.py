@@ -18,6 +18,8 @@ from src.schemas.session.models import (
     # Schema version
     SCHEMA_VERSION,
     VALIDATION_RECORD_COUNT,
+    # Records - AssistantRecord variants
+    AgentAssistantRecord,
     # Tool results (alphabetical)
     AgentCompletedState,
     # Tool inputs (alphabetical)
@@ -28,9 +30,12 @@ from src.schemas.session.models import (
     ApiErrorDetail,
     ApiErrorResponse,
     ApiErrorSystemRecord,
+    ApiErrorType,
     AskUserQuestionToolInput,
     AskUserQuestionToolResult,
-    # Records
+    # Message
+    AssistantMessage,
+    AssistantMessageContent,
     AssistantRecord,
     AsyncTaskLaunchResult,
     BackgroundTask,
@@ -57,6 +62,8 @@ from src.schemas.session.models import (
     EmptyError,
     EnterPlanModeToolInput,
     EnterPlanModeToolResult,
+    ErrorAgentAssistantRecord,
+    ErrorMainAssistantRecord,
     ExitPlanModeToolInput,
     ExitPlanModeToolResult,
     FileBackupInfo,
@@ -77,15 +84,17 @@ from src.schemas.session.models import (
     KillShellToolResult,
     ListMcpResourcesToolInput,
     LocalCommandSystemRecord,
+    MainAssistantRecord,
     MalformedWriteToolInput,
     McpResource,
     MCPSearchToolInput,
     MCPToolInput,
     MCPToolResult,
-    # Message
     Message,
     MessageContent,
     NetworkError,
+    NormalAgentAssistantRecord,
+    NormalMainAssistantRecord,
     NotebookEditToolInput,
     PatchHunk,
     QuestionOption,
@@ -101,6 +110,7 @@ from src.schemas.session.models import (
     SessionRecord,
     SessionRecordAdapter,
     SkillToolInput,
+    StopReason,
     # Base
     StrictModel,
     SummaryRecord,
@@ -128,6 +138,8 @@ from src.schemas.session.models import (
     ToolUseCaller,
     ToolUseContent,
     TurnDurationSystemRecord,
+    UserMessage,
+    UserMessageContent,
     UserQuestion,
     UserRecord,
     WebFetchToolInput,
@@ -201,7 +213,12 @@ __all__ = [
     # Context management
     'ContextManagement',
     # Message
+    'AssistantMessage',
+    'AssistantMessageContent',
     'Message',
+    'StopReason',
+    'UserMessage',
+    'UserMessageContent',
     # Token usage
     'CacheCreation',
     'ServerToolUse',
@@ -253,10 +270,17 @@ __all__ = [
     'WriteToolResult',
     'ToolResult',
     'MCPToolResult',  # Fallback for MCP tool results (enables isinstance checks)
-    # Records
+    # Records - AssistantRecord variants
     'BaseRecord',
     'UserRecord',
     'AssistantRecord',
+    'MainAssistantRecord',
+    'AgentAssistantRecord',
+    'NormalMainAssistantRecord',
+    'NormalAgentAssistantRecord',
+    'ErrorMainAssistantRecord',
+    'ErrorAgentAssistantRecord',
+    'ApiErrorType',
     'SummaryRecord',
     'SystemRecord',
     'LocalCommandSystemRecord',

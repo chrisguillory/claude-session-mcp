@@ -224,14 +224,30 @@ def print_model_summary(model: type[BaseModel]) -> None:
 
 if __name__ == '__main__':
     # Demo
-    from src.schemas.session import AssistantRecord, Message, UserRecord
+    from src.schemas.session import (
+        AssistantMessage,
+        ErrorAgentAssistantRecord,
+        ErrorMainAssistantRecord,
+        NormalAgentAssistantRecord,
+        NormalMainAssistantRecord,
+        UserMessage,
+        UserRecord,
+    )
 
     print('=' * 80)
     print('Model Introspection Demo')
     print('=' * 80)
     print()
 
-    models: list[type[BaseModel]] = [UserRecord, AssistantRecord, Message]
+    models: list[type[BaseModel]] = [
+        UserRecord,
+        NormalMainAssistantRecord,
+        ErrorMainAssistantRecord,
+        NormalAgentAssistantRecord,
+        ErrorAgentAssistantRecord,
+        UserMessage,
+        AssistantMessage,
+    ]
     for model in models:
         print_model_summary(model)
         print()
