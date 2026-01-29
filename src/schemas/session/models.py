@@ -433,7 +433,7 @@ class TaskUpdateToolInput(StrictModel):
     """
 
     taskId: str
-    status: Literal['pending', 'in_progress', 'completed'] | None = None
+    status: Literal['pending', 'in_progress', 'completed', 'deleted'] | None = None
     description: str | None = None  # Updated task description
     owner: str | None = None
     addBlockedBy: Sequence[str] | None = None
@@ -544,6 +544,13 @@ class AskUserQuestionToolInput(StrictModel):
 # ==============================================================================
 
 
+class PromptPermission(StrictModel):
+    """A prompt-based permission request in ExitPlanMode."""
+
+    tool: str
+    prompt: str
+
+
 class ExitPlanModeToolInput(StrictModel):
     """Input for ExitPlanMode tool - exits planning mode.
 
@@ -553,12 +560,14 @@ class ExitPlanModeToolInput(StrictModel):
     Fields:
         plan: Plan content in markdown (optional)
         launchSwarm: Whether to launch swarm agents (optional)
-        allowedPrompts: Permission requests (only empty arrays observed so far)
+        allowedPrompts: Prompt-based permission requests (tool + prompt pairs)
+        pushToRemote: Whether to push plan to remote Claude.ai session
     """
 
     plan: str | None = None
     launchSwarm: bool | None = None
-    allowedPrompts: EmptySequence | None = None
+    allowedPrompts: Sequence[PromptPermission] | None = None
+    pushToRemote: bool | None = None
 
 
 # ==============================================================================

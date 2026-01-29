@@ -24,7 +24,7 @@ class BaseSessionSettings(pydantic_settings.BaseSettings):
         env_file='.env',
         env_file_encoding='utf-8',
         case_sensitive=True,  # Fail fast on misconfiguration
-        extra='forbid',  # Reject unknown environment variables
+        extra='ignore',  # Only read defined fields, ignore other env vars
     )
 
     # Application metadata
