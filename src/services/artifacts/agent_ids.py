@@ -7,11 +7,15 @@ Handles:
 - Agent ID mapping for session transformations
 
 Agent file patterns:
-- Native: agent-<hex-id>.jsonl (e.g., "agent-5271c147.jsonl")
-- Cloned: agent-<hex-id>-clone-<prefix>.jsonl (e.g., "agent-5271c147-clone-019b51bd.jsonl")
+- Native hex: agent-<hex-id>.jsonl (e.g., "agent-5271c147.jsonl")
+- Native typed: agent-<type>-<hex-id>.jsonl (e.g., "agent-aprompt_suggestion-d7f1a0.jsonl")
+- Cloned: agent-<id>-clone-<prefix>.jsonl (e.g., "agent-5271c147-clone-019b51bd.jsonl")
 
-Cloning always produces a flat structure: {base-hex}-clone-{new-prefix}
-When cloning a clone, we extract the base hex and apply the new prefix,
+The typed format was introduced in Claude Code 2.1.25 for specialized agents
+like prompt suggestions. The type prefix uses lowercase letters and underscores.
+
+Cloning always produces a flat structure: {base-id}-clone-{new-prefix}
+When cloning a clone, we extract the base ID and apply the new prefix,
 NOT append another -clone- segment. This keeps filenames simple and consistent.
 
 Key insight: New agent IDs are REQUIRED for same-project forking.
@@ -20,7 +24,7 @@ the parent session's agent files.
 
 Note: Agent session IDs (in isSidechain records) are full UUIDs
 that reference separate agent-{agentId}.jsonl files. The agentId
-is the hex portion extracted from these filenames.
+is extracted from these filenames.
 """
 
 from __future__ import annotations
@@ -30,31 +34,43 @@ from collections.abc import Mapping, Sequence, Set
 
 from src.schemas.session import SessionRecord
 
-# Pattern for agent filenames - matches both native and cloned formats:
-# - agent-5271c147.jsonl (native)
-# - agent-5271c147-clone-019b51bd.jsonl (cloned)
-AGENT_FILENAME_PATTERN = re.compile(r'^agent-([a-f0-9]+(?:-clone-[a-f0-9]+)?)\.jsonl$')
+# Pattern for agent filenames - matches native (hex or typed) and cloned formats:
+# - agent-5271c147.jsonl (native hex)
+# - agent-aprompt_suggestion-d7f1a0.jsonl (native typed, 2.1.25+)
+# - agent-5271c147-clone-019b51bd.jsonl (cloned hex)
+# - agent-aprompt_suggestion-d7f1a0-clone-019b51bd.jsonl (cloned typed)
+AGENT_FILENAME_PATTERN = re.compile(
+    r'^agent-'
+    r'('
+    r'(?:[a-z_]+-)?'  # Optional type prefix (e.g., "aprompt_suggestion-")
+    r'[a-f0-9]+'  # Required hex ID
+    r'(?:-clone-[a-f0-9]+)?'  # Optional clone suffix
+    r')'
+    r'\.jsonl$'
+)
 
 
 def extract_base_agent_id(agent_id: str) -> str:
     """
-    Extract the base hex ID from an agent ID.
+    Extract the base ID from an agent ID.
 
     For native IDs, returns the ID unchanged.
-    For cloned IDs, returns the hex portion before '-clone-'.
+    For cloned IDs, returns the portion before '-clone-'.
 
     Examples:
         '5271c147' -> '5271c147'
         '5271c147-clone-019b51bd' -> '5271c147'
+        'aprompt_suggestion-d7f1a0' -> 'aprompt_suggestion-d7f1a0'
+        'aprompt_suggestion-d7f1a0-clone-019b51bd' -> 'aprompt_suggestion-d7f1a0'
 
     This enables flat cloning: cloning a clone produces the same
     format as cloning a native session, just with a different suffix.
 
     Args:
-        agent_id: Agent ID (native or cloned format)
+        agent_id: Agent ID (native hex, native typed, or cloned format)
 
     Returns:
-        Base hex ID without any clone suffix
+        Base ID without any clone suffix
     """
     if '-clone-' in agent_id:
         return agent_id.split('-clone-')[0]
@@ -68,7 +84,7 @@ def extract_agent_ids_from_files(
     Extract agent IDs from loaded session files.
 
     Agent IDs are extracted from filenames, not record content.
-    Handles both native and cloned filename patterns.
+    Handles native (hex and typed) and cloned filename patterns.
 
     Ignores the main session file and any non-agent files.
 
@@ -77,7 +93,8 @@ def extract_agent_ids_from_files(
 
     Returns:
         Set of agent ID strings. May include:
-        - Native IDs: {"5271c147", "5848e60e"}
+        - Native hex IDs: {"5271c147", "5848e60e"}
+        - Native typed IDs: {"aprompt_suggestion-d7f1a0"}
         - Cloned IDs: {"5271c147-clone-019b51bd"}
     """
     agent_ids: set[str] = set()
@@ -94,22 +111,23 @@ def generate_clone_agent_id(old_agent_id: str, new_session_id: str) -> str:
     """
     Generate new agent ID with provenance.
 
-    Format: {base_hex}-clone-{session_prefix}
+    Format: {base_id}-clone-{session_prefix}
 
     Examples:
         ('5271c147', '019b51bd-...') -> '5271c147-clone-019b51bd'
         ('5271c147-clone-019b51bd', '019c1234-...') -> '5271c147-clone-019c1234'
+        ('aprompt_suggestion-d7f1a0', '019b51bd-...') -> 'aprompt_suggestion-d7f1a0-clone-019b51bd'
 
-    Note: When cloning a clone, we extract the base hex ID first.
+    Note: When cloning a clone, we extract the base ID first.
     This produces a flat structure rather than accumulating -clone- segments.
     Each cloned session gets a unique suffix from its session ID prefix.
 
     Args:
-        old_agent_id: Original agent ID (native hex or cloned format)
+        old_agent_id: Original agent ID (native hex, native typed, or cloned format)
         new_session_id: New session ID for provenance
 
     Returns:
-        New agent ID: {base_hex}-clone-{8-char-prefix}
+        New agent ID: {base_id}-clone-{8-char-prefix}
     """
     base_id = extract_base_agent_id(old_agent_id)
     prefix = new_session_id[:8]
