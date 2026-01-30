@@ -25,6 +25,7 @@ CLAUDE CODE VERSION COMPATIBILITY:
 - Schema v0.2.6: Added StopHookSummarySystemRecord, resume field to AgentProgressData (2.1.14+),
                  TaskCreate/TaskUpdate/TaskList tool inputs and results (2.1.17+)
 - Schema v0.2.7: Added SimpleThinkingMetadata, McpMeta, MCPStructuredContent, Task tool mode field (2.1.19+)
+- Schema v0.2.8: Added timeoutMs to BashProgressData (2.1.25+)
 - If validation fails, Claude Code schema may have changed - update models accordingly
 
 NEW FIELDS IN CLAUDE CODE 2.0.51+ (Schema v0.1.3):
@@ -94,11 +95,11 @@ from src.schemas.types import BaseStrictModel, EmptyDict, EmptySequence, ModelId
 # Schema Version
 # ==============================================================================
 
-SCHEMA_VERSION = '0.2.7'
+SCHEMA_VERSION = '0.2.8'
 CLAUDE_CODE_MIN_VERSION = '2.0.35'
-CLAUDE_CODE_MAX_VERSION = '2.1.19'
-LAST_VALIDATED = '2026-01-24'
-VALIDATION_RECORD_COUNT = 221_695
+CLAUDE_CODE_MAX_VERSION = '2.1.25'
+LAST_VALIDATED = '2026-01-30'
+VALIDATION_RECORD_COUNT = 255_102
 
 
 # ==============================================================================
@@ -1982,6 +1983,7 @@ class BashProgressData(StrictModel):
     fullOutput: str
     elapsedTimeSeconds: int
     totalLines: int
+    timeoutMs: int | None = None  # Present when command has explicit timeout
 
 
 class WaitingForTaskData(StrictModel):
