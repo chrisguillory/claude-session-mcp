@@ -85,7 +85,7 @@ class SessionInfoService:
             AmbiguousSessionError: If prefix matches multiple sessions
         """
         # Resolve session ID (supports both full ID and prefix)
-        session_info = await self._resolve_session(session_id)
+        session_info = await self.resolve_session(session_id)
 
         full_session_id = session_info.session_id
         session_folder = session_info.session_folder
@@ -334,7 +334,7 @@ class SessionInfoService:
 
         return None
 
-    async def _resolve_session(self, session_id_or_prefix: str) -> SessionInfo:
+    async def resolve_session(self, session_id_or_prefix: str) -> SessionInfo:
         """
         Resolve a session ID or prefix to a full session.
 

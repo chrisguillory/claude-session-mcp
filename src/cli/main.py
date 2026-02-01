@@ -213,6 +213,11 @@ async def _archive_async(
     except FileExistsError as e:
         typer.secho(f'Error: {e}', fg=typer.colors.RED, err=True)
         raise typer.Exit(1)
+    except AmbiguousSessionError as e:
+        typer.secho(f'Error: {e}', fg=typer.colors.RED, err=True)
+        typer.echo()
+        typer.echo('Please provide a more specific session ID prefix.')
+        raise typer.Exit(1)
     except Exception as e:
         await logger.error(f'Failed to create archive: {e}')
         if verbose:
@@ -446,7 +451,7 @@ async def _clone_async(
 def delete(
     session_id: str = typer.Argument(..., help='Session ID to delete'),
     force: bool = typer.Option(False, '--force', '-f', help='Required to delete native (UUIDv4) sessions'),
-    no_backup: bool = typer.Option(False, '--no-backup', help='Skip auto-backup before deletion'),
+    no_backup: bool = typer.Option(False, '--no-backup', help="Don't keep a backup file for undo"),
     dry_run: bool = typer.Option(False, '--dry-run', help='Preview what would be deleted'),
     project: Path | None = typer.Option(None, '--project', '-p', help='Project directory (default: current)'),
     verbose: bool = typer.Option(False, '--verbose', '-v', help='Verbose output'),
@@ -456,8 +461,8 @@ def delete(
     By default, only cloned/restored sessions (UUIDv7) can be deleted.
     Native Claude sessions (UUIDv4) require --force.
 
-    Before deletion, a backup archive is created at ~/.claude-session-mcp/deleted/
-    unless --no-backup is specified. Use 'restore --in-place' on the backup to undo.
+    A backup is saved to ~/.claude-session-mcp/deleted/ for undo capability.
+    Use 'restore --in-place' on the backup to undo.
     """
     asyncio.run(_delete_async(session_id, force, no_backup, dry_run, project, verbose))
 
@@ -483,12 +488,17 @@ async def _delete_async(
         else:
             project_path = Path.cwd()
 
+        # Resolve session ID prefix to full ID
+        info_service = SessionInfoService()
+        session_info = await info_service.resolve_session(session_id)
+        full_session_id = session_info.session_id
+
         # Initialize delete service
         delete_service = SessionDeleteService(project_path)
 
         # Delete the session
         result = await delete_service.delete_session(
-            session_id=session_id,
+            session_id=full_session_id,
             force=force,
             no_backup=no_backup,
             dry_run=dry_run,
@@ -503,15 +513,21 @@ async def _delete_async(
             typer.secho('Dry run - would delete:', fg=typer.colors.YELLOW)
             typer.echo(f'  Session ID: {result.session_id}')
             typer.echo(f'  Files: {result.files_deleted}')
+            typer.echo(f'  Directories: {len(result.directories_removed)}')
             typer.echo(f'  Size: {result.size_freed_bytes:,} bytes')
             if verbose:
                 typer.echo('\n  Files to delete:')
                 for path in result.deleted_files:
                     typer.echo(f'    - {path}')
+                if result.directories_removed:
+                    typer.echo('\n  Directories to clean up:')
+                    for path in result.directories_removed:
+                        typer.echo(f'    - {path}')
         else:
             typer.secho('✓ Session deleted successfully!', fg=typer.colors.GREEN)
             typer.echo(f'  Session ID: {result.session_id}')
             typer.echo(f'  Files deleted: {result.files_deleted}')
+            typer.echo(f'  Directories removed: {len(result.directories_removed)}')
             typer.echo(f'  Size freed: {result.size_freed_bytes:,} bytes')
             typer.echo(f'  Duration: {result.duration_ms:.0f}ms')
             if result.backup_path:
@@ -520,14 +536,13 @@ async def _delete_async(
                 typer.echo('To undo, run:')
                 typer.secho(f'  claude-session restore --in-place {result.backup_path}', fg=typer.colors.CYAN)
 
-            if result.failed_deletions:
-                typer.echo()
-                typer.secho('Warning: Some files failed to delete:', fg=typer.colors.YELLOW)
-                for failure in result.failed_deletions:
-                    typer.echo(f'  - {failure}')
-
     except FileNotFoundError as e:
         typer.secho(f'Error: {e}', fg=typer.colors.RED, err=True)
+        raise typer.Exit(1)
+    except AmbiguousSessionError as e:
+        typer.secho(f'Error: {e}', fg=typer.colors.RED, err=True)
+        typer.echo()
+        typer.echo('Please provide a more specific session ID prefix.')
         raise typer.Exit(1)
     except Exception as e:
         await logger.error(f'Failed to delete session: {e}')
@@ -550,50 +565,60 @@ def lineage(
         claude-session lineage c3bac5a6 --format tree
         claude-session lineage 019b53ff --format json
     """
-    lineage_service = LineageService()
-    entry = lineage_service.get_entry(session_id)
+    try:
+        lineage_service = LineageService()
 
-    if format == 'text':
-        if entry:
-            typer.echo(f'Session: {entry.child_session_id}')
-            typer.echo(f'Parent:  {entry.parent_session_id}')
-            typer.echo(f'Cloned:  {entry.cloned_at}')
-            typer.echo(f'Method:  {entry.method}')
-            typer.echo(f'Source:  {entry.parent_project_path}')
-            typer.echo(f'Target:  {entry.target_project_path}')
-            typer.echo(f'Machine: {entry.target_machine_id}')
-            if entry.parent_machine_id:
-                if entry.parent_machine_id != entry.target_machine_id:
-                    typer.secho(f'Source Machine: {entry.parent_machine_id} (cross-machine)', fg=typer.colors.YELLOW)
-                else:
-                    typer.echo(f'Source Machine: {entry.parent_machine_id} (same machine)')
-            if entry.archive_path:
-                typer.echo(f'Archive: {entry.archive_path}')
-            if entry.paths_translated:
-                typer.secho('Paths translated: yes', fg=typer.colors.CYAN)
-        else:
-            typer.secho(f'No lineage entry found for {session_id}', fg=typer.colors.YELLOW)
-            typer.echo('(This is either a native session or lineage tracking was not enabled)')
+        if format == 'text':
+            entry = lineage_service.get_entry(session_id)
+            if entry:
+                typer.echo(f'Session: {entry.child_session_id}')
+                typer.echo(f'Parent:  {entry.parent_session_id}')
+                typer.echo(f'Cloned:  {entry.cloned_at}')
+                typer.echo(f'Method:  {entry.method}')
+                typer.echo(f'Source:  {entry.parent_project_path}')
+                typer.echo(f'Target:  {entry.target_project_path}')
+                typer.echo(f'Machine: {entry.target_machine_id}')
+                if entry.parent_machine_id:
+                    if entry.parent_machine_id != entry.target_machine_id:
+                        typer.secho(
+                            f'Source Machine: {entry.parent_machine_id} (cross-machine)', fg=typer.colors.YELLOW
+                        )
+                    else:
+                        typer.echo(f'Source Machine: {entry.parent_machine_id} (same machine)')
+                if entry.archive_path:
+                    typer.echo(f'Archive: {entry.archive_path}')
+                if entry.paths_translated:
+                    typer.secho('Paths translated: yes', fg=typer.colors.CYAN)
+            else:
+                typer.secho(f'No lineage entry found for {session_id}', fg=typer.colors.YELLOW)
+                typer.echo('(This is either a native session or lineage tracking was not enabled)')
 
-    elif format == 'tree':
-        ancestry = lineage_service.get_ancestry(session_id)
-        if not ancestry:
-            typer.secho(f'No lineage found for {session_id}', fg=typer.colors.YELLOW)
-        else:
-            for i, ancestor_id in enumerate(ancestry):
-                indent = '  ' * i
-                prefix = '└─ ' if i > 0 else ''
-                # Highlight the requested session
-                if ancestor_id == session_id or ancestor_id.startswith(session_id):
-                    typer.secho(f'{indent}{prefix}{ancestor_id}', fg=typer.colors.GREEN)
-                else:
-                    typer.echo(f'{indent}{prefix}{ancestor_id}')
+        elif format == 'tree':
+            ancestry = lineage_service.get_ancestry(session_id)
+            if not ancestry:
+                typer.secho(f'No lineage found for {session_id}', fg=typer.colors.YELLOW)
+            else:
+                for i, ancestor_id in enumerate(ancestry):
+                    indent = '  ' * i
+                    prefix = '└─ ' if i > 0 else ''
+                    # Highlight the requested session
+                    if ancestor_id == session_id or ancestor_id.startswith(session_id):
+                        typer.secho(f'{indent}{prefix}{ancestor_id}', fg=typer.colors.GREEN)
+                    else:
+                        typer.echo(f'{indent}{prefix}{ancestor_id}')
 
-    elif format == 'json':
-        if entry:
-            typer.echo(entry.model_dump_json(indent=2))
-        else:
-            typer.echo('null')
+        elif format == 'json':
+            entry = lineage_service.get_entry(session_id)
+            if entry:
+                typer.echo(entry.model_dump_json(indent=2))
+            else:
+                typer.echo('null')
+
+    except AmbiguousSessionError as e:
+        typer.secho(f'Error: {e}', fg=typer.colors.RED, err=True)
+        typer.echo()
+        typer.echo('Please provide a more specific session ID prefix.')
+        raise typer.Exit(1)
 
 
 @app.command()
@@ -619,7 +644,16 @@ async def _info_async(
 ) -> None:
     """Async implementation of info command."""
     info_service = SessionInfoService()
-    context = await info_service.get_info(session_id)
+    try:
+        context = await info_service.get_info(session_id)
+    except FileNotFoundError as e:
+        typer.secho(f'Error: {e}', fg=typer.colors.RED, err=True)
+        raise typer.Exit(1)
+    except AmbiguousSessionError as e:
+        typer.secho(f'Error: {e}', fg=typer.colors.RED, err=True)
+        typer.echo()
+        typer.echo('Please provide a more specific session ID prefix.')
+        raise typer.Exit(1)
 
     if format == 'json':
         typer.echo(context.model_dump_json(indent=2))

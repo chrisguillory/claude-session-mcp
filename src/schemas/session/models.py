@@ -388,9 +388,9 @@ class TaskToolInput(StrictModel):
         mode: Permission mode for the agent (Claude Code 2.1.19+)
     """
 
+    description: str | None = None  # Usually present but some early records lack it
     prompt: str
     subagent_type: str
-    description: str | None = None  # Usually present but some early records lack it
     allowed_tools: Sequence[str] | None = None  # Tools to grant the subagent
     run_in_background: bool | None = None
     model: str | None = None
