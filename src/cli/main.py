@@ -20,7 +20,7 @@ import httpx
 import typer
 
 from src.cli.logger import CLILogger
-from src.exceptions import AmbiguousSessionError
+from src.exceptions import ClaudeSessionError
 from src.launcher import launch_claude_with_session
 from src.services.archive import SessionArchiveService
 from src.services.clone import SessionCloneService
@@ -210,13 +210,8 @@ async def _archive_async(
                     for file_meta in metadata.files:
                         typer.echo(f'    - {file_meta.filename}: {file_meta.record_count} records')
 
-    except FileExistsError as e:
+    except (ClaudeSessionError, FileNotFoundError, FileExistsError) as e:
         typer.secho(f'Error: {e}', fg=typer.colors.RED, err=True)
-        raise typer.Exit(1)
-    except AmbiguousSessionError as e:
-        typer.secho(f'Error: {e}', fg=typer.colors.RED, err=True)
-        typer.echo()
-        typer.echo('Please provide a more specific session ID prefix.')
         raise typer.Exit(1)
     except Exception as e:
         await logger.error(f'Failed to create archive: {e}')
@@ -432,13 +427,8 @@ async def _clone_async(
             typer.echo('To continue this session, run:')
             typer.secho(f'  claude --resume {result.new_session_id}', fg=typer.colors.CYAN)
 
-    except FileNotFoundError as e:
+    except (ClaudeSessionError, FileNotFoundError, FileExistsError) as e:
         typer.secho(f'Error: {e}', fg=typer.colors.RED, err=True)
-        raise typer.Exit(1)
-    except AmbiguousSessionError as e:
-        typer.secho(f'Error: {e}', fg=typer.colors.RED, err=True)
-        typer.echo()
-        typer.echo('Please provide a more specific session ID prefix.')
         raise typer.Exit(1)
     except Exception as e:
         await logger.error(f'Failed to clone session: {e}')
@@ -451,6 +441,7 @@ async def _clone_async(
 def delete(
     session_id: str = typer.Argument(..., help='Session ID to delete'),
     force: bool = typer.Option(False, '--force', '-f', help='Required to delete native (UUIDv4) sessions'),
+    terminate: bool = typer.Option(False, '--terminate', '-t', help='Terminate running Claude process before deletion'),
     no_backup: bool = typer.Option(False, '--no-backup', help="Don't keep a backup file for undo"),
     dry_run: bool = typer.Option(False, '--dry-run', help='Preview what would be deleted'),
     project: Path | None = typer.Option(None, '--project', '-p', help='Project directory (default: current)'),
@@ -461,15 +452,20 @@ def delete(
     By default, only cloned/restored sessions (UUIDv7) can be deleted.
     Native Claude sessions (UUIDv4) require --force.
 
+    If the session is currently running, use --terminate to kill the Claude
+    process before deletion. This prevents the session file from being
+    recreated when the process exits.
+
     A backup is saved to ~/.claude-session-mcp/deleted/ for undo capability.
     Use 'restore --in-place' on the backup to undo.
     """
-    asyncio.run(_delete_async(session_id, force, no_backup, dry_run, project, verbose))
+    asyncio.run(_delete_async(session_id, force, terminate, no_backup, dry_run, project, verbose))
 
 
 async def _delete_async(
     session_id: str,
     force: bool,
+    terminate: bool,
     no_backup: bool,
     dry_run: bool,
     project: Path | None,
@@ -493,8 +489,32 @@ async def _delete_async(
         session_info = await info_service.resolve_session(session_id)
         full_session_id = session_info.session_id
 
+        # Check if session is running
+        is_running, running_pid = info_service.is_session_running(full_session_id)
+
+        if is_running:
+            assert running_pid is not None  # is_running=True guarantees this
+            if dry_run:
+                # Dry-run: show warning but continue
+                typer.secho(f'Warning: Session is currently running (PID {running_pid})', fg=typer.colors.YELLOW)
+            elif not terminate:
+                # Running without --terminate: error
+                typer.secho(
+                    f'Error: Session {full_session_id[:12]}... is currently running (PID {running_pid}).',
+                    fg=typer.colors.RED,
+                    err=True,
+                )
+                typer.echo('Use --terminate to kill the process before deletion.', err=True)
+                raise typer.Exit(1)
+            else:
+                # Running with --terminate: will terminate
+                await logger.info(f'Session is running (PID {running_pid}), will terminate before deletion')
+
         # Initialize delete service
         delete_service = SessionDeleteService(project_path)
+
+        # Pass PID to terminate if running and --terminate was specified
+        terminate_pid = running_pid if is_running and terminate and not dry_run else None
 
         # Delete the session
         result = await delete_service.delete_session(
@@ -503,6 +523,7 @@ async def _delete_async(
             no_backup=no_backup,
             dry_run=dry_run,
             logger=logger,
+            terminate_pid_before_delete=terminate_pid,
         )
 
         if not result.success:
@@ -536,13 +557,8 @@ async def _delete_async(
                 typer.echo('To undo, run:')
                 typer.secho(f'  claude-session restore --in-place {result.backup_path}', fg=typer.colors.CYAN)
 
-    except FileNotFoundError as e:
+    except (ClaudeSessionError, FileNotFoundError, FileExistsError) as e:
         typer.secho(f'Error: {e}', fg=typer.colors.RED, err=True)
-        raise typer.Exit(1)
-    except AmbiguousSessionError as e:
-        typer.secho(f'Error: {e}', fg=typer.colors.RED, err=True)
-        typer.echo()
-        typer.echo('Please provide a more specific session ID prefix.')
         raise typer.Exit(1)
     except Exception as e:
         await logger.error(f'Failed to delete session: {e}')
@@ -614,10 +630,8 @@ def lineage(
             else:
                 typer.echo('null')
 
-    except AmbiguousSessionError as e:
+    except ClaudeSessionError as e:
         typer.secho(f'Error: {e}', fg=typer.colors.RED, err=True)
-        typer.echo()
-        typer.echo('Please provide a more specific session ID prefix.')
         raise typer.Exit(1)
 
 
@@ -646,13 +660,8 @@ async def _info_async(
     info_service = SessionInfoService()
     try:
         context = await info_service.get_info(session_id)
-    except FileNotFoundError as e:
+    except (ClaudeSessionError, FileNotFoundError) as e:
         typer.secho(f'Error: {e}', fg=typer.colors.RED, err=True)
-        raise typer.Exit(1)
-    except AmbiguousSessionError as e:
-        typer.secho(f'Error: {e}', fg=typer.colors.RED, err=True)
-        typer.echo()
-        typer.echo('Please provide a more specific session ID prefix.')
         raise typer.Exit(1)
 
     if format == 'json':

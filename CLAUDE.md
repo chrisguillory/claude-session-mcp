@@ -51,6 +51,7 @@ Common fields and their meanings:
 - **`parentUuid`**: Links to preceding message; establishes conversation thread (null for root records)
 - **`cwd`**: Working directory at time of record (absolute path)
 - **`isSidechain`**: Message from an agent or subprocess (references `agent-{agentId}.jsonl`)
+- **`agentId`**: Agent identifier; typed agents use `<type>-<hex>` format (e.g., `aprompt_suggestion-a1b2c3`)
 - **`slug`**: Human-readable session identifier (e.g., "jiggly-churning-rabbit") - may change within session
 - **`leafUuid`**: Most recent message in a conversation branch (used in summary records)
 - **`compactMetadata`**: Session compression metadata (`trigger`: auto/manual, `preTokens`: token count before compaction)

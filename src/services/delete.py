@@ -27,14 +27,19 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
+import signal
+import time
 import uuid
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 
+from src.exceptions import NativeSessionDeletionError
 from src.paths import encode_path
 from src.protocols import LoggerProtocol
+from src.schemas.operations.archive import SessionArchive
 from src.schemas.operations.delete import ArtifactFile, DeleteManifest, DeleteResult
 from src.services.archive import SessionArchiveService
 from src.services.artifacts import (
@@ -358,6 +363,7 @@ class SessionDeleteService:
         no_backup: bool = False,
         dry_run: bool = False,
         logger: LoggerProtocol | None = None,
+        terminate_pid_before_delete: int | None = None,
     ) -> DeleteResult:
         """
         Delete session artifacts with atomic rollback on failure.
@@ -412,21 +418,7 @@ class SessionDeleteService:
 
         # Safety check for native sessions (skip for dry_run)
         if manifest.is_native and not force and not dry_run:
-            return DeleteResult(
-                session_id=session_id,
-                was_dry_run=dry_run,
-                success=False,
-                error_message=(
-                    f'Session {session_id} is a native Claude session (UUIDv4). Use --force to delete native sessions.'
-                ),
-                backup_path=None,
-                files_deleted=0,
-                size_freed_bytes=0,
-                deleted_files=[],
-                directories_removed=[],
-                duration_ms=0,
-                deleted_at=start_time,
-            )
+            raise NativeSessionDeletionError(session_id)
 
         # Dry run - return what would be deleted
         if dry_run:
@@ -474,6 +466,15 @@ class SessionDeleteService:
                 duration_ms=(datetime.now(UTC) - start_time).total_seconds() * 1000,
                 deleted_at=datetime.now(UTC),
             )
+
+        # Self-deletion: terminate the calling process to prevent session file recreation
+        # This happens AFTER backup (rollback safety) but BEFORE deletion (no interference)
+        # Uses SIGKILL because SIGTERM allows graceful shutdown which writes to session file
+        if terminate_pid_before_delete is not None:
+            if logger:
+                await logger.info(f'Terminating process {terminate_pid_before_delete} (SIGKILL) before deletion')
+            os.kill(terminate_pid_before_delete, signal.SIGKILL)
+            time.sleep(0.2)  # Brief pause to ensure process termination
 
         # Perform atomic deletion with rollback on any failure
         try:
@@ -596,70 +597,60 @@ class SessionDeleteService:
         Reads the backup archive and writes files back to their original
         locations. This is simpler than the normal restore flow because
         we're restoring to the same session ID and paths.
+
+        Uses SessionArchive Pydantic model for type-safe parsing.
         """
         logger.info(f'Rolling back from backup: {backup_path}')
 
-        # Read the backup archive
+        # Parse backup using SessionArchive model (strict typing)
         backup_data = json.loads(backup_path.read_text(encoding='utf-8'))
+        archive = SessionArchive.model_validate(backup_data)
 
-        # Extract metadata
-        metadata = backup_data.get('metadata', {})
-        original_project_path = metadata.get('source_project_path')
-
-        if not original_project_path:
-            raise ValueError('Backup missing source_project_path metadata')
-
-        # Get target directory
-        encoded_path = encode_path(Path(original_project_path))
+        # Get target directory from archive metadata
+        encoded_path = encode_path(Path(archive.original_project_path))
         target_dir = self.claude_sessions_dir / encoded_path
         target_dir.mkdir(parents=True, exist_ok=True)
 
         # Restore session files (main + agents)
-        session_files = backup_data.get('session_files', {})
-        for filename, records in session_files.items():
+        for filename, records in archive.files.items():
             file_path = target_dir / filename
             with open(file_path, 'w', encoding='utf-8') as f:
                 for record in records:
-                    f.write(json.dumps(record, separators=(',', ':')) + '\n')
+                    # SessionRecord objects need to be serialized
+                    record_dict = record.model_dump(mode='json', exclude_none=True)
+                    f.write(json.dumps(record_dict, separators=(',', ':')) + '\n')
             logger.info(f'Restored: {file_path}')
 
         # Restore tool results
-        tool_results = backup_data.get('tool_results', {})
-        if tool_results:
-            session_id = metadata.get('session_id')
-            tool_results_dir = get_tool_results_dir(target_dir, session_id)
+        if archive.tool_results:
+            tool_results_dir = get_tool_results_dir(target_dir, archive.session_id)
             tool_results_dir.mkdir(parents=True, exist_ok=True)
 
-            for tool_use_id, content in tool_results.items():
+            for tool_use_id, content in archive.tool_results.items():
                 file_path = tool_results_dir / f'{tool_use_id}.txt'
                 file_path.write_text(content, encoding='utf-8')
-            logger.info(f'Restored {len(tool_results)} tool result files')
+            logger.info(f'Restored {len(archive.tool_results)} tool result files')
 
         # Restore todo files
-        todos = backup_data.get('todos', {})
-        if todos:
+        if archive.todos:
             TODOS_DIR.mkdir(parents=True, exist_ok=True)
-            for filename, content in todos.items():
+            for filename, content in archive.todos.items():
                 file_path = TODOS_DIR / filename
-                file_path.write_text(
-                    json.dumps(content, indent=2, separators=(',', ': ')),
-                    encoding='utf-8',
-                )
-            logger.info(f'Restored {len(todos)} todo files')
+                # todos content is already JSON string in archive
+                file_path.write_text(content, encoding='utf-8')
+            logger.info(f'Restored {len(archive.todos)} todo files')
 
         # Restore plan files
-        plan_files = backup_data.get('plan_files', {})
-        if plan_files:
+        if archive.plan_files:
             plans_dir = Path.home() / '.claude' / 'plans'
             plans_dir.mkdir(parents=True, exist_ok=True)
-            for filename, content in plan_files.items():
+            for filename, content in archive.plan_files.items():
                 file_path = plans_dir / filename
                 file_path.write_text(content, encoding='utf-8')
-            logger.info(f'Restored {len(plan_files)} plan files')
+            logger.info(f'Restored {len(archive.plan_files)} plan files')
 
         # Recreate session-env directory (usually empty)
-        session_id = metadata.get('session_id')
-        session_env_dir = SESSION_ENV_DIR / session_id
+        session_env_dir = SESSION_ENV_DIR / archive.session_id
         session_env_dir.mkdir(parents=True, exist_ok=True)
 
         logger.info('Rollback completed successfully')

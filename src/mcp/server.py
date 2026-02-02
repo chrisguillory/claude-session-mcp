@@ -31,6 +31,7 @@ import attrs
 import pydantic
 from mcp.server.fastmcp import Context, FastMCP
 
+from src.exceptions import RunningSessionDeletionError
 from src.mcp.utils import DualLogger
 from src.schemas.claude_workspace import SessionDatabase
 from src.schemas.operations.archive import ArchiveMetadata
@@ -333,6 +334,7 @@ def register_tools(state: ServerState) -> None:
     async def delete_session(
         session_id: str,
         force: bool = False,
+        terminate_running: bool = False,
         no_backup: bool = False,
         dry_run: bool = False,
         ctx: Context[Any, Any, Any] | None = None,
@@ -343,6 +345,10 @@ def register_tools(state: ServerState) -> None:
         By default, only cloned/restored sessions (UUIDv7) can be deleted.
         Native Claude sessions (UUIDv4) require force=True.
 
+        If the session is currently running (another Claude process), set
+        terminate_running=True to kill it before deletion. For self-deletion
+        (deleting the current session), termination is automatic.
+
         Deletion is atomic with rollback on failure. A backup is always
         created for rollback capability. The no_backup flag only controls
         whether the backup is kept after successful deletion (for undo).
@@ -352,6 +358,7 @@ def register_tools(state: ServerState) -> None:
         Args:
             session_id: Session ID to delete
             force: Required to delete native (UUIDv4) sessions
+            terminate_running: Terminate running Claude process before deletion
             no_backup: Don't keep a backup file for undo
             dry_run: If True, show what would be deleted without actually deleting
 
@@ -368,6 +375,9 @@ def register_tools(state: ServerState) -> None:
 
             # Delete native session (requires force)
             result = await delete_session('a1b2c3d4-...', force=True)
+
+            # Delete a running session (requires terminate_running)
+            result = await delete_session('019b5232-...', terminate_running=True)
 
             # Delete without backup
             result = await delete_session('019b5232-...', no_backup=True)
@@ -388,6 +398,30 @@ def register_tools(state: ServerState) -> None:
         # Create delete service for current project
         delete_service = SessionDeleteService(state.project_path)
 
+        # Determine if termination is needed
+        is_self_delete = full_session_id == state.session_id
+
+        if is_self_delete:
+            # Self-deletion: auto-terminate (no flag needed)
+            terminate_pid = state.claude_pid if not dry_run else None
+        else:
+            # Other session: check if running
+            is_running, running_pid = info_service.is_session_running(full_session_id)
+            if is_running:
+                if dry_run:
+                    await logger.info(f'Warning: Session is currently running (PID {running_pid})')
+                    terminate_pid = None
+                elif not terminate_running:
+                    # Running without terminate_running: raise exception
+                    assert running_pid is not None  # is_running=True guarantees this
+                    raise RunningSessionDeletionError(full_session_id, running_pid)
+                else:
+                    # Running with terminate_running: will terminate
+                    await logger.info(f'Session is running (PID {running_pid}), will terminate before deletion')
+                    terminate_pid = running_pid
+            else:
+                terminate_pid = None
+
         # Delete the session
         result = await delete_service.delete_session(
             session_id=full_session_id,
@@ -395,6 +429,7 @@ def register_tools(state: ServerState) -> None:
             no_backup=no_backup,
             dry_run=dry_run,
             logger=logger,
+            terminate_pid_before_delete=terminate_pid,
         )
 
         if result.success:
