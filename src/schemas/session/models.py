@@ -25,6 +25,7 @@ CLAUDE CODE VERSION COMPATIBILITY:
 - Schema v0.2.6: Added StopHookSummarySystemRecord, resume field to AgentProgressData (2.1.14+),
                  TaskCreate/TaskUpdate/TaskList tool inputs and results (2.1.17+)
 - Schema v0.2.7: Added SimpleThinkingMetadata, McpMeta, MCPStructuredContent, Task tool mode field (2.1.19+)
+- Schema v0.2.8: Added timeoutMs to BashProgressData (2.1.25+)
 - If validation fails, Claude Code schema may have changed - update models accordingly
 
 NEW FIELDS IN CLAUDE CODE 2.0.51+ (Schema v0.1.3):
@@ -118,9 +119,9 @@ from src.schemas.types import BaseStrictModel, EmptyDict, EmptySequence, ModelId
 
 SCHEMA_VERSION = '0.2.8'
 CLAUDE_CODE_MIN_VERSION = '2.0.35'
-CLAUDE_CODE_MAX_VERSION = '2.1.19'
-LAST_VALIDATED = '2026-01-24'
-VALIDATION_RECORD_COUNT = 221_695
+CLAUDE_CODE_MAX_VERSION = '2.1.25'
+LAST_VALIDATED = '2026-01-30'
+VALIDATION_RECORD_COUNT = 255_102
 
 
 # ==============================================================================
@@ -409,9 +410,9 @@ class TaskToolInput(StrictModel):
         mode: Permission mode for the agent (Claude Code 2.1.19+)
     """
 
+    description: str | None = None  # Usually present but some early records lack it
     prompt: str
     subagent_type: str
-    description: str | None = None  # Usually present but some early records lack it
     allowed_tools: Sequence[str] | None = None  # Tools to grant the subagent
     run_in_background: bool | None = None
     model: str | None = None
@@ -455,7 +456,7 @@ class TaskUpdateToolInput(StrictModel):
     """
 
     taskId: str
-    status: Literal['pending', 'in_progress', 'completed'] | None = None
+    status: Literal['pending', 'in_progress', 'completed', 'deleted'] | None = None
     description: str | None = None  # Updated task description
     owner: str | None = None
     addBlockedBy: Sequence[str] | None = None
@@ -566,6 +567,13 @@ class AskUserQuestionToolInput(StrictModel):
 # ==============================================================================
 
 
+class PromptPermission(StrictModel):
+    """A prompt-based permission request in ExitPlanMode."""
+
+    tool: str
+    prompt: str
+
+
 class ExitPlanModeToolInput(StrictModel):
     """Input for ExitPlanMode tool - exits planning mode.
 
@@ -575,12 +583,14 @@ class ExitPlanModeToolInput(StrictModel):
     Fields:
         plan: Plan content in markdown (optional)
         launchSwarm: Whether to launch swarm agents (optional)
-        allowedPrompts: Permission requests (only empty arrays observed so far)
+        allowedPrompts: Prompt-based permission requests (tool + prompt pairs)
+        pushToRemote: Whether to push plan to remote Claude.ai session
     """
 
     plan: str | None = None
     launchSwarm: bool | None = None
-    allowedPrompts: EmptySequence | None = None
+    allowedPrompts: Sequence[PromptPermission] | None = None
+    pushToRemote: bool | None = None
 
 
 # ==============================================================================
@@ -2143,6 +2153,7 @@ class BashProgressData(StrictModel):
     fullOutput: str
     elapsedTimeSeconds: int
     totalLines: int
+    timeoutMs: int | None = None  # Present when command has explicit timeout
 
 
 class WaitingForTaskData(StrictModel):

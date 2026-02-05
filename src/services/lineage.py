@@ -16,6 +16,7 @@ from typing import Literal
 
 from filelock import FileLock
 
+from src.exceptions import AmbiguousSessionError
 from src.schemas.operations.lineage import LineageEntry, LineageFile, LineageResult
 
 __all__ = [
@@ -106,6 +107,9 @@ class LineageService:
 
         Returns:
             LineageEntry if found, None otherwise
+
+        Raises:
+            AmbiguousSessionError: If prefix matches multiple sessions
         """
         if not self.lineage_file.exists():
             return None
@@ -118,6 +122,8 @@ class LineageService:
 
         # Try prefix match
         matches = [sid for sid in lineage.sessions if sid.startswith(session_id)]
+        if len(matches) > 1:
+            raise AmbiguousSessionError(session_id, matches)
         if len(matches) == 1:
             return lineage.sessions[matches[0]]
 

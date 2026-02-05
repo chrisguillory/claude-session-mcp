@@ -343,16 +343,16 @@ def register_tools(state: ServerState) -> None:
         By default, only cloned/restored sessions (UUIDv7) can be deleted.
         Native Claude sessions (UUIDv4) require force=True.
 
-        Before deletion, an archive is automatically created at
-        ~/.claude-session-mcp/deleted/<session-id>-<timestamp>.json
-        unless no_backup=True.
+        Deletion is atomic with rollback on failure. A backup is always
+        created for rollback capability. The no_backup flag only controls
+        whether the backup is kept after successful deletion (for undo).
 
         Use restore --in-place on the backup to undo a delete.
 
         Args:
             session_id: Session ID to delete
             force: Required to delete native (UUIDv4) sessions
-            no_backup: Skip auto-backup before deletion
+            no_backup: Don't keep a backup file for undo
             dry_run: If True, show what would be deleted without actually deleting
 
         Returns:
@@ -382,7 +382,7 @@ def register_tools(state: ServerState) -> None:
 
         # Resolve prefix to full session ID
         info_service = SessionInfoService()
-        session_info = await info_service._resolve_session(session_id)
+        session_info = await info_service.resolve_session(session_id)
         full_session_id = session_info.session_id
 
         # Create delete service for current project
@@ -400,10 +400,14 @@ def register_tools(state: ServerState) -> None:
         if result.success:
             if dry_run:
                 await logger.info(
-                    f'Dry run: would delete {result.files_deleted} files ({result.size_freed_bytes:,} bytes)'
+                    f'Dry run: would delete {result.files_deleted} files, '
+                    f'{len(result.directories_removed)} directories ({result.size_freed_bytes:,} bytes)'
                 )
             else:
-                await logger.info(f'Deleted {result.files_deleted} files ({result.size_freed_bytes:,} bytes)')
+                await logger.info(
+                    f'Deleted {result.files_deleted} files, '
+                    f'{len(result.directories_removed)} directories ({result.size_freed_bytes:,} bytes)'
+                )
                 if result.backup_path:
                     await logger.info(f'Backup: {result.backup_path}')
                     await logger.info(f'To undo: claude-session restore --in-place {result.backup_path}')
@@ -446,7 +450,7 @@ def register_tools(state: ServerState) -> None:
 
         # Resolve prefix to full session ID and validate session exists
         info_service = SessionInfoService()
-        session_info = await info_service._resolve_session(target_id_or_prefix)
+        session_info = await info_service.resolve_session(target_id_or_prefix)
         target_id = session_info.session_id
 
         await logger.info(f'Looking up lineage for session: {target_id[:12]}...')
@@ -597,7 +601,7 @@ def register_tools(state: ServerState) -> None:
 
         # Resolve prefix to full session ID
         info_service = SessionInfoService()
-        session_info = await info_service._resolve_session(target_id_or_prefix)
+        session_info = await info_service.resolve_session(target_id_or_prefix)
         target_id = session_info.session_id
 
         await logger.info(f'Saving session to Gist: {target_id[:12]}...')

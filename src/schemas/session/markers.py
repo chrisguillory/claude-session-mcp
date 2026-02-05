@@ -10,6 +10,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Annotated
 
+from src.schemas.types import PathStr
+
 
 @dataclass(frozen=True)
 class PathMarker:
@@ -18,6 +20,8 @@ class PathMarker:
     pass
 
 
-# Type aliases for path fields
-type PathField = Annotated[str, PathMarker()]
-type PathListField = Annotated[list[str], PathMarker()]
+type PathField = Annotated[PathStr, PathMarker()]
+"""A path that needs translation during cross-machine restore."""
+
+type PathListField = Annotated[list[PathStr], PathMarker()]
+"""A list of paths that need translation during cross-machine restore."""

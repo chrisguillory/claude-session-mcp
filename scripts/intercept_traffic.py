@@ -581,6 +581,54 @@ def _parse_body(content: bytes | None, content_type: str) -> dict[str, Any]:
         ]
         if text_deltas:
             result['concatenated_text'] = ''.join(text_deltas)
+
+        # Concatenate thinking_delta events for analysis
+        thinking_deltas = [
+            e.get('parsed_data', {}).get('delta', {}).get('thinking', '')
+            for e in events
+            if e.get('parsed_data', {}).get('delta', {}).get('type') == 'thinking_delta'
+        ]
+        if thinking_deltas:
+            result['concatenated_thinking'] = ''.join(thinking_deltas)
+
+        # Concatenate input_json_delta events for tool call analysis
+        input_json_deltas = [
+            e.get('parsed_data', {}).get('delta', {}).get('partial_json', '')
+            for e in events
+            if e.get('parsed_data', {}).get('delta', {}).get('type') == 'input_json_delta'
+        ]
+        if input_json_deltas:
+            combined = ''.join(input_json_deltas)
+            try:
+                result['concatenated_tool_input'] = json.loads(combined)
+            except json.JSONDecodeError:
+                result['concatenated_tool_input_partial'] = combined
+
+        # Extract response summary/metadata from message events
+        summary: dict[str, Any] = {}
+        content_block_types: list[str] = []
+        for e in events:
+            pd = e.get('parsed_data', {})
+            event_type = pd.get('type')
+            if event_type == 'message_start':
+                msg = pd.get('message', {})
+                summary['model'] = msg.get('model')
+                summary['message_id'] = msg.get('id')
+                summary['initial_usage'] = msg.get('usage')
+            elif event_type == 'message_delta':
+                summary['stop_reason'] = pd.get('delta', {}).get('stop_reason')
+                summary['final_usage'] = pd.get('usage')
+            elif event_type == 'content_block_start':
+                cb = pd.get('content_block', {})
+                cb_type = cb.get('type')
+                if cb_type:
+                    content_block_types.append(cb_type)
+
+        if summary:
+            result['summary'] = summary
+        if content_block_types:
+            result['content_block_types'] = content_block_types
+
         return result
 
     # JSON

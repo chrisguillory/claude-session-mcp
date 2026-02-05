@@ -134,8 +134,11 @@ Example:
 # Primitive Types
 # ==============================================================================
 
-# Pydantic-enhanced datetime for JSON serialization (allows string->datetime conversion)
-JsonDatetime = Annotated[datetime, pydantic.Field(strict=False)]
+type JsonDatetime = Annotated[datetime, pydantic.Field(strict=False)]
+"""Pydantic-enhanced datetime for JSON serialization (allows string->datetime conversion)."""
+
+type PathStr = str
+"""A filesystem path (file or directory) as a string."""
 
 
 # ==============================================================================
