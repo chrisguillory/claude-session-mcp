@@ -1306,6 +1306,33 @@ class TaskSingleToolResult(StrictModel):
 
 
 # ==============================================================================
+# Task Model (Session Artifact - On-Disk Format)
+# ==============================================================================
+#
+# Task files are session-scoped artifacts stored separately from session JSONL.
+# They don't appear in session records but are persisted under the session ID.
+#
+# Path: ~/.claude/tasks/{session_id}/{id}.json
+# ==============================================================================
+
+
+class Task(StrictModel):
+    """Canonical task model (on-disk format).
+
+    Path: ~/.claude/tasks/{session_id}/{id}.json
+    """
+
+    id: str  # Matches filename without .json
+    subject: str  # Brief imperative title (e.g., "Run tests")
+    description: str  # Detailed what-to-do with acceptance criteria
+    activeForm: str  # Present continuous for UI spinner (e.g., "Running tests")
+    status: Literal['pending', 'in_progress', 'completed']
+    blocks: Sequence[str]  # Task IDs that cannot start until this completes
+    blockedBy: Sequence[str]  # Task IDs that must complete before this starts
+    owner: str | None = None  # Agent/owner identifier
+
+
+# ==============================================================================
 # AskUserQuestion Structures
 # ==============================================================================
 

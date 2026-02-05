@@ -437,6 +437,79 @@ When Claude Code updates break validation:
 3. Update `src/schemas/session/models.py` with new fields/types
 4. Bump schema version in models.py header
 
+## Model Definition Ordering
+
+**Use composite-first (top-down) ordering** when defining Pydantic models. Show the complete assembled structure first, then define its constituent parts below.
+
+### The Pattern
+
+```python
+# GOOD: Composite-first ordering
+# 1. Show the complete structure first (what the reader cares about)
+class SessionArchive(StrictModel):
+    main_session: MainSessionFileEntry
+    agent_files: Sequence[AgentFileEntry]
+    plan_files: Sequence[PlanFileEntry]
+
+# 2. Then define the constituent types it references
+class MainSessionFileEntry(StrictModel):
+    filename: str
+    records: Sequence[SessionRecord]
+
+class AgentFileEntry(StrictModel):
+    filename: str
+    nested: bool
+    records: Sequence[SessionRecord]
+
+class PlanFileEntry(StrictModel):
+    slug: str
+    content: str
+```
+
+### Why This Matters
+
+1. **Reader-friendly**: The main structure answers "what does this look like?" immediately
+2. **Self-documenting**: Field types in the composite serve as a table of contents
+3. **API-style**: Matches how documentation typically presents complex structures
+4. **Dependency clarity**: Reading top-to-bottom reveals the dependency graph
+
+### The Anti-Pattern
+
+```python
+# BAD: Bottom-up ordering (forces reader to scroll to understand the whole)
+class PlanFileEntry(StrictModel):
+    slug: str
+    content: str
+
+class AgentFileEntry(StrictModel):
+    filename: str
+    nested: bool
+
+class MainSessionFileEntry(StrictModel):
+    filename: str
+    records: Sequence[SessionRecord]
+
+# Reader has to scroll past all these to see what they compose into
+class SessionArchive(StrictModel):
+    main_session: MainSessionFileEntry
+    agent_files: Sequence[AgentFileEntry]
+    plan_files: Sequence[PlanFileEntry]
+```
+
+### Python Forward References
+
+Python allows forward references via string annotations or `from __future__ import annotations`. Use these to enable composite-first ordering:
+
+```python
+from __future__ import annotations
+
+class SessionArchive(StrictModel):
+    agent_files: Sequence[AgentFileEntry]  # AgentFileEntry defined below
+
+class AgentFileEntry(StrictModel):  # Definition follows reference
+    ...
+```
+
 ## Git Workflow
 
 **Setup**: Ensure dev dependencies are installed before committing:

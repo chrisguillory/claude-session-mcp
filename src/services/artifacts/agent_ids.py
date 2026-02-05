@@ -31,6 +31,8 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping, Sequence, Set
+from dataclasses import dataclass
+from pathlib import Path
 
 from src.schemas.session import SessionRecord
 
@@ -48,6 +50,54 @@ AGENT_FILENAME_PATTERN = re.compile(
     r')'
     r'\.jsonl$'
 )
+
+
+@dataclass
+class AgentFileInfo:
+    """Agent file information for processing.
+
+    Lightweight structure for clone/restore operations that combines
+    filename, parsed agent ID, and structure metadata.
+
+    Not used for serialization (see AgentFileEntry in operations/archive.py).
+    """
+
+    filename: str
+    agent_id: str
+    nested: bool
+
+
+def collect_agent_file_info(
+    files_data: Mapping[str, Sequence[SessionRecord]],
+    agent_structure: Mapping[str, bool],
+) -> list[AgentFileInfo]:
+    """
+    Collect agent file information from loaded session data.
+
+    Combines filename parsing with structure detection results.
+    Replaces pattern: `for filename in files_data: if startswith('agent-'): ...`
+
+    Uses AGENT_FILENAME_PATTERN for encapsulated parsing.
+
+    Args:
+        files_data: Mapping of filename -> records (from parser service)
+        agent_structure: Mapping of filename -> is_nested (from discovery)
+
+    Returns:
+        List of AgentFileInfo for each agent file found
+    """
+    result = []
+    for filename in files_data:
+        match = AGENT_FILENAME_PATTERN.match(filename)
+        if match:
+            result.append(
+                AgentFileInfo(
+                    filename=filename,
+                    agent_id=match.group(1),
+                    nested=agent_structure.get(filename, False),
+                )
+            )
+    return result
 
 
 def extract_base_agent_id(agent_id: str) -> str:
@@ -215,3 +265,48 @@ def apply_agent_id_mapping(json_str: str, agent_id_mapping: Mapping[str, str]) -
     for old_id, new_id in agent_id_mapping.items():
         result = result.replace(old_id, new_id)
     return result
+
+
+def detect_agent_structure(
+    agent_path: Path,
+    session_id: str,
+    project_folder: Path,
+) -> bool:
+    """
+    Detect if agent file is nested (subagents/) or flat.
+
+    Expected structures:
+    - Flat: <project>/agent-*.jsonl
+    - Nested: <project>/<session-id>/subagents/agent-*.jsonl
+
+    Args:
+        agent_path: Absolute path to agent file
+        session_id: Session ID (for validating nested structure)
+        project_folder: Project folder path
+
+    Returns:
+        True if nested, False if flat
+
+    Raises:
+        ValueError: If structure is unexpected (fail-fast)
+    """
+    try:
+        rel_path = agent_path.relative_to(project_folder)
+    except ValueError as e:
+        raise ValueError(f'Agent file outside project folder: {agent_path}') from e
+
+    parts = rel_path.parts
+
+    # Flat: (agent-*.jsonl,)
+    if len(parts) == 1:
+        return False
+
+    # Nested: (<session-id>, 'subagents', agent-*.jsonl)
+    if len(parts) == 3 and parts[0] == session_id and parts[1] == 'subagents':
+        return True
+
+    # Unexpected structure - fail fast
+    raise ValueError(
+        f'Unexpected agent file structure: {rel_path}\n'
+        f'Expected flat (agent-*.jsonl) or nested (<session-id>/subagents/agent-*.jsonl)'
+    )

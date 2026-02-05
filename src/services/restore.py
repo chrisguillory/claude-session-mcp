@@ -11,9 +11,10 @@ import base64
 import binascii
 import json
 import uuid
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import uuid6
 import zstandard
@@ -21,21 +22,23 @@ import zstandard
 from src.introspection import get_path_fields
 from src.paths import encode_path
 from src.protocols import LoggerProtocol
-from src.schemas.operations.archive import SessionArchive
+from src.schemas.operations.archive import (
+    SessionArchiveV1,
+    SessionArchiveV2,
+    migrate_v1_to_v2,
+)
 from src.schemas.operations.restore import RestoreResult
 from src.schemas.session import CustomTitleRecord, SessionRecord, SessionRecordAdapter
 from src.services.artifacts import (
+    TASKS_DIR,
     TODOS_DIR,
     apply_agent_id_mapping,
     apply_slug_mapping,
     create_session_env_dir,
-    extract_agent_ids_from_files,
     generate_agent_id_mapping,
     generate_clone_custom_title,
     generate_clone_slug,
-    transform_agent_filename,
-    transform_todo_filename,
-    write_todos,
+    write_tasks,
     write_tool_results,
 )
 from src.services.lineage import LineageService
@@ -237,8 +240,8 @@ class SessionRestoreService:
                 await logger.info(f'Generated new session ID (UUIDv7): {new_session_id}')
                 await logger.info(f'Original session ID: {archive.session_id}')
 
-            # Generate agent ID mapping for fork safety
-            agent_ids = extract_agent_ids_from_files(archive.files)
+            # Generate agent ID mapping for fork safety (from v2 agent_files)
+            agent_ids = {agent.agent_id for agent in archive.agent_files}
             agent_id_mapping = generate_agent_id_mapping(agent_ids, new_session_id)
             if logger and agent_id_mapping:
                 await logger.info(f'Generated {len(agent_id_mapping)} agent ID mappings')
@@ -248,9 +251,8 @@ class SessionRestoreService:
             # Pre-compute slug mapping (but don't write yet!)
             slug_mapping = {}
             if archive.plan_files:
-                # Generate new slug names without writing
                 slug_mapping = {
-                    old_slug: generate_clone_slug(old_slug, new_session_id) for old_slug in archive.plan_files
+                    plan.slug: generate_clone_slug(plan.slug, new_session_id) for plan in archive.plan_files
                 }
 
         # Get target directory and plans directory
@@ -263,41 +265,51 @@ class SessionRestoreService:
         # =========================================================================
         all_output_paths: list[Path] = []
 
-        # 1. Session files (main + agents)
-        for filename in archive.files:
-            if filename == f'{archive.session_id}.jsonl':
-                all_output_paths.append(target_dir / f'{new_session_id}.jsonl')
-            elif filename.startswith('agent-'):
-                if in_place:
-                    all_output_paths.append(target_dir / filename)
-                else:
-                    new_filename = transform_agent_filename(filename, agent_id_mapping)
-                    all_output_paths.append(target_dir / new_filename)
-            else:
-                all_output_paths.append(target_dir / filename)
+        # 1. Main session file
+        all_output_paths.append(target_dir / f'{new_session_id}.jsonl')
 
-        # 2. Tool results
+        # 2. Agent files (with nested structure awareness)
+        for agent in archive.agent_files:
+            if in_place:
+                new_agent_id = agent.agent_id
+            else:
+                new_agent_id = agent_id_mapping[agent.agent_id]
+
+            new_filename = f'agent-{new_agent_id}.jsonl'
+
+            if agent.nested:
+                # Nested: <target>/<new_session_id>/subagents/agent-*.jsonl
+                all_output_paths.append(target_dir / new_session_id / 'subagents' / new_filename)
+            else:
+                # Flat: <target>/agent-*.jsonl
+                all_output_paths.append(target_dir / new_filename)
+
+        # 3. Tool results
         if archive.tool_results:
             tool_results_dir = target_dir / new_session_id / 'tool-results'
-            all_output_paths.extend(tool_results_dir / f'{tool_use_id}.txt' for tool_use_id in archive.tool_results)
+            all_output_paths.extend(tool_results_dir / f'{tr.tool_use_id}.txt' for tr in archive.tool_results)
 
-        # 3. Todos
+        # 4. Todos
         if archive.todos:
-            for old_filename in archive.todos:
+            for todo in archive.todos:
                 if in_place:
+                    old_filename = f'{archive.session_id}-agent-{todo.agent_id}.json'
                     all_output_paths.append(TODOS_DIR / old_filename)
                 else:
-                    new_filename = transform_todo_filename(old_filename, archive.session_id, new_session_id)
+                    new_agent_id = agent_id_mapping.get(todo.agent_id, todo.agent_id)
+                    new_filename = f'{new_session_id}-agent-{new_agent_id}.json'
                     all_output_paths.append(TODOS_DIR / new_filename)
 
-        # 4. Plan files
+        # 5. Plan files
         if archive.plan_files:
             if in_place:
-                # In-place: use original slugs
-                all_output_paths.extend(plans_dir / f'{old_slug}.md' for old_slug in archive.plan_files)
+                all_output_paths.extend(plans_dir / f'{plan.slug}.md' for plan in archive.plan_files)
             else:
-                # Normal: use new slugs
                 all_output_paths.extend(plans_dir / f'{new_slug}.md' for new_slug in slug_mapping.values())
+
+        # 6. Tasks (only for in_place - tasks dir structure)
+        if in_place and archive.tasks:
+            all_output_paths.extend(TASKS_DIR / new_session_id / f'{task.id}.json' for task in archive.tasks)
 
         # Check ALL paths before writing ANYTHING
         existing_files = [p for p in all_output_paths if p.exists()]
@@ -318,96 +330,113 @@ class SessionRestoreService:
         if logger:
             await logger.info(f'Target directory: {target_dir}')
 
-        # Write plan files
+        # Track artifact counts for result
+        plan_files_restored = 0
+        tool_results_restored = 0
+        todos_restored = 0
+        tasks_restored = 0
+
+        # Write plan files (v2: entry.slug, entry.content)
         if archive.plan_files:
             plans_dir.mkdir(parents=True, exist_ok=True)
             if in_place:
-                # In-place: use original slugs
-                for old_slug, content in archive.plan_files.items():
-                    plan_path = plans_dir / f'{old_slug}.md'
-                    plan_path.write_text(content, encoding='utf-8')
+                for plan in archive.plan_files:
+                    plan_path = plans_dir / f'{plan.slug}.md'
+                    plan_path.write_text(plan.content, encoding='utf-8')
                 if logger:
                     await logger.info(f'Restored {len(archive.plan_files)} plan files (in-place)')
             else:
-                # Normal: use new slugs
-                for old_slug, content in archive.plan_files.items():
-                    new_slug = slug_mapping[old_slug]
+                for plan in archive.plan_files:
+                    new_slug = slug_mapping[plan.slug]
                     plan_path = plans_dir / f'{new_slug}.md'
-                    plan_path.write_text(content, encoding='utf-8')
+                    plan_path.write_text(plan.content, encoding='utf-8')
                 if logger:
                     await logger.info(f'Restored {len(slug_mapping)} plan files')
                     for old_slug, new_slug in slug_mapping.items():
                         await logger.info(f'  {old_slug} -> {new_slug}')
+            plan_files_restored = len(archive.plan_files)
 
-        # Write tool results (v1.2+ archives)
+        # Write tool results (v2: entry.tool_use_id, entry.content)
         if archive.tool_results:
-            tool_results_count = write_tool_results(archive.tool_results, target_dir, new_session_id)
+            tool_results_mapping = {tr.tool_use_id: tr.content for tr in archive.tool_results}
+            tool_results_restored = write_tool_results(tool_results_mapping, target_dir, new_session_id)
             if logger:
-                await logger.info(f'Restored {tool_results_count} tool result files')
+                await logger.info(f'Restored {tool_results_restored} tool result files')
 
-        # Write todos (v1.2+ archives)
+        # Write todos (v2: entry.agent_id, entry.content)
         if archive.todos:
-            if in_place:
-                TODOS_DIR.mkdir(parents=True, exist_ok=True)
-                for filename, content in archive.todos.items():
-                    (TODOS_DIR / filename).write_text(content, encoding='utf-8')
-                if logger:
-                    await logger.info(f'Restored {len(archive.todos)} todo files (in-place)')
-            else:
-                todos_mapping = write_todos(archive.todos, archive.session_id, new_session_id)
-                if logger:
-                    await logger.info(f'Restored {len(todos_mapping)} todo files')
+            TODOS_DIR.mkdir(parents=True, exist_ok=True)
+            for todo in archive.todos:
+                if in_place:
+                    filename = f'{archive.session_id}-agent-{todo.agent_id}.json'
+                else:
+                    new_agent_id = agent_id_mapping.get(todo.agent_id, todo.agent_id)
+                    filename = f'{new_session_id}-agent-{new_agent_id}.json'
+                (TODOS_DIR / filename).write_text(todo.content, encoding='utf-8')
+            todos_restored = len(archive.todos)
+            if logger:
+                await logger.info(f'Restored {todos_restored} todo files')
 
         # Create session-env directory
         create_session_env_dir(new_session_id)
 
-        # Restore session files
-        main_file_path = None
-        agent_files = []
-        total_records = 0
+        # Restore tasks (only for in_place mode)
+        if in_place and archive.tasks:
+            tasks_restored = write_tasks(new_session_id, archive.tasks)
+            if logger:
+                await logger.info(f'Restored {tasks_restored} tasks')
 
-        for filename, records in archive.files.items():
-            # Determine new filename
-            if filename == f'{archive.session_id}.jsonl':
-                new_filename = f'{new_session_id}.jsonl'
-                main_file_path = str(target_dir / new_filename)
-            elif filename.startswith('agent-'):
-                if in_place:
-                    new_filename = filename
-                else:
-                    new_filename = transform_agent_filename(filename, agent_id_mapping)
-                agent_files.append(str(target_dir / new_filename))
+        # Restore main session file
+        main_file_path = str(target_dir / f'{new_session_id}.jsonl')
+        main_records = list(
+            self._iter_transformed_records(
+                archive.main_session.records,
+                new_session_id,
+                translator,
+                in_place,
+            )
+        )
+        await self._write_jsonl(
+            target_dir / f'{new_session_id}.jsonl', main_records, slug_mapping, agent_id_mapping, logger
+        )
+        if logger:
+            await logger.info(f'Restored main session: {len(main_records)} records')
+
+        # Restore agent files (with nested structure)
+        agent_file_paths: list[str] = []
+        total_agent_records = 0
+
+        for agent in archive.agent_files:
+            # Determine new agent ID
+            if in_place:
+                new_agent_id = agent.agent_id
             else:
-                new_filename = filename
+                new_agent_id = agent_id_mapping[agent.agent_id]
 
-            # Update session IDs and translate paths in records
-            updated_records: list[SessionRecord] = []
-            for record in records:
-                # Transform CustomTitleRecord with clone title (only for non-in_place)
-                if isinstance(record, CustomTitleRecord) and not in_place:
-                    new_title = generate_clone_custom_title(record.customTitle, new_session_id)
-                    updated_record: SessionRecord = CustomTitleRecord(
-                        type='custom-title',
-                        customTitle=new_title,
-                        sessionId=new_session_id,
-                    )
-                else:
-                    record_dict = record.model_dump(exclude_unset=True, mode='json')
-                    # Update session ID if present (even in in_place mode, records need correct ID)
-                    if 'sessionId' in record_dict:
-                        record_dict['sessionId'] = new_session_id
-                    updated_record = SessionRecordAdapter.validate_python(record_dict)
+            new_filename = f'agent-{new_agent_id}.jsonl'
 
-                # Translate paths if needed
-                if translator:
-                    updated_record = translator.translate_record(updated_record)
+            # Determine output path based on nested flag
+            if agent.nested:
+                output_path = target_dir / new_session_id / 'subagents' / new_filename
+            else:
+                output_path = target_dir / new_filename
 
-                updated_records.append(updated_record)
+            # Create parent directories
+            output_path.parent.mkdir(parents=True, exist_ok=True)
 
-            # Write JSONL file
-            output_path = target_dir / new_filename
+            # Transform and write records
+            updated_records = list(
+                self._iter_transformed_records(
+                    agent.records,
+                    new_session_id,
+                    translator,
+                    in_place,
+                )
+            )
             await self._write_jsonl(output_path, updated_records, slug_mapping, agent_id_mapping, logger)
-            total_records += len(updated_records)
+
+            agent_file_paths.append(str(output_path))
+            total_agent_records += len(updated_records)
 
             if logger:
                 await logger.info(f'Restored {new_filename}: {len(updated_records)} records')
@@ -436,17 +465,29 @@ class SessionRestoreService:
             original_session_id=archive.session_id,
             restored_at=datetime.now(UTC),
             project_path=str(self.project_path),
-            files_restored=len(archive.files),
-            records_restored=total_records,
+            was_in_place=in_place,
+            main_session_file=main_file_path,
+            agent_files=agent_file_paths,
+            main_records_restored=len(main_records),
+            agent_records_restored=total_agent_records,
+            plan_files_restored=plan_files_restored,
+            tool_results_restored=tool_results_restored,
+            todos_restored=todos_restored,
+            tasks_restored=tasks_restored,
             paths_translated=translator is not None,
-            main_session_file=main_file_path or '',
-            agent_files=agent_files,
+            slug_mappings_applied=len(slug_mapping),
+            agent_id_mappings_applied=len(agent_id_mapping),
+            source_machine_id=archive.machine_id,
+            custom_title=archive.custom_title,
         )
 
     async def _load_json_archive(
         self, archive_file: Path, is_base64: bool, logger: LoggerProtocol | None
-    ) -> SessionArchive:
-        """Load archive from JSON file (optionally base64-encoded)."""
+    ) -> SessionArchiveV2:
+        """Load archive from JSON file (optionally base64-encoded).
+
+        Handles both v1 and v2 formats - v1 is migrated to v2 in memory.
+        """
         if is_base64:
             with open(archive_file, encoding='utf-8') as f:
                 try:
@@ -458,16 +499,15 @@ class SessionRestoreService:
             with open(archive_file, encoding='utf-8') as f:
                 data = json.load(f)
 
-        # Convert records from dicts to SessionRecord objects
-        for filename, records in data['files'].items():
-            data['files'][filename] = [SessionRecordAdapter.validate_python(r) for r in records]
-
-        return SessionArchive(**data)
+        return self._parse_archive_data(data)
 
     async def _load_zst_archive(
         self, archive_file: Path, is_base64: bool, logger: LoggerProtocol | None
-    ) -> SessionArchive:
-        """Load archive from Zstandard compressed file (optionally base64-encoded)."""
+    ) -> SessionArchiveV2:
+        """Load archive from Zstandard compressed file (optionally base64-encoded).
+
+        Handles both v1 and v2 formats - v1 is migrated to v2 in memory.
+        """
         with open(archive_file, 'rb') as f:
             content = f.read()
 
@@ -483,11 +523,57 @@ class SessionRestoreService:
 
         data = json.loads(decompressed)
 
-        # Convert records from dicts to SessionRecord objects
-        for filename, records in data['files'].items():
-            data['files'][filename] = [SessionRecordAdapter.validate_python(r) for r in records]
+        return self._parse_archive_data(data)
 
-        return SessionArchive(**data)
+    def _parse_archive_data(self, data: dict[str, Any]) -> SessionArchiveV2:
+        """Parse archive data with version detection.
+
+        V1 archives are migrated to V2 in memory for unified processing.
+        """
+        version = data.get('version', '1.0')
+
+        if version.startswith('2.'):
+            # V2: Validate directly (records are already dicts, Pydantic handles conversion)
+            return SessionArchiveV2.model_validate(data)
+        else:
+            # V1: Convert records then migrate
+            for filename, records in data['files'].items():
+                data['files'][filename] = [SessionRecordAdapter.validate_python(r) for r in records]
+            v1 = SessionArchiveV1.model_validate(data)
+            return migrate_v1_to_v2(v1)
+
+    def _iter_transformed_records(
+        self,
+        records: Sequence[SessionRecord],
+        new_session_id: str,
+        translator: PathTranslator | None,
+        in_place: bool,
+    ) -> Iterator[SessionRecord]:
+        """Yield transformed records for restoration.
+
+        Updates session IDs, translates paths, and handles custom titles.
+        """
+        for record in records:
+            # Transform CustomTitleRecord with clone title (only for non-in_place)
+            if isinstance(record, CustomTitleRecord) and not in_place:
+                new_title = generate_clone_custom_title(record.customTitle, new_session_id)
+                updated_record: SessionRecord = CustomTitleRecord(
+                    type='custom-title',
+                    customTitle=new_title,
+                    sessionId=new_session_id,
+                )
+            else:
+                record_dict = record.model_dump(exclude_unset=True, mode='json')
+                # Update session ID if present
+                if 'sessionId' in record_dict:
+                    record_dict['sessionId'] = new_session_id
+                updated_record = SessionRecordAdapter.validate_python(record_dict)
+
+            # Translate paths if needed
+            if translator:
+                updated_record = translator.translate_record(updated_record)
+
+            yield updated_record
 
     async def _write_jsonl(
         self,

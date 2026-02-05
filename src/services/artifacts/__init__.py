@@ -9,7 +9,10 @@ from __future__ import annotations
 
 from .agent_ids import (
     AGENT_FILENAME_PATTERN,
+    AgentFileInfo,
     apply_agent_id_mapping,
+    collect_agent_file_info,
+    detect_agent_structure,
     extract_agent_ids_from_files,
     extract_base_agent_id,
     generate_agent_id_mapping,
@@ -41,6 +44,11 @@ from .session_env import (
     create_session_env_dir,
     validate_session_env_empty,
 )
+from .tasks import (
+    TASKS_DIR,
+    iter_tasks,
+    write_tasks,
+)
 from .todos import (
     TODOS_DIR,
     collect_todos,
@@ -62,12 +70,15 @@ __all__ = [
     'generate_clone_custom_title',
     # agent_ids
     'AGENT_FILENAME_PATTERN',
+    'AgentFileInfo',
+    'apply_agent_id_mapping',
+    'collect_agent_file_info',
+    'detect_agent_structure',
     'extract_agent_ids_from_files',
     'extract_base_agent_id',
     'generate_agent_id_mapping',
     'generate_clone_agent_id',
     'transform_agent_filename',
-    'apply_agent_id_mapping',
     # plan_files
     'SLUG_RECORD_TYPES',
     'extract_base_slug',
@@ -89,6 +100,10 @@ __all__ = [
     'get_tool_results_dir',
     'collect_tool_results',
     'write_tool_results',
+    # tasks
+    'TASKS_DIR',
+    'iter_tasks',
+    'write_tasks',
     # paths
     'MissingCwdError',
     'extract_source_project_path',

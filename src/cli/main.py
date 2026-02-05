@@ -336,8 +336,20 @@ async def _restore_async(
         typer.echo(f'  New session ID: {result.new_session_id}')
         typer.echo(f'  Original session ID: {result.original_session_id}')
         typer.echo(f'  Project: {result.project_path}')
-        typer.echo(f'  Files restored: {result.files_restored}')
-        typer.echo(f'  Records restored: {result.records_restored:,}')
+        typer.echo(f'  Mode: {"in-place" if result.was_in_place else "fork"}')
+        typer.echo()
+        typer.echo('  Files restored:')
+        typer.echo(f'    - Session: 1 main + {len(result.agent_files)} agents')
+        if result.plan_files_restored:
+            typer.echo(f'    - Plans: {result.plan_files_restored}')
+        if result.tool_results_restored:
+            typer.echo(f'    - Tool results: {result.tool_results_restored}')
+        if result.todos_restored:
+            typer.echo(f'    - Todos: {result.todos_restored}')
+        if result.tasks_restored:
+            typer.echo(f'    - Tasks: {result.tasks_restored}')
+        typer.echo()
+        typer.echo(f'  Records: {result.main_records_restored:,} main + {result.agent_records_restored:,} agent')
         typer.echo(f'  Paths translated: {result.paths_translated}')
 
         if launch:
@@ -413,8 +425,17 @@ async def _clone_async(
         typer.echo(f'  New session ID: {result.new_session_id}')
         typer.echo(f'  Original session ID: {result.original_session_id}')
         typer.echo(f'  Project: {result.project_path}')
-        typer.echo(f'  Files cloned: {result.files_restored}')
-        typer.echo(f'  Records cloned: {result.records_restored:,}')
+        typer.echo()
+        typer.echo('  Files cloned:')
+        typer.echo(f'    - Session: 1 main + {len(result.agent_files)} agents')
+        if result.plan_files_restored:
+            typer.echo(f'    - Plans: {result.plan_files_restored}')
+        if result.tool_results_restored:
+            typer.echo(f'    - Tool results: {result.tool_results_restored}')
+        if result.todos_restored:
+            typer.echo(f'    - Todos: {result.todos_restored}')
+        typer.echo()
+        typer.echo(f'  Records: {result.main_records_restored:,} main + {result.agent_records_restored:,} agent')
         typer.echo(f'  Paths translated: {result.paths_translated}')
 
         if launch:
@@ -547,7 +568,18 @@ async def _delete_async(
         else:
             typer.secho('✓ Session deleted successfully!', fg=typer.colors.GREEN)
             typer.echo(f'  Session ID: {result.session_id}')
-            typer.echo(f'  Files deleted: {result.files_deleted}')
+            typer.echo()
+            typer.echo('  Files deleted:')
+            typer.echo(f'    - Session: {result.session_files_deleted}')
+            if result.plan_files_deleted:
+                typer.echo(f'    - Plans: {result.plan_files_deleted}')
+            if result.tool_results_deleted:
+                typer.echo(f'    - Tool results: {result.tool_results_deleted}')
+            if result.todos_deleted:
+                typer.echo(f'    - Todos: {result.todos_deleted}')
+            if result.tasks_deleted:
+                typer.echo(f'    - Tasks: {result.tasks_deleted}')
+            typer.echo()
             typer.echo(f'  Directories removed: {len(result.directories_removed)}')
             typer.echo(f'  Size freed: {result.size_freed_bytes:,} bytes')
             typer.echo(f'  Duration: {result.duration_ms:.0f}ms')

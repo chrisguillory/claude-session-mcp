@@ -35,21 +35,33 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any, TypedDict
 
 from src.exceptions import NativeSessionDeletionError
 from src.paths import encode_path
 from src.protocols import LoggerProtocol
-from src.schemas.operations.archive import SessionArchive
+from src.schemas.operations.archive import (
+    SessionArchiveV1,
+    SessionArchiveV2,
+    migrate_v1_to_v2,
+)
 from src.schemas.operations.delete import ArtifactFile, DeleteManifest, DeleteResult
+from src.schemas.session import SessionRecordAdapter
 from src.services.archive import SessionArchiveService
 from src.services.artifacts import (
     SESSION_ENV_DIR,
+    TASKS_DIR,
     TODOS_DIR,
     extract_slugs_from_records,
     get_tool_results_dir,
 )
 from src.services.parser import SessionParserService
 from src.storage.local import LocalFileSystemStorage
+
+__all__ = [
+    'SessionDeleteService',
+    'is_native_session',
+]
 
 logger = logging.getLogger(__name__)
 
@@ -196,6 +208,7 @@ class SessionDeleteService:
         plan_file_paths: list[str] = []
         tool_result_paths: list[str] = []
         todo_file_paths: list[str] = []
+        task_file_paths: list[str] = []
         directories_to_cleanup: list[str] = []
         unexpected_files: list[str] = []
 
@@ -238,6 +251,23 @@ class SessionDeleteService:
                         )
                     )
                     agent_file_paths.append(str(agent_path))
+
+        # Track subagents directory if it exists (2.1.2+ nested structure)
+        subagents_dir = session_dir / session_id / 'subagents'
+        if subagents_dir.exists():
+            # Check for unexpected files in subagents/ (non-agent files)
+            for path in subagents_dir.iterdir():
+                if path.is_file() and not path.name.startswith('agent-'):
+                    unexpected_files.append(str(path))
+                elif path.is_dir():
+                    # Unexpected subdirectory in subagents/
+                    directories_to_cleanup.append(str(path))
+            directories_to_cleanup.append(str(subagents_dir))
+
+        # Also track parent session directory if it exists
+        session_parent_dir = session_dir / session_id
+        if session_parent_dir.exists() and str(session_parent_dir) not in directories_to_cleanup:
+            directories_to_cleanup.append(str(session_parent_dir))
 
         # 3. Extract slugs from session records to find plan files
         session_files = [main_file] + [Path(p) for p in agent_file_paths]
@@ -311,7 +341,30 @@ class SessionDeleteService:
         if logger and todo_file_paths:
             await logger.info(f'Found {len(todo_file_paths)} todo files')
 
-        # 6. Session-env - expected to be empty, any file is unexpected
+        # 6. Task files (CLAUDE_CODE_ENABLE_TASKS mode)
+        tasks_session_dir = TASKS_DIR / session_id
+        if tasks_session_dir.exists():
+            for path in tasks_session_dir.iterdir():
+                if path.name == '.lock':
+                    continue  # Claude Code convention - skip lock file
+                if path.is_file():
+                    size = path.stat().st_size
+                    artifacts.append(
+                        ArtifactFile(
+                            path=str(path),
+                            size_bytes=size,
+                            artifact_type='task_file',
+                        )
+                    )
+                    task_file_paths.append(str(path))
+
+            # Track tasks session directory for cleanup
+            directories_to_cleanup.append(str(tasks_session_dir))
+
+        if logger and task_file_paths:
+            await logger.info(f'Found {len(task_file_paths)} task files')
+
+        # 7. Session-env - expected to be empty, any file is unexpected
         session_env_dir = SESSION_ENV_DIR / session_id
         if session_env_dir.exists():
             for path in session_env_dir.rglob('*'):
@@ -352,6 +405,7 @@ class SessionDeleteService:
             plan_files=plan_file_paths,
             tool_result_files=tool_result_paths,
             todo_files=todo_file_paths,
+            task_files=task_file_paths,
             directories_to_cleanup=directories_to_cleanup,
             unexpected_files=unexpected_files,
         )
@@ -411,6 +465,11 @@ class SessionDeleteService:
                 files_deleted=0,
                 size_freed_bytes=0,
                 deleted_files=[],
+                session_files_deleted=0,
+                plan_files_deleted=0,
+                tool_results_deleted=0,
+                todos_deleted=0,
+                tasks_deleted=0,
                 directories_removed=[],
                 duration_ms=(datetime.now(UTC) - start_time).total_seconds() * 1000,
                 deleted_at=datetime.now(UTC),
@@ -430,6 +489,9 @@ class SessionDeleteService:
                     f'({manifest.total_size_bytes:,} bytes)'
                 )
 
+            # Compute artifact counts for dry run
+            counts = self._compute_artifact_counts(manifest)
+
             return DeleteResult(
                 session_id=session_id,
                 was_dry_run=True,
@@ -439,6 +501,11 @@ class SessionDeleteService:
                 files_deleted=len(manifest.files),
                 size_freed_bytes=manifest.total_size_bytes,
                 deleted_files=[a.path for a in manifest.files],
+                session_files_deleted=counts['session_files'],
+                plan_files_deleted=counts['plan_files'],
+                tool_results_deleted=counts['tool_results'],
+                todos_deleted=counts['todos'],
+                tasks_deleted=counts['tasks'],
                 directories_removed=list(manifest.directories_to_cleanup),
                 duration_ms=(datetime.now(UTC) - start_time).total_seconds() * 1000,
                 deleted_at=datetime.now(UTC),
@@ -462,6 +529,11 @@ class SessionDeleteService:
                 files_deleted=0,
                 size_freed_bytes=0,
                 deleted_files=[],
+                session_files_deleted=0,
+                plan_files_deleted=0,
+                tool_results_deleted=0,
+                todos_deleted=0,
+                tasks_deleted=0,
                 directories_removed=[],
                 duration_ms=(datetime.now(UTC) - start_time).total_seconds() * 1000,
                 deleted_at=datetime.now(UTC),
@@ -516,6 +588,11 @@ class SessionDeleteService:
                 files_deleted=0,
                 size_freed_bytes=0,
                 deleted_files=[],
+                session_files_deleted=0,
+                plan_files_deleted=0,
+                tool_results_deleted=0,
+                todos_deleted=0,
+                tasks_deleted=0,
                 directories_removed=[],
                 duration_ms=(datetime.now(UTC) - start_time).total_seconds() * 1000,
                 deleted_at=datetime.now(UTC),
@@ -542,6 +619,9 @@ class SessionDeleteService:
                 f'Deleted {len(deleted_files)} files, {len(directories_removed)} directories ({size_freed:,} bytes)'
             )
 
+        # Compute per-artifact-type counts
+        counts = self._compute_artifact_counts(manifest)
+
         return DeleteResult(
             session_id=session_id,
             was_dry_run=False,
@@ -551,6 +631,11 @@ class SessionDeleteService:
             files_deleted=len(deleted_files),
             size_freed_bytes=size_freed,
             deleted_files=deleted_files,
+            session_files_deleted=counts['session_files'],
+            plan_files_deleted=counts['plan_files'],
+            tool_results_deleted=counts['tool_results'],
+            todos_deleted=counts['todos'],
+            tasks_deleted=counts['tasks'],
             directories_removed=directories_removed,
             duration_ms=(end_time - start_time).total_seconds() * 1000,
             deleted_at=end_time,
@@ -590,63 +675,112 @@ class SessionDeleteService:
 
         return metadata.file_path
 
+    @staticmethod
+    def _parse_backup_data(data: dict[str, Any]) -> SessionArchiveV2:
+        """
+        Parse backup data with version detection.
+
+        Mirrors restore service's approach for consistency.
+        Backups created by this service are always v2, but this handles
+        legacy backups for robustness.
+
+        Args:
+            data: Parsed JSON backup data
+
+        Returns:
+            SessionArchiveV2 (v1 is migrated in memory)
+        """
+        version = data.get('version', '1.0')
+
+        if version.startswith('2.'):
+            return SessionArchiveV2.model_validate(data)
+        else:
+            # V1 backup (legacy) - convert records then migrate
+            for filename, records in data['files'].items():
+                data['files'][filename] = [SessionRecordAdapter.validate_python(r) for r in records]
+            v1 = SessionArchiveV1.model_validate(data)
+            return migrate_v1_to_v2(v1)
+
     async def _rollback_from_backup(self, backup_path: Path) -> None:
         """
         Restore session from backup after failed deletion.
 
         Reads the backup archive and writes files back to their original
-        locations. This is simpler than the normal restore flow because
-        we're restoring to the same session ID and paths.
+        locations (in-place restoration with original session ID).
 
-        Uses SessionArchive Pydantic model for type-safe parsing.
+        Uses SessionArchiveV2 structure (v1 backups are migrated).
         """
         logger.info(f'Rolling back from backup: {backup_path}')
 
-        # Parse backup using SessionArchive model (strict typing)
+        # Parse backup using version detection
         backup_data = json.loads(backup_path.read_text(encoding='utf-8'))
-        archive = SessionArchive.model_validate(backup_data)
+        archive = self._parse_backup_data(backup_data)
 
         # Get target directory from archive metadata
         encoded_path = encode_path(Path(archive.original_project_path))
         target_dir = self.claude_sessions_dir / encoded_path
         target_dir.mkdir(parents=True, exist_ok=True)
 
-        # Restore session files (main + agents)
-        for filename, records in archive.files.items():
-            file_path = target_dir / filename
-            with open(file_path, 'w', encoding='utf-8') as f:
-                for record in records:
-                    # SessionRecord objects need to be serialized
+        # Restore main session file
+        main_file_path = target_dir / f'{archive.session_id}.jsonl'
+        with open(main_file_path, 'w', encoding='utf-8') as f:
+            for record in archive.main_session.records:
+                record_dict = record.model_dump(mode='json', exclude_none=True)
+                f.write(json.dumps(record_dict, separators=(',', ':')) + '\n')
+        logger.info(f'Restored: {main_file_path}')
+
+        # Restore agent files (with nested structure support)
+        for agent in archive.agent_files:
+            agent_filename = f'agent-{agent.agent_id}.jsonl'
+
+            if agent.nested:
+                # Nested: <target>/<session_id>/subagents/agent-*.jsonl
+                agent_dir = target_dir / archive.session_id / 'subagents'
+            else:
+                # Flat: <target>/agent-*.jsonl
+                agent_dir = target_dir
+
+            agent_dir.mkdir(parents=True, exist_ok=True)
+            agent_path = agent_dir / agent_filename
+
+            with open(agent_path, 'w', encoding='utf-8') as f:
+                for record in agent.records:
                     record_dict = record.model_dump(mode='json', exclude_none=True)
                     f.write(json.dumps(record_dict, separators=(',', ':')) + '\n')
-            logger.info(f'Restored: {file_path}')
+            logger.info(f'Restored: {agent_path}')
 
         # Restore tool results
         if archive.tool_results:
             tool_results_dir = get_tool_results_dir(target_dir, archive.session_id)
             tool_results_dir.mkdir(parents=True, exist_ok=True)
-
-            for tool_use_id, content in archive.tool_results.items():
-                file_path = tool_results_dir / f'{tool_use_id}.txt'
-                file_path.write_text(content, encoding='utf-8')
+            for tr in archive.tool_results:
+                file_path = tool_results_dir / f'{tr.tool_use_id}.txt'
+                file_path.write_text(tr.content, encoding='utf-8')
             logger.info(f'Restored {len(archive.tool_results)} tool result files')
 
         # Restore todo files
         if archive.todos:
             TODOS_DIR.mkdir(parents=True, exist_ok=True)
-            for filename, content in archive.todos.items():
+            for todo in archive.todos:
+                filename = f'{archive.session_id}-agent-{todo.agent_id}.json'
                 file_path = TODOS_DIR / filename
-                # todos content is already JSON string in archive
-                file_path.write_text(content, encoding='utf-8')
+                file_path.write_text(todo.content, encoding='utf-8')
             logger.info(f'Restored {len(archive.todos)} todo files')
+
+        # Restore task files
+        if archive.tasks:
+            from src.services.artifacts import write_tasks
+
+            tasks_restored = write_tasks(archive.session_id, archive.tasks)
+            logger.info(f'Restored {tasks_restored} task files')
 
         # Restore plan files
         if archive.plan_files:
             plans_dir = Path.home() / '.claude' / 'plans'
             plans_dir.mkdir(parents=True, exist_ok=True)
-            for filename, content in archive.plan_files.items():
-                file_path = plans_dir / filename
-                file_path.write_text(content, encoding='utf-8')
+            for plan in archive.plan_files:
+                file_path = plans_dir / f'{plan.slug}.md'
+                file_path.write_text(plan.content, encoding='utf-8')
             logger.info(f'Restored {len(archive.plan_files)} plan files')
 
         # Recreate session-env directory (usually empty)
@@ -654,6 +788,32 @@ class SessionDeleteService:
         session_env_dir.mkdir(parents=True, exist_ok=True)
 
         logger.info('Rollback completed successfully')
+
+    @staticmethod
+    def _compute_artifact_counts(manifest: DeleteManifest) -> dict[str, int]:
+        """
+        Compute per-artifact-type counts from manifest.
+
+        Returns:
+            Dict with keys: session_files, plan_files, tool_results, todos, tasks
+        """
+        return {
+            'session_files': 1 + len(manifest.agent_files),  # main + agents
+            'plan_files': len(manifest.plan_files),
+            'tool_results': len(manifest.tool_result_files),
+            'todos': len(manifest.todo_files),
+            'tasks': len(manifest.task_files),
+        }
+
+
+class ArtifactCounts(TypedDict):
+    """Per-artifact-type deletion counts."""
+
+    session_files: int  # main + agents
+    plan_files: int
+    tool_results: int
+    todos: int
+    tasks: int
 
 
 # ==============================================================================
