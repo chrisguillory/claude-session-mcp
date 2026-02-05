@@ -26,6 +26,8 @@ CLAUDE CODE VERSION COMPATIBILITY:
                  TaskCreate/TaskUpdate/TaskList tool inputs and results (2.1.17+)
 - Schema v0.2.7: Added SimpleThinkingMetadata, McpMeta, MCPStructuredContent, Task tool mode field (2.1.19+)
 - Schema v0.2.8: Added timeoutMs to BashProgressData (2.1.25+)
+- Schema v0.2.9: Added inference_geo to TokenUsage, claude-opus-4-6 model ID,
+                 PrLinkRecord, SavedHookContextRecord (2.1.32+)
 - If validation fails, Claude Code schema may have changed - update models accordingly
 
 NEW FIELDS IN CLAUDE CODE 2.0.51+ (Schema v0.1.3):
@@ -95,9 +97,9 @@ from src.schemas.types import BaseStrictModel, EmptyDict, EmptySequence, ModelId
 # Schema Version
 # ==============================================================================
 
-SCHEMA_VERSION = '0.2.8'
+SCHEMA_VERSION = '0.2.9'
 CLAUDE_CODE_MIN_VERSION = '2.0.35'
-CLAUDE_CODE_MAX_VERSION = '2.1.25'
+CLAUDE_CODE_MAX_VERSION = '2.1.32'
 LAST_VALIDATED = '2026-01-30'
 VALIDATION_RECORD_COUNT = 255_102
 
@@ -958,6 +960,7 @@ class TokenUsage(StrictModel):
     cache_creation: CacheCreation  # Always present (115,497/115,497)
     service_tier: Literal['standard'] | None = None  # Only value: 'standard' (19018 occurrences) - null for synthetic
     server_tool_use: ServerToolUse | None = None  # Server-side tool use tracking (0.5% present)
+    inference_geo: str | None = None  # Inference geography (Claude Code 2.1.31+, e.g. 'not_available')
 
 
 # ==============================================================================
@@ -2086,6 +2089,46 @@ class ProgressRecord(StrictModel):
 
 
 # ==============================================================================
+# PR Link Record (Claude Code 2.1.31+)
+# ==============================================================================
+
+
+class PrLinkRecord(StrictModel):
+    """PR link record created when Claude Code opens a pull request."""
+
+    type: Literal['pr-link']
+    sessionId: str
+    timestamp: str
+    prNumber: int
+    prUrl: str
+    prRepository: str
+
+
+# ==============================================================================
+# Saved Hook Context Record (Claude Code 2.1.27+)
+# ==============================================================================
+
+
+class SavedHookContextRecord(StrictModel):
+    """Saved hook context record for persisting hook output across session boundaries."""
+
+    type: Literal['saved_hook_context']
+    uuid: str
+    timestamp: str
+    sessionId: str
+    cwd: PathField
+    parentUuid: str | None
+    isSidechain: bool
+    userType: Literal['external']
+    version: str
+    gitBranch: str
+    content: Sequence[str]
+    hookName: str
+    toolUseID: str
+    hookEvent: str
+
+
+# ==============================================================================
 # Session Record (Discriminated Union)
 # ==============================================================================
 
@@ -2107,7 +2150,9 @@ SessionRecord = Annotated[
     | FileHistorySnapshotRecord
     | QueueOperationRecord
     | CustomTitleRecord
-    | ProgressRecord,
+    | ProgressRecord
+    | PrLinkRecord
+    | SavedHookContextRecord,
     pydantic.Field(union_mode='left_to_right'),
 ]
 
