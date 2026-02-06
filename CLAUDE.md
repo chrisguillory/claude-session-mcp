@@ -8,7 +8,7 @@ Session files are JSONL at `~/.claude/projects/<encoded-path>/<session-id>.jsonl
 
 ### Quick Reference: Record Types
 
-Core record types found in session files (schema v0.1.7):
+Record types found in session files (schema v0.2.9):
 
 | Type | Purpose | Key Fields | Inherits BaseRecord |
 |------|---------|------------|---------------------|
@@ -18,6 +18,10 @@ Core record types found in session files (schema v0.1.7):
 | `system` | Internal events (see subtypes below) | `uuid`, `timestamp`, `sessionId`, `cwd`, `parentUuid`, `systemType` | Yes |
 | `file-history-snapshot` | Document/file state tracking | `messageId`, `snapshot`, `isSnapshotUpdate` | **No** |
 | `queue-operation` | Queue management events | `operation`, `timestamp`, `sessionId`, `content` | **No** (no uuid) |
+| `custom-title` | User-defined session names (v0.1.9) | `customTitle`, `sessionId`, `timestamp` | **No** |
+| `progress` | Long-running operation tracking (v0.2.4) | `data`, `parentToolUseID`, `toolUseID` | **No** (own schema) |
+| `pr-link` | PR creation tracking (v0.2.9) | `prNumber`, `prUrl`, `prRepository` | **No** |
+| `saved_hook_context` | Persisted hook output (v0.2.9) | `content`, `hookName`, `hookEvent`, `toolUseID` | **No** (own schema) |
 
 **System Record Subtypes** (all have `type='system'`, differentiated by `subtype` field):
 
@@ -25,8 +29,11 @@ Core record types found in session files (schema v0.1.7):
 |---------|---------|-------------------|
 | `local_command` | Local shell/CLI operations | `content`, `level`, `slug`, `isMeta` |
 | `compact_boundary` | Session compaction markers | `content`, `compactMetadata` (trigger, preTokens), `logicalParentUuid` |
+| `microcompact_boundary` | Lightweight compaction markers (v0.2.4) | `content`, `microcompactMetadata` |
 | `api_error` | Claude API failures | `error`, `retryInMs`, `retryAttempt`, `maxRetries`, `cause` |
 | `informational` | General system notifications | `content`, `level` |
+| `turn_duration` | Turn timing data (v0.2.0) | `durationMs` |
+| `stop_hook_summary` | Hook execution summaries (v0.2.6) | `hookCount`, `hookInfos`, `hookErrors`, `stopReason` |
 
 ### Quick Reference: Message Content Types
 
