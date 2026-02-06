@@ -398,6 +398,7 @@ class TaskToolInput(StrictModel):
     model: str | None = None
     resume: str | None = None
     mode: Literal['default', 'bypassPermissions'] | None = None  # Permission mode (2.1.19+)
+    max_turns: int | None = None  # Maximum agentic turns before stopping (2.1.25+)
 
 
 # ==============================================================================
@@ -437,7 +438,9 @@ class TaskUpdateToolInput(StrictModel):
 
     taskId: str
     status: Literal['pending', 'in_progress', 'completed', 'deleted'] | None = None
+    subject: str | None = None  # Updated task title
     description: str | None = None  # Updated task description
+    activeForm: str | None = None  # Updated spinner text
     owner: str | None = None
     addBlockedBy: Sequence[str] | None = None
 
