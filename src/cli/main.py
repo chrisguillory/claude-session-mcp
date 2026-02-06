@@ -23,6 +23,7 @@ from src.cli.logger import CLILogger
 from src.exceptions import ClaudeSessionError
 from src.launcher import launch_claude_with_session
 from src.services.archive import SessionArchiveService
+from src.services.claude_process import auto_detect_session_id
 from src.services.clone import SessionCloneService
 from src.services.delete import SessionDeleteService
 from src.services.discovery import SessionDiscoveryService
@@ -55,6 +56,18 @@ def _validate_archive_format(value: str | None) -> ArchiveFormat | None:
     if _is_archive_format(value):
         return value
     raise typer.BadParameter("Must be 'json' or 'zst'")
+
+
+def _resolve_session_id(session_id: str | None) -> str:
+    """Resolve session_id, auto-detecting from Claude Code if not provided."""
+    if session_id is not None:
+        return session_id
+    detected = auto_detect_session_id()
+    if detected is None:
+        typer.secho('Error: Not running inside Claude Code.', fg=typer.colors.RED, err=True)
+        typer.echo('Provide a session ID: claude-session <command> <session-id>', err=True)
+        raise typer.Exit(1)
+    return detected
 
 
 @app.command()
@@ -601,18 +614,23 @@ async def _delete_async(
 
 @app.command()
 def lineage(
-    session_id: str = typer.Argument(..., help='Session ID (full or prefix)'),
+    session_id: str | None = typer.Argument(
+        None, help='Session ID (full or prefix). Auto-detected inside Claude Code.'
+    ),
     format: Literal['text', 'tree', 'json'] = typer.Option(
         'text', '--format', '-f', help='Output format: text, tree, or json'
     ),
 ) -> None:
     """Show the lineage (parent-child relationships) for a session.
 
+    When run inside Claude Code without a session ID, auto-detects the current session.
+
     Examples:
+        claude-session lineage
         claude-session lineage 019b53ff
         claude-session lineage c3bac5a6 --format tree
-        claude-session lineage 019b53ff --format json
     """
+    session_id = _resolve_session_id(session_id)
     try:
         lineage_service = LineageService()
 
@@ -669,7 +687,9 @@ def lineage(
 
 @app.command()
 def info(
-    session_id: str = typer.Argument(..., help='Session ID (full or prefix)'),
+    session_id: str | None = typer.Argument(
+        None, help='Session ID (full or prefix). Auto-detected inside Claude Code.'
+    ),
     format: Literal['text', 'json'] = typer.Option('text', '--format', '-f', help='Output format: text or json'),
 ) -> None:
     """Display comprehensive information about a session.
@@ -677,11 +697,14 @@ def info(
     Shows session context including ID, project path, file locations,
     origin (how it was created), state, and characteristics.
 
+    When run inside Claude Code without a session ID, auto-detects the current session.
+
     Examples:
+        claude-session info
         claude-session info 019b53ff
         claude-session info c3bac5a6 --format json
     """
-    asyncio.run(_info_async(session_id, format))
+    asyncio.run(_info_async(_resolve_session_id(session_id), format))
 
 
 async def _info_async(

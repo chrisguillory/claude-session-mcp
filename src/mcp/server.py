@@ -17,23 +17,19 @@ Example:
 from __future__ import annotations
 
 import contextlib
-import json
 import os
 import pathlib
 import subprocess
 import tempfile
-import time
 from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any, Literal
 
 import attrs
-import pydantic
 from mcp.server.fastmcp import Context, FastMCP
 
 from src.exceptions import RunningSessionDeletionError
 from src.mcp.utils import DualLogger
-from src.schemas.claude_workspace import SessionDatabase
 from src.schemas.operations.archive import ArchiveMetadata
 from src.schemas.operations.context import SessionContext
 from src.schemas.operations.delete import DeleteResult
@@ -41,6 +37,7 @@ from src.schemas.operations.gist import GistArchiveResult
 from src.schemas.operations.lineage import LineageResult
 from src.schemas.operations.restore import RestoreResult
 from src.services.archive import SessionArchiveService
+from src.services.claude_process import find_ancestor_claude_pid, resolve_session_id_from_pid
 from src.services.clone import SessionCloneService
 from src.services.delete import SessionDeleteService
 from src.services.info import CurrentSessionContext, SessionInfoService
@@ -705,8 +702,7 @@ def _find_claude_context() -> ClaudeContext:
     """
     Find Claude process and extract its context (PID, project directory).
 
-    Walks up the process tree to find the Claude process, then uses lsof to
-    determine its working directory.
+    Uses shared process tree walk to find Claude, then lsof to determine CWD.
 
     Returns:
         ClaudeContext with PID and project directory
@@ -714,73 +710,54 @@ def _find_claude_context() -> ClaudeContext:
     Raises:
         RuntimeError: If Claude process cannot be found or CWD cannot be determined
     """
-    current = os.getppid()
+    pid = find_ancestor_claude_pid()
+    if pid is None:
+        raise RuntimeError('Could not find Claude process in parent tree')
 
-    for _ in range(20):  # Depth limit
-        result = subprocess.run(
-            ['ps', '-p', str(current), '-o', 'ppid=,comm='],
-            capture_output=True,
-            text=True,
+    # Get Claude's CWD using lsof
+    result = subprocess.run(
+        ['lsof', '-p', str(pid), '-a', '-d', 'cwd'],
+        capture_output=True,
+        text=True,
+    )
+
+    cwd = None
+    for line in result.stdout.split('\n'):
+        if 'cwd' in line:
+            parts = line.split()
+            if len(parts) >= 9:
+                cwd = pathlib.Path(' '.join(parts[8:]))
+                break
+
+    if not cwd:
+        raise RuntimeError(f'Found Claude process (PID {pid}) but could not determine CWD')
+
+    # Verify by checking if Claude has .claude/ files open
+    result = subprocess.run(['lsof', '-p', str(pid)], capture_output=True, text=True)
+
+    claude_files = []
+    for line in result.stdout.split('\n'):
+        if '.claude' in line:
+            parts = line.split()
+            if len(parts) >= 9:
+                file_path = ' '.join(parts[8:])
+                claude_files.append(file_path)
+
+    if not claude_files:
+        raise RuntimeError(
+            f'Found Claude process (PID {pid}) with CWD {cwd}, '
+            f'but no .claude/ files are open - may not be a Claude project'
         )
 
-        if not result.stdout.strip():
-            break
-
-        parts = result.stdout.strip().split(None, 1)
-        ppid = int(parts[0])
-        comm = parts[1] if len(parts) > 1 else ''
-
-        # Check if this is Claude
-        if 'claude' in comm.lower():
-            # Get Claude's CWD using lsof
-            result = subprocess.run(
-                ['lsof', '-p', str(current), '-a', '-d', 'cwd'],
-                capture_output=True,
-                text=True,
-            )
-
-            cwd = None
-            for line in result.stdout.split('\n'):
-                if 'cwd' in line:
-                    parts = line.split()
-                    if len(parts) >= 9:
-                        cwd = pathlib.Path(' '.join(parts[8:]))
-                        break
-
-            if not cwd:
-                raise RuntimeError(f'Found Claude process (PID {current}) but could not determine CWD')
-
-            # Verify by checking if Claude has .claude/ files open
-            result = subprocess.run(['lsof', '-p', str(current)], capture_output=True, text=True)
-
-            claude_files = []
-            for line in result.stdout.split('\n'):
-                if '.claude' in line:
-                    # Extract the full path from lsof output
-                    parts = line.split()
-                    if len(parts) >= 9:
-                        file_path = ' '.join(parts[8:])
-                        claude_files.append(file_path)
-
-            if not claude_files:
-                raise RuntimeError(
-                    f'Found Claude process (PID {current}) with CWD {cwd}, '
-                    f'but no .claude/ files are open - may not be a Claude project'
-                )
-
-            return ClaudeContext(claude_pid=current, project_dir=cwd)
-
-        current = ppid
-
-    raise RuntimeError('Could not find Claude process in parent tree')
+    return ClaudeContext(claude_pid=pid, project_dir=cwd)
 
 
 def _discover_session_id(claude_pid: int) -> str:
     """
     Discover Claude Code session ID from claude-workspace sessions.json.
 
-    Looks up the active session matching the given Claude PID in the sessions
-    database maintained by claude-workspace hooks.
+    Delegates to shared session resolution with MCP-specific retry count
+    (10 attempts) to handle the startup race with SessionStart hook.
 
     Args:
         claude_pid: PID of the Claude process (from _find_claude_context)
@@ -789,45 +766,16 @@ def _discover_session_id(claude_pid: int) -> str:
         Session ID (UUID string)
 
     Raises:
-        RuntimeError: If sessions.json doesn't exist, no matching session found,
-                      or multiple active sessions match the PID
+        RuntimeError: If no matching session found or multiple active sessions match
     """
-    sessions_file = pathlib.Path.home() / '.claude-workspace' / 'sessions.json'
-
-    # Retry loop - SessionStart hook may not have finished writing yet
-    max_retries = 10
-    retry_delay = 0.1  # 100ms between retries
-
-    for attempt in range(max_retries):
-        if not sessions_file.exists():
-            time.sleep(retry_delay)
-            continue
-
-        with sessions_file.open() as f:
-            data = json.load(f)
-
-        adapter = pydantic.TypeAdapter(SessionDatabase)
-        db = adapter.validate_python(data)
-
-        # Find active sessions matching our Claude PID
-        matching = [s for s in db.sessions if s.state == 'active' and s.metadata.claude_pid == claude_pid]
-
-        if len(matching) == 1:
-            return matching[0].session_id
-
-        if len(matching) > 1:
-            # Multiple active sessions with same PID - shouldn't happen
-            session_ids = [s.session_id for s in matching]
-            raise RuntimeError(f'Multiple active sessions found for Claude PID {claude_pid}: {session_ids}')
-
-        # No match yet - hook may still be writing
-        time.sleep(retry_delay)
-
-    # All retries exhausted
-    raise RuntimeError(
-        f'Could not find active session for Claude PID {claude_pid} in {sessions_file} '
-        f'after {max_retries} attempts. Ensure claude-workspace SessionStart hook is configured.'
-    )
+    session_id = resolve_session_id_from_pid(claude_pid, max_attempts=10)
+    if session_id is None:
+        sessions_file = pathlib.Path.home() / '.claude-workspace' / 'sessions.json'
+        raise RuntimeError(
+            f'Could not find active session for Claude PID {claude_pid} in {sessions_file} '
+            f'after 10 attempts. Ensure claude-workspace SessionStart hook is configured.'
+        )
+    return session_id
 
 
 def _get_github_token() -> str | None:
