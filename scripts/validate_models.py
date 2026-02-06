@@ -31,6 +31,7 @@ import json
 import math
 import sys
 from collections import Counter, defaultdict
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, TypedDict
 
@@ -41,6 +42,12 @@ import pydantic
 from pydantic import ValidationError
 
 from src.schemas.session import SessionRecordAdapter
+from src.schemas.session.models import (
+    AssistantRecord,
+    ToolResultContent,
+    ToolUseContent,
+    UserRecord,
+)
 from src.schemas.types import PermissiveModel
 
 # ==============================================================================
@@ -485,6 +492,38 @@ def find_fallbacks(
     return fallbacks
 
 
+def resolve_tool_name_for_result(
+    record: UserRecord,
+    tool_use_map: Mapping[str, str],
+) -> str | None:
+    """
+    Look up tool name for a UserRecord's tool result.
+
+    Uses sourceToolUseID or scans ToolResultContent blocks to find the
+    corresponding tool_use_id, then looks it up in the map.
+
+    Args:
+        record: The UserRecord containing toolUseResult
+        tool_use_map: Mapping of tool_use_id -> tool_name from AssistantRecords
+
+    Returns:
+        Tool name if found, None otherwise
+    """
+    # Try direct field first (most reliable)
+    if record.sourceToolUseID and record.sourceToolUseID in tool_use_map:
+        return tool_use_map[record.sourceToolUseID]
+
+    # Try scanning ToolResultContent blocks in message
+    if record.message and isinstance(record.message.content, list):
+        for block in record.message.content:
+            if not isinstance(block, ToolResultContent):
+                continue
+            if block.tool_use_id in tool_use_map:
+                return tool_use_map[block.tool_use_id]
+
+    return None
+
+
 # ==============================================================================
 # File Validation
 # ==============================================================================
@@ -523,6 +562,9 @@ def validate_session_file(session_file: Path) -> FileValidationResult:
 
     session_filename = Path(session_file).name
 
+    # Track tool_use_id -> tool_name for cross-record correlation
+    tool_use_map: dict[str, str] = {}
+
     with open(session_file) as f:
         for line_num, line in enumerate(f, 1):
             if not line.strip():
@@ -540,8 +582,30 @@ def validate_session_file(session_file: Path) -> FileValidationResult:
                 record = SessionRecordAdapter.validate_python(record_data)
                 results['valid_records'] += 1
 
+                # Extract tool uses from AssistantRecords for correlation
+                if isinstance(record, AssistantRecord) and record.message:
+                    if isinstance(record.message.content, list):
+                        for block in record.message.content:
+                            if isinstance(block, ToolUseContent):
+                                tool_use_map[block.id] = block.name
+
                 # Check for PermissiveModel fallbacks in the validated record
                 for path, fb_type, tool_name, extra_fields in find_fallbacks(record):
+                    # For MCPToolResult, check if it's actually a Claude Code tool
+                    if fb_type == 'MCPToolResult' and isinstance(record, UserRecord):
+                        actual_tool_name = resolve_tool_name_for_result(record, tool_use_map)
+                        if actual_tool_name and not actual_tool_name.startswith('mcp__'):
+                            # Claude Code tool fell through - this is a validation error!
+                            results['invalid_records'] += 1
+                            results['valid_records'] -= 1
+                            error_msg = (
+                                f'Line {line_num} ({record_type}): ⚠️  Claude Code tool '
+                                f"'{actual_tool_name}' result fell through to MCPToolResult. "
+                                f'Fields: {list(extra_fields.keys())}'
+                            )
+                            results['errors'].append(error_msg)
+                            continue  # Don't also add to fallbacks
+
                     results['fallbacks'].append(
                         {
                             'file': session_filename,

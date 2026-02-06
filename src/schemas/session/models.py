@@ -1155,13 +1155,39 @@ class McpMeta(StrictModel):
 
 
 class FileInfo(StrictModel):
-    """File information from Read tool."""
+    """File information from Read tool (text files)."""
 
     filePath: PathField
     content: str
     numLines: int
     startLine: int
     totalLines: int
+
+
+class PdfFileInfo(StrictModel):
+    """File information from Read tool (PDF files)."""
+
+    filePath: PathField
+    base64: str
+    originalSize: int
+
+
+class ImageFileInfo(StrictModel):
+    """File information from Read tool (image files)."""
+
+    type: str  # e.g., 'image/png', 'image/jpeg'
+    base64: str
+    originalSize: int
+    dimensions: ImageDimensions | None = None
+
+
+class ImageDimensions(StrictModel):
+    """Image dimensions."""
+
+    originalWidth: int
+    originalHeight: int
+    displayWidth: int
+    displayHeight: int
 
 
 # ==============================================================================
@@ -1195,6 +1221,8 @@ class BashToolResult(StrictModel):
         Literal['No matches found', 'Some directories were inaccessible', 'Files differ'] | None
     ) = None
     backgroundTaskId: str | None = None
+    backgroundedByUser: bool | None = None  # True if user manually backgrounded with Ctrl+B
+    dangerouslyDisableSandbox: bool | None = None  # True if sandbox was disabled for this command
     shellId: str | None = None
     command: str | None = None
     exitCode: int | None = None
@@ -1205,11 +1233,25 @@ class BashToolResult(StrictModel):
     filterPattern: str | None = None
 
 
-class ReadToolResult(StrictModel):
-    """Result from Read tool execution."""
+class ReadTextToolResult(StrictModel):
+    """Result from Read tool execution (text files)."""
 
     type: Literal['text']
     file: FileInfo
+
+
+class ReadPdfToolResult(StrictModel):
+    """Result from Read tool execution (PDF files)."""
+
+    type: Literal['pdf']
+    file: PdfFileInfo
+
+
+class ReadImageToolResult(StrictModel):
+    """Result from Read tool execution (image files)."""
+
+    type: Literal['image']
+    file: ImageFileInfo
 
 
 class GlobToolResult(StrictModel):
@@ -1311,6 +1353,33 @@ class TaskSingleToolResult(StrictModel):
     task: TaskSingleItem
 
 
+class StatusChange(StrictModel):
+    """Status transition details."""
+
+    from_: str = pydantic.Field(alias='from')
+    to: str
+
+
+class TaskUpdateSuccessResult(StrictModel):
+    """Alternative result format from TaskUpdate (success-based)."""
+
+    success: bool
+    taskId: str
+    updatedFields: Sequence[str]
+    statusChange: str | StatusChange | None = None
+    error: str | None = None  # Present when update fails
+
+
+class LSPToolResult(StrictModel):
+    """Result from LSP tool execution."""
+
+    operation: str  # e.g., 'definition', 'references'
+    result: str
+    filePath: PathField
+    resultCount: int
+    fileCount: int
+
+
 # ==============================================================================
 # Task Model (Session Artifact - On-Disk Format)
 # ==============================================================================
@@ -1400,7 +1469,7 @@ class WebFetchToolResult(StrictModel):
 class ExitPlanModeToolResult(StrictModel):
     """Result from ExitPlanMode tool execution."""
 
-    plan: str
+    plan: str | None  # Can be null when plan is in external file
     isAgent: bool
     filePath: PathField | None = None  # Plan file path (present in newer versions)
 
@@ -1427,6 +1496,24 @@ class KillShellToolResult(StrictModel):
     shellId: str
 
 
+class TaskStopToolResult(StrictModel):
+    """Result from TaskStop tool execution."""
+
+    message: str
+    task_id: str
+    task_type: Literal['local_bash', 'local_agent']
+
+
+class ToolSearchToolResult(StrictModel):
+    """Result from ToolSearch tool execution."""
+
+    matches: Sequence[str]
+    query: str
+    # Field name changed over versions - data has one or the other
+    total_deferred_tools: int | None = None
+    total_mcp_tools: int | None = None
+
+
 # NOTE: BashOutput tool uses BashToolResult (same structure)
 
 
@@ -1443,13 +1530,16 @@ class BackgroundTask(StrictModel):
     status: Literal['running', 'completed', 'failed']
     description: str
     output: str
-    exitCode: int | None = None  # Null when running
+    exitCode: int | None = None  # For bash tasks, null when running
+    prompt: str | None = None  # For agent tasks
+    result: str | None = None  # For agent tasks
+    error: str | None = None  # For failed agent tasks
 
 
 class TaskOutputPollingResult(StrictModel):
     """Result from TaskOutput tool - polling background task state."""
 
-    retrieval_status: Literal['not_ready', 'success']
+    retrieval_status: Literal['not_ready', 'success', 'timeout']
     task: BackgroundTask
 
 
@@ -1486,7 +1576,7 @@ class AgentCompletedState(StrictModel):
 class AgentsRetrievalResult(StrictModel):
     """Result from retrieving multiple agent states."""
 
-    retrieval_status: Literal['not_ready', 'success']
+    retrieval_status: Literal['not_ready', 'success', 'timeout']
     agents: Mapping[str, AgentCompletedState]  # Empty dict when not_ready
 
 
@@ -1580,7 +1670,9 @@ class MCPToolResult(PermissiveModel):
 ToolResult = Annotated[
     # Core tool results (most specific first)
     BashToolResult  # Also handles BashOutput
-    | ReadToolResult
+    | ReadTextToolResult  # Read text files
+    | ReadPdfToolResult  # Read PDF files
+    | ReadImageToolResult  # Read image files
     | EditToolResult
     | WriteToolResult
     | GrepToolResult
@@ -1592,6 +1684,10 @@ ToolResult = Annotated[
     | AgentsRetrievalResult  # Multi-agent polling
     | TaskListToolResult  # TaskList result (2.1.17+)
     | TaskSingleToolResult  # TaskCreate/TaskUpdate result (2.1.17+)
+    | TaskUpdateSuccessResult  # Alternative TaskUpdate result (success-based)
+    | TaskStopToolResult  # TaskStop result (2.1.25+)
+    | ToolSearchToolResult  # ToolSearch/MCPSearch result (2.1.4+)
+    | LSPToolResult  # LSP tool result (definition, references, etc.)
     | AskUserQuestionToolResult
     | WebSearchNestedResult  # Nested structure variant (more specific - has tool_use_id in results)
     | WebSearchToolResult  # Simple structure
