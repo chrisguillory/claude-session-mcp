@@ -604,3 +604,131 @@ When a new Claude Code version is released:
 ## License
 
 MIT
+
+# Appendix
+
+### Agent Files
+
+Agents run as sidechains (`isSidechain: true` on parent records). Agent session files are JSONL with the same record types as main sessions.
+
+#### File Location (Version-Dependent)
+
+| Version | Location |
+|---------|----------|
+| Pre-2.1.2 | `<session-dir>/agent-a<hex>.jsonl` |
+| 2.1.2+ | `<session-dir>/subagents/agent-a<hex>.jsonl` |
+
+Key version changes:
+
+| Version | Change |
+|---------|--------|
+| 2.1.25 | Typed agents with semantic prefixes |
+| 2.1.2 | `subagents/` directory for agent files |
+| 2.1.0 | Skills, forked contexts, hooks |
+| 2.0.64 | Background agents, TaskOutputTool |
+
+#### Typed Agents (2.1.25+)
+
+Claude Code 2.1.25 introduced typed agents with semantic prefixes in the `agentId`:
+
+| Type Prefix | Purpose | Example ID |
+|-------------|---------|------------|
+| `aprompt_suggestion` | Predicts user's next input | `aprompt_suggestion-a1b2c3` |
+
+File pattern: `<session-dir>/subagents/agent-<type>-<hex>.jsonl`
+
+Typed agents contain embedded system prompts in their first user message. Example `aprompt_suggestion` instruction:
+
+```
+[SUGGESTION MODE: Suggest what the user might naturally type next into Claude Code.]
+FIRST: Look at the user's recent messages and original request.
+Your job is to predict what THEY would type - not what you think they should do.
+THE TEST: Would they think "I was just about to type that"?
+```
+
+These agents run as sidechains and are referenced from the main session via `isSidechain: true`.
+
+## Testing Interactive Features
+
+Some Claude Code features only activate in interactive mode. Standard automation approaches fail because Claude Code's Ink-based UI requires genuine TTY semantics.
+
+### Why Standard Approaches Fail
+
+| Approach | Problem |
+|----------|---------|
+| `subprocess.Popen` with PTY | UI renders, messages don't submit |
+| `pexpect.spawn()` | Same - messages appear but stay at "0 tokens" |
+| `-p` flag | Works but doesn't trigger interactive-only features |
+
+**Root cause**: Claude Code uses Ink (React-like terminal UI framework) which requires:
+- `setRawMode(true)` on stdin - throws errors in non-TTY contexts
+- Keypress events, not buffered line input (Enter must be a keypress, not `\n`)
+- Natural timing between keystrokes - automation delivers input instantly
+
+### tmux-Based Automation
+
+tmux provides genuine TTY semantics. Claude Code sees a real terminal:
+
+```bash
+# Create detached session with explicit dimensions
+tmux new-session -d -s claude-test -x 120 -y 40
+
+# Start Claude interactively
+tmux send-keys -t claude-test "claude --session-id <id>" Enter
+
+# Wait for ready, send message
+sleep 3
+tmux send-keys -t claude-test "What is 2+2" Enter
+
+# Capture output
+tmux capture-pane -t claude-test -p
+
+# Clean up
+tmux kill-session -t claude-test
+```
+
+This enables testing features like `aprompt_suggestion` agents that require interactive mode.
+
+### Version Testing with Controlled Sessions
+
+For empirical version comparison, use predictable session IDs. See `.claude/skills/version-test/` for the full workflow.
+
+1. **Install specific version** (preserves current symlink):
+   ```bash
+   # Save current, install version, restore symlink, return binary path
+   original=$(readlink ~/.local/bin/claude)
+   curl -fsSL https://claude.ai/install.sh | bash -s "2.1.25" >/dev/null 2>&1
+   ln -sf "$original" ~/.local/bin/claude
+   binary="$HOME/.local/share/claude/versions/2.1.25"
+   ```
+
+2. **Run with predictable session ID**:
+   ```bash
+   "$binary" --session-id MMPP0000-0000-0000-0000-00000000000N -p "test prompt"
+   ```
+   Format: `MM`=minor version, `PP`=patch, `N`=counter (e.g., `25000000-...` for v2.1.25).
+
+3. **Inspect artifacts**:
+   ```bash
+   find ~/.claude/projects -name "*MMPP0000*"
+   ```
+
+4. **Clean up test sessions**:
+   ```bash
+   uv run python -m src.cli.main delete "MMPP0000..." --force --no-backup
+   ```
+
+### Binary Search for Version Changes
+
+To identify when a feature was introduced:
+
+```bash
+# Install and test a version
+curl -fsSL https://claude.ai/install.sh | bash -s "2.1.1" >/dev/null 2>&1
+~/.local/share/claude/versions/2.1.1 --session-id 01010000... -p "Launch agent for 1+1"
+
+# Check for expected artifact
+ls ~/.claude/projects/-Users-.../<session-id>/subagents/  # Does it exist?
+
+# Repeat with different versions to narrow down
+```

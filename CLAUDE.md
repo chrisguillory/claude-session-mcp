@@ -8,7 +8,7 @@ Session files are JSONL at `~/.claude/projects/<encoded-path>/<session-id>.jsonl
 
 ### Quick Reference: Record Types
 
-Core record types found in session files (schema v0.1.7):
+Record types found in session files (schema v0.2.9):
 
 | Type | Purpose | Key Fields | Inherits BaseRecord |
 |------|---------|------------|---------------------|
@@ -18,6 +18,10 @@ Core record types found in session files (schema v0.1.7):
 | `system` | Internal events (see subtypes below) | `uuid`, `timestamp`, `sessionId`, `cwd`, `parentUuid`, `systemType` | Yes |
 | `file-history-snapshot` | Document/file state tracking | `messageId`, `snapshot`, `isSnapshotUpdate` | **No** |
 | `queue-operation` | Queue management events | `operation`, `timestamp`, `sessionId`, `content` | **No** (no uuid) |
+| `custom-title` | User-defined session names (v0.1.9) | `customTitle`, `sessionId`, `timestamp` | **No** |
+| `progress` | Long-running operation tracking (v0.2.4) | `data`, `parentToolUseID`, `toolUseID` | **No** (own schema) |
+| `pr-link` | PR creation tracking (v0.2.9) | `prNumber`, `prUrl`, `prRepository` | **No** |
+| `saved_hook_context` | Persisted hook output (v0.2.9) | `content`, `hookName`, `hookEvent`, `toolUseID` | **No** (own schema) |
 
 **System Record Subtypes** (all have `type='system'`, differentiated by `subtype` field):
 
@@ -25,8 +29,11 @@ Core record types found in session files (schema v0.1.7):
 |---------|---------|-------------------|
 | `local_command` | Local shell/CLI operations | `content`, `level`, `slug`, `isMeta` |
 | `compact_boundary` | Session compaction markers | `content`, `compactMetadata` (trigger, preTokens), `logicalParentUuid` |
+| `microcompact_boundary` | Lightweight compaction markers (v0.2.4) | `content`, `microcompactMetadata` |
 | `api_error` | Claude API failures | `error`, `retryInMs`, `retryAttempt`, `maxRetries`, `cause` |
 | `informational` | General system notifications | `content`, `level` |
+| `turn_duration` | Turn timing data (v0.2.0) | `durationMs` |
+| `stop_hook_summary` | Hook execution summaries (v0.2.6) | `hookCount`, `hookInfos`, `hookErrors`, `stopReason` |
 
 ### Quick Reference: Message Content Types
 
@@ -51,6 +58,7 @@ Common fields and their meanings:
 - **`parentUuid`**: Links to preceding message; establishes conversation thread (null for root records)
 - **`cwd`**: Working directory at time of record (absolute path)
 - **`isSidechain`**: Message from an agent or subprocess (references `agent-{agentId}.jsonl`)
+- **`agentId`**: Agent identifier; typed agents use `<type>-<hex>` format (e.g., `aprompt_suggestion-a1b2c3`)
 - **`slug`**: Human-readable session identifier (e.g., "jiggly-churning-rabbit") - may change within session
 - **`leafUuid`**: Most recent message in a conversation branch (used in summary records)
 - **`compactMetadata`**: Session compression metadata (`trigger`: auto/manual, `preTokens`: token count before compaction)
@@ -435,6 +443,79 @@ When Claude Code updates break validation:
 2. Inspect failing records using the command above
 3. Update `src/schemas/session/models.py` with new fields/types
 4. Bump schema version in models.py header
+
+## Model Definition Ordering
+
+**Use composite-first (top-down) ordering** when defining Pydantic models. Show the complete assembled structure first, then define its constituent parts below.
+
+### The Pattern
+
+```python
+# GOOD: Composite-first ordering
+# 1. Show the complete structure first (what the reader cares about)
+class SessionArchive(StrictModel):
+    main_session: MainSessionFileEntry
+    agent_files: Sequence[AgentFileEntry]
+    plan_files: Sequence[PlanFileEntry]
+
+# 2. Then define the constituent types it references
+class MainSessionFileEntry(StrictModel):
+    filename: str
+    records: Sequence[SessionRecord]
+
+class AgentFileEntry(StrictModel):
+    filename: str
+    nested: bool
+    records: Sequence[SessionRecord]
+
+class PlanFileEntry(StrictModel):
+    slug: str
+    content: str
+```
+
+### Why This Matters
+
+1. **Reader-friendly**: The main structure answers "what does this look like?" immediately
+2. **Self-documenting**: Field types in the composite serve as a table of contents
+3. **API-style**: Matches how documentation typically presents complex structures
+4. **Dependency clarity**: Reading top-to-bottom reveals the dependency graph
+
+### The Anti-Pattern
+
+```python
+# BAD: Bottom-up ordering (forces reader to scroll to understand the whole)
+class PlanFileEntry(StrictModel):
+    slug: str
+    content: str
+
+class AgentFileEntry(StrictModel):
+    filename: str
+    nested: bool
+
+class MainSessionFileEntry(StrictModel):
+    filename: str
+    records: Sequence[SessionRecord]
+
+# Reader has to scroll past all these to see what they compose into
+class SessionArchive(StrictModel):
+    main_session: MainSessionFileEntry
+    agent_files: Sequence[AgentFileEntry]
+    plan_files: Sequence[PlanFileEntry]
+```
+
+### Python Forward References
+
+Python allows forward references via string annotations or `from __future__ import annotations`. Use these to enable composite-first ordering:
+
+```python
+from __future__ import annotations
+
+class SessionArchive(StrictModel):
+    agent_files: Sequence[AgentFileEntry]  # AgentFileEntry defined below
+
+class AgentFileEntry(StrictModel):  # Definition follows reference
+    ...
+```
 
 ## Git Workflow
 

@@ -22,6 +22,8 @@ from src.schemas.session.models import (
     AgentCompletedState,
     # Tool inputs (alphabetical)
     AgentOutputToolInput,
+    # Progress data
+    AgentProgressData,
     AgentsRetrievalResult,
     # API errors
     ApiError,
@@ -36,6 +38,7 @@ from src.schemas.session.models import (
     BackgroundTask,
     BaseRecord,
     BashOutputToolInput,
+    BashProgressData,
     BashToolInput,
     BashToolResult,
     # Token usage
@@ -69,6 +72,8 @@ from src.schemas.session.models import (
     GrepToolInput,
     GrepToolResult,
     HandoffCommandResult,
+    HookInfo,
+    HookProgressData,
     ImageContent,
     ImageSource,
     InformationalSystemRecord,
@@ -78,21 +83,28 @@ from src.schemas.session.models import (
     ListMcpResourcesToolInput,
     LocalCommandSystemRecord,
     MalformedWriteToolInput,
+    McpMeta,
     McpResource,
     MCPSearchToolInput,
+    MCPStructuredContent,
     MCPToolInput,
     MCPToolResult,
     # Message
     Message,
     MessageContent,
+    MicrocompactBoundarySystemRecord,
     NetworkError,
     NotebookEditToolInput,
     PatchHunk,
+    PrLinkRecord,
+    ProgressData,
+    ProgressRecord,
     QuestionOption,
     QueueOperationRecord,
     ReadMcpResourceToolInput,
     ReadToolInput,
     ReadToolResult,
+    SavedHookContextRecord,
     ServerToolUse,
     SessionAnalysis,
     # Metadata/Analysis
@@ -100,12 +112,15 @@ from src.schemas.session.models import (
     # Main union
     SessionRecord,
     SessionRecordAdapter,
+    SimpleThinkingMetadata,
     SkillToolInput,
+    StopHookSummarySystemRecord,
     # Base
     StrictModel,
     SummaryRecord,
     SystemRecord,
     SystemSubtypeRecord,
+    Task,
     TaskOutputPollingResult,
     TaskOutputToolInput,
     TaskToolInput,
@@ -209,6 +224,7 @@ __all__ = [
     # Thinking metadata
     'ThinkingTrigger',
     'ThinkingMetadata',
+    'SimpleThinkingMetadata',
     # Todo
     'TodoItem',
     # Compact
@@ -253,6 +269,13 @@ __all__ = [
     'WriteToolResult',
     'ToolResult',
     'MCPToolResult',  # Fallback for MCP tool results (enables isinstance checks)
+    'MCPStructuredContent',
+    'McpMeta',
+    # Progress data
+    'AgentProgressData',
+    'BashProgressData',
+    'HookProgressData',
+    'ProgressData',
     # Records
     'BaseRecord',
     'UserRecord',
@@ -261,15 +284,22 @@ __all__ = [
     'SystemRecord',
     'LocalCommandSystemRecord',
     'CompactBoundarySystemRecord',
+    'MicrocompactBoundarySystemRecord',
     'ApiErrorSystemRecord',
     'InformationalSystemRecord',
     'TurnDurationSystemRecord',
+    'StopHookSummarySystemRecord',
+    'HookInfo',
     'SystemSubtypeRecord',
+    'Task',
     'FileBackupInfo',
     'FileHistorySnapshot',
     'FileHistorySnapshotRecord',
     'QueueOperationRecord',
     'CustomTitleRecord',
+    'ProgressRecord',
+    'PrLinkRecord',
+    'SavedHookContextRecord',
     # Main union
     'SessionRecord',
     'SessionRecordAdapter',

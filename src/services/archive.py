@@ -18,18 +18,26 @@ from src.paths import encode_path
 from src.protocols import LoggerProtocol, NullLogger
 from src.schemas.operations.archive import (
     ARCHIVE_FORMAT_VERSION,
+    AgentFileEntry,
     ArchiveMetadata,
     FileMetadata,
-    SessionArchive,
+    MainSessionFileEntry,
+    PlanFileEntry,
+    SessionArchiveV2,
+    TodoFileEntry,
+    ToolResultEntry,
+    parse_agent_metadata,
 )
 from src.schemas.session import SessionRecord
 from src.services.artifacts import (
     collect_plan_files,
     collect_todos,
     collect_tool_results,
+    detect_agent_structure,
     extract_custom_title_from_records,
     extract_slugs_from_records,
     extract_source_project_path,
+    iter_tasks,
     validate_session_env_empty,
 )
 from src.services.lineage import get_machine_id
@@ -305,19 +313,82 @@ class SessionArchiveService:
         if custom_title:
             await log.info(f'Found custom title: {custom_title}')
 
-        # Create archive structure
-        archive = SessionArchive(
+        # Collect tasks
+        tasks = list(iter_tasks(self.session_id))
+        if tasks:
+            await log.info(f'Collected {len(tasks)} tasks')
+
+        # Build v2 explicit entry models
+        main_filename = f'{self.session_id}.jsonl'
+        main_records = files_data.get(main_filename, [])
+        main_session = MainSessionFileEntry(
+            record_count=len(main_records),
+            records=main_records,
+        )
+
+        # Build agent entries with structure detection
+        agent_entries: list[AgentFileEntry] = []
+        for file_path in session_files:
+            if not file_path.name.startswith('agent-'):
+                continue
+
+            agent_id, agent_type = parse_agent_metadata(file_path.name)
+            nested = detect_agent_structure(file_path, self.session_id, project_folder)
+            records = files_data.get(file_path.name, [])
+
+            agent_entries.append(
+                AgentFileEntry(
+                    agent_id=agent_id,
+                    agent_type=agent_type,
+                    nested=nested,
+                    record_count=len(records),
+                    records=records,
+                )
+            )
+
+        # Convert artifacts to v2 entry models
+        plan_entries = [PlanFileEntry(slug=slug, content=content) for slug, content in plan_files.items()]
+
+        tool_result_entries = [
+            ToolResultEntry(tool_use_id=tool_use_id, content=content) for tool_use_id, content in tool_results.items()
+        ]
+
+        # Extract agent_id from todo filename: {session_id}-agent-{agent_id}.json
+        # collect_todos() already filters by session_id, so we know the prefix matches
+        todo_prefix = f'{self.session_id}-agent-'
+        todo_entries = [
+            TodoFileEntry(
+                agent_id=filename.removeprefix(todo_prefix).removesuffix('.json'),
+                content=content,
+            )
+            for filename, content in todos.items()
+        ]
+
+        # Calculate statistics
+        total_agent_records = sum(agent.record_count for agent in agent_entries)
+
+        # Handle None version (v2 requires string)
+        if claude_code_version is None:
+            claude_code_version = 'unknown'
+            await log.warning('Claude Code version not found, using "unknown"')
+
+        # Create v2 archive structure
+        archive = SessionArchiveV2(
             version=ARCHIVE_FORMAT_VERSION,
             session_id=self.session_id,
             archived_at=datetime.now(UTC),
             original_project_path=str(source_project_path),
             claude_code_version=claude_code_version,
-            files=files_data,
-            plan_files=plan_files,
-            tool_results=tool_results,
-            todos=todos,
             machine_id=get_machine_id(),
             custom_title=custom_title,
+            main_session=main_session,
+            agent_files=agent_entries,
+            plan_files=plan_entries,
+            tool_results=tool_result_entries,
+            todos=todo_entries,
+            tasks=tasks,
+            total_session_records=len(main_records) + total_agent_records,
+            total_agent_records=total_agent_records,
         )
 
         # Serialize and compress
@@ -366,7 +437,8 @@ class SessionArchiveService:
 
         Finds:
         - Main session file: {session_id}.jsonl
-        - Agent session files: agent-*.jsonl (if any)
+        - Agent session files (flat, pre-2.1.2): agent-*.jsonl
+        - Agent session files (nested, 2.1.2+): {session_id}/subagents/agent-*.jsonl
 
         Args:
             project_folder: Path to project folder in ~/.claude/projects/
@@ -388,10 +460,11 @@ class SessionArchiveService:
         session_files = [main_file]
 
         # Find agent files that belong to this session using rg
+        # Search both flat (project_folder/) and nested (project_folder/<sid>/subagents/)
         # Note: JSON may have optional space after colon, so we use regex pattern
         pattern = f'"sessionId":\\s*"{self.session_id}"'
         result = subprocess.run(
-            ['rg', '--files-with-matches', pattern, '--glob', 'agent-*.jsonl', str(project_folder)],
+            ['rg', '--files-with-matches', pattern, '--glob', '**/agent-*.jsonl', str(project_folder)],
             capture_output=True,
             text=True,
         )
@@ -461,13 +534,13 @@ class SessionArchiveService:
 
         return version
 
-    async def _serialize_json(self, archive: SessionArchive, logger: LoggerProtocol) -> bytes:
+    async def _serialize_json(self, archive: SessionArchiveV2, logger: LoggerProtocol) -> bytes:
         """Serialize archive to uncompressed JSON."""
         await logger.info('Serializing to JSON')
         json_str = archive.model_dump_json(indent=2, exclude_unset=True)
         return json_str.encode('utf-8')
 
-    async def _serialize_zst(self, archive: SessionArchive, logger: LoggerProtocol) -> bytes:
+    async def _serialize_zst(self, archive: SessionArchiveV2, logger: LoggerProtocol) -> bytes:
         """Serialize archive to zstd-compressed JSON."""
         await logger.info('Serializing to zstd-compressed JSON')
 

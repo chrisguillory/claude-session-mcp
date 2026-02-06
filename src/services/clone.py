@@ -24,21 +24,20 @@ from src.services.artifacts import (
     TODOS_DIR,
     apply_agent_id_mapping,
     apply_slug_mapping,
+    collect_agent_file_info,
     collect_plan_files,
     collect_todos,
     collect_tool_results,
     create_session_env_dir,
-    extract_agent_ids_from_files,
+    detect_agent_structure,
     extract_custom_title_from_records,
     extract_slugs_from_records,
     extract_source_project_path,
     generate_agent_id_mapping,
     generate_clone_custom_title,
     generate_clone_slug,
-    transform_agent_filename,
     transform_todo_filename,
     validate_session_env_empty,
-    write_todos,
     write_tool_results,
 )
 from src.services.discovery import SessionDiscoveryService
@@ -107,14 +106,25 @@ class SessionCloneService:
         # Source session directory (we have it directly from discovery, no encoding needed)
         source_session_dir = session_info.session_folder
 
-        # Discover all session files (main + agents)
-        session_files = await self._discover_session_files(session_info, logger)
+        # Discover all session files (main + agents) with structure detection
+        session_files, agent_structure = await self._discover_session_files(session_info, logger)
 
         if logger:
             await logger.info(f'Found {len(session_files)} session files')
+            nested_count = sum(1 for is_nested in agent_structure.values() if is_nested)
+            if nested_count:
+                await logger.info(f'  {nested_count} nested agents (in subagents/)')
 
         # Load all records
         files_data = await self.parser_service.load_session_files(session_files, logger)
+
+        # Collect agent file info (combines filename parsing + structure detection)
+        agent_infos = collect_agent_file_info(files_data, agent_structure)
+        if logger:
+            await logger.info(f'Identified {len(agent_infos)} agent files')
+            nested_count = sum(1 for info in agent_infos if info.nested)
+            if nested_count:
+                await logger.info(f'  {nested_count} nested agents (in subagents/)')
 
         # Collect tool results from source session
         tool_results = collect_tool_results(source_session_dir, session_info.session_id)
@@ -152,7 +162,7 @@ class SessionCloneService:
             slug_mapping = {old_slug: generate_clone_slug(old_slug, new_session_id) for old_slug in plan_files}
 
         # Generate agent ID mapping (CRITICAL for same-project forking)
-        agent_ids = extract_agent_ids_from_files(files_data)
+        agent_ids = {info.agent_id for info in agent_infos}
         agent_id_mapping = generate_agent_id_mapping(agent_ids, new_session_id)
         if logger and agent_id_mapping:
             await logger.info(f'Generated {len(agent_id_mapping)} agent ID mappings')
@@ -179,28 +189,33 @@ class SessionCloneService:
         # =========================================================================
         all_output_paths: list[Path] = []
 
-        # 1. Session files (main + agents with transformed names)
-        for filename in files_data:
-            if filename == f'{session_info.session_id}.jsonl':
-                all_output_paths.append(target_dir / f'{new_session_id}.jsonl')
-            elif filename.startswith('agent-'):
-                new_filename = transform_agent_filename(filename, agent_id_mapping)
-                all_output_paths.append(target_dir / new_filename)
-            else:
-                all_output_paths.append(target_dir / filename)
+        # 1. Main session file
+        all_output_paths.append(target_dir / f'{new_session_id}.jsonl')
 
-        # 2. Tool results
+        # 2. Agent files (with nested structure awareness)
+        for info in agent_infos:
+            new_agent_id = agent_id_mapping[info.agent_id]
+            new_filename = f'agent-{new_agent_id}.jsonl'
+
+            if info.nested:
+                # Nested: <target>/<new_session_id>/subagents/agent-*.jsonl
+                all_output_paths.append(target_dir / new_session_id / 'subagents' / new_filename)
+            else:
+                # Flat: <target>/agent-*.jsonl
+                all_output_paths.append(target_dir / new_filename)
+
+        # 3. Tool results
         if tool_results:
             tool_results_dir = target_dir / new_session_id / 'tool-results'
             all_output_paths.extend(tool_results_dir / f'{tool_use_id}.txt' for tool_use_id in tool_results)
 
-        # 3. Todos
+        # 4. Todos
         if todos:
             for old_filename in todos:
                 new_filename = transform_todo_filename(old_filename, session_info.session_id, new_session_id)
                 all_output_paths.append(TODOS_DIR / new_filename)
 
-        # 4. Plan files
+        # 5. Plan files
         if plan_files:
             all_output_paths.extend(plans_dir / f'{new_slug}.md' for new_slug in slug_mapping.values())
 
@@ -245,58 +260,60 @@ class SessionCloneService:
                 await logger.info(f'Wrote {tool_results_count} tool result files')
 
         # Write todos with updated filenames
+        todos_cloned = 0
         if todos:
-            todos_mapping = write_todos(todos, session_info.session_id, new_session_id)
+            TODOS_DIR.mkdir(parents=True, exist_ok=True)
+            for old_filename, content in todos.items():
+                new_filename = transform_todo_filename(old_filename, session_info.session_id, new_session_id)
+                (TODOS_DIR / new_filename).write_text(content, encoding='utf-8')
+                todos_cloned += 1
             if logger:
-                await logger.info(f'Wrote {len(todos_mapping)} todo files')
+                await logger.info(f'Wrote {todos_cloned} todo files')
 
         # Create session-env directory
         create_session_env_dir(new_session_id)
 
-        # Write transformed session files
-        main_file_path = None
-        agent_files = []
-        total_records = 0
+        # Clone main session file
+        main_filename = f'{session_info.session_id}.jsonl'
+        main_records = files_data[main_filename]
+        main_file_path = str(target_dir / f'{new_session_id}.jsonl')
 
-        for filename, records in files_data.items():
-            # Determine new filename
-            if filename == f'{session_info.session_id}.jsonl':
-                new_filename = f'{new_session_id}.jsonl'
-                main_file_path = str(target_dir / new_filename)
-            elif filename.startswith('agent-'):
-                # Transform agent filename with new ID for fork safety
-                new_filename = transform_agent_filename(filename, agent_id_mapping)
-                agent_files.append(str(target_dir / new_filename))
+        updated_main_records = self._transform_records(main_records, new_session_id, translator)
+        await self._write_jsonl(
+            target_dir / f'{new_session_id}.jsonl',
+            updated_main_records,
+            slug_mapping,
+            agent_id_mapping,
+            logger,
+        )
+        main_records_cloned = len(updated_main_records)
+
+        if logger:
+            await logger.info(f'Cloned main session: {main_records_cloned} records')
+
+        # Clone agent files (with nested structure preservation)
+        agent_file_paths: list[str] = []
+        agent_records_cloned = 0
+
+        for info in agent_infos:
+            records = files_data[info.filename]
+            new_agent_id = agent_id_mapping[info.agent_id]
+            new_filename = f'agent-{new_agent_id}.jsonl'
+
+            if info.nested:
+                output_path = target_dir / new_session_id / 'subagents' / new_filename
             else:
-                new_filename = filename
+                output_path = target_dir / new_filename
 
-            # Transform records
-            updated_records: list[SessionRecord] = []
-            for record in records:
-                # Transform CustomTitleRecord with clone title
-                if isinstance(record, CustomTitleRecord):
-                    new_title = generate_clone_custom_title(record.customTitle, new_session_id)
-                    updated_record: SessionRecord = CustomTitleRecord(
-                        type='custom-title',
-                        customTitle=new_title,
-                        sessionId=new_session_id,
-                    )
-                else:
-                    record_dict = record.model_dump(exclude_unset=True, mode='json')
-                    if 'sessionId' in record_dict:
-                        record_dict['sessionId'] = new_session_id
-                    updated_record = SessionRecordAdapter.validate_python(record_dict)
+            # Create parent directories
+            output_path.parent.mkdir(parents=True, exist_ok=True)
 
-                # Translate paths if needed
-                if translator:
-                    updated_record = translator.translate_record(updated_record)
-
-                updated_records.append(updated_record)
-
-            # Write JSONL file (with slug and agent ID mappings applied)
-            output_path = target_dir / new_filename
+            # Transform and write
+            updated_records = self._transform_records(records, new_session_id, translator)
             await self._write_jsonl(output_path, updated_records, slug_mapping, agent_id_mapping, logger)
-            total_records += len(updated_records)
+
+            agent_file_paths.append(str(output_path))
+            agent_records_cloned += len(updated_records)
 
             if logger:
                 await logger.info(f'Cloned {new_filename}: {len(updated_records)} records')
@@ -322,11 +339,20 @@ class SessionCloneService:
             original_session_id=session_info.session_id,
             restored_at=datetime.now(UTC),
             project_path=str(self.target_project_path),
-            files_restored=len(files_data),
-            records_restored=total_records,
+            was_in_place=False,  # Clone is NEVER in-place
+            main_session_file=main_file_path,
+            agent_files=agent_file_paths,
+            main_records_restored=main_records_cloned,
+            agent_records_restored=agent_records_cloned,
+            plan_files_restored=len(plan_files),
+            tool_results_restored=len(tool_results),
+            todos_restored=todos_cloned,
+            tasks_restored=0,  # Clone ALWAYS skips tasks (fresh start)
             paths_translated=translator is not None,
-            main_session_file=main_file_path or '',
-            agent_files=agent_files,
+            slug_mappings_applied=len(slug_mapping),
+            agent_id_mappings_applied=len(agent_id_mapping),
+            source_machine_id=None,  # Clone is always same machine
+            custom_title=source_custom_title,  # Source title for provenance
         )
 
     async def _resolve_session(
@@ -360,8 +386,13 @@ class SessionCloneService:
         self,
         session_info: SessionInfo,
         logger: LoggerProtocol | None,
-    ) -> list[Path]:
-        """Discover all JSONL files for a session (main + agents)."""
+    ) -> tuple[list[Path], dict[str, bool]]:
+        """Discover all JSONL files for a session with structure detection.
+
+        Returns:
+            Tuple of (file_paths, agent_structure_map)
+            agent_structure_map: filename -> is_nested
+        """
         # Use session folder directly from discovery (no encoding needed)
         session_dir = session_info.session_folder
 
@@ -376,25 +407,68 @@ class SessionCloneService:
         session_files = [main_file]
 
         # Find agent files belonging to this session
-        # Note: JSON may have optional space after colon, so we use regex pattern
+        # Searches both flat and nested (subagents/) locations
         result = subprocess.run(
             [
                 'rg',
                 '--files-with-matches',
                 f'"sessionId":\\s*"{session_info.session_id}"',
                 '--glob',
-                'agent-*.jsonl',
+                '**/agent-*.jsonl',  # Recursive glob for subagents/
                 str(session_dir),
             ],
             capture_output=True,
             text=True,
         )
 
+        # Detect nested structure for each agent file
+        agent_structure: dict[str, bool] = {}
+
         if result.stdout.strip():
             agent_files = [Path(line) for line in result.stdout.strip().split('\n')]
+
+            for agent_path in agent_files:
+                is_nested = detect_agent_structure(agent_path, session_info.session_id, session_dir)
+                agent_structure[agent_path.name] = is_nested
+
             session_files.extend(agent_files)
 
-        return session_files
+        return session_files, agent_structure
+
+    def _transform_records(
+        self,
+        records: Sequence[SessionRecord],
+        new_session_id: str,
+        translator: PathTranslator | None,
+    ) -> list[SessionRecord]:
+        """Transform records for cloning.
+
+        Updates session IDs, translates paths, and generates clone custom titles.
+        """
+        updated_records: list[SessionRecord] = []
+
+        for record in records:
+            # Transform CustomTitleRecord with clone title
+            if isinstance(record, CustomTitleRecord):
+                new_title = generate_clone_custom_title(record.customTitle, new_session_id)
+                updated_record: SessionRecord = CustomTitleRecord(
+                    type='custom-title',
+                    customTitle=new_title,
+                    sessionId=new_session_id,
+                )
+            else:
+                record_dict = record.model_dump(exclude_unset=True, mode='json')
+                if 'sessionId' in record_dict:
+                    record_dict['sessionId'] = new_session_id
+                updated_record = SessionRecordAdapter.validate_python(record_dict)
+
+            # Translate paths if needed
+            if translator:
+                updated_record = translator.translate_record(updated_record)
+
+            updated_records.append(updated_record)
+
+        return updated_records
 
     async def _write_jsonl(
         self,
