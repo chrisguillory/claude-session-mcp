@@ -473,7 +473,9 @@ async def _clone_async(
 
 @app.command()
 def delete(
-    session_id: str = typer.Argument(..., help='Session ID to delete'),
+    session_id: str | None = typer.Argument(
+        None, help='Session ID (full or prefix). Auto-detected inside Claude Code.'
+    ),
     force: bool = typer.Option(False, '--force', '-f', help='Required to delete native (UUIDv4) sessions'),
     terminate: bool = typer.Option(False, '--terminate', '-t', help='Terminate running Claude process before deletion'),
     no_backup: bool = typer.Option(False, '--no-backup', help="Don't keep a backup file for undo"),
@@ -493,7 +495,7 @@ def delete(
     A backup is saved to ~/.claude-session-mcp/deleted/ for undo capability.
     Use 'restore --in-place' on the backup to undo.
     """
-    asyncio.run(_delete_async(session_id, force, terminate, no_backup, dry_run, project, verbose))
+    asyncio.run(_delete_async(_resolve_session_id(session_id), force, terminate, no_backup, dry_run, project, verbose))
 
 
 async def _delete_async(
