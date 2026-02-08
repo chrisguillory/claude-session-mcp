@@ -1,6 +1,6 @@
 #!/usr/bin/env -S uv run --no-project
 # /// script
-# dependencies = []
+# dependencies = ["pydantic"]
 # ///
 
 """
@@ -10,11 +10,14 @@ Does an initial full render via claude-code-log, then streams new records
 to the browser in real-time via Server-Sent Events. No page reloads needed.
 
 Usage:
-    ./scripts/watch_session.py SESSION_ID [--interval 1.0] [--open-browser]
+    # Auto-detect current session (daemon mode, auto-opens browser):
+    ./scripts/watch_session.py
 
-Examples:
-    ./scripts/watch_session.py 408c123a --open-browser
-    ./scripts/watch_session.py 408c123a-1b11-4ddd-9e49-06baf2ca1d56
+    # Daemon mode without browser auto-open:
+    ./scripts/watch_session.py --no-browser
+
+    # Watch a specific session (manual mode):
+    ./scripts/watch_session.py SESSION_ID [--interval 1.0] [--open-browser]
 
 Requires:
     - rg (ripgrep) for session discovery
@@ -41,6 +44,8 @@ from html import escape as html_escape
 from pathlib import Path
 from typing import Any
 
+import pydantic
+
 # ==============================================================================
 # Terminal Colors
 # ==============================================================================
@@ -64,6 +69,55 @@ class Colors:
 
 if not sys.stdout.isatty():
     Colors.disable()
+
+
+# ==============================================================================
+# Pydantic Models
+# ==============================================================================
+
+
+class StrictModel(pydantic.BaseModel):
+    """Strict base model mirroring src/schemas/types.py:BaseStrictModel."""
+
+    model_config = pydantic.ConfigDict(
+        extra='forbid',
+        strict=True,
+        frozen=True,
+    )
+
+
+class SessionMetadata(StrictModel):
+    """Subset of claude-workspace SessionMetadata — only fields we need."""
+
+    claude_pid: int
+
+    model_config = pydantic.ConfigDict(extra='ignore', strict=True, frozen=True)
+
+
+class SessionEntry(StrictModel):
+    """Subset of claude-workspace Session — only fields we need."""
+
+    session_id: str
+    state: str
+    metadata: SessionMetadata
+
+    model_config = pydantic.ConfigDict(extra='ignore', strict=True, frozen=True)
+
+
+class SessionDatabase(StrictModel):
+    """Subset of claude-workspace SessionDatabase."""
+
+    sessions: list[SessionEntry]
+
+    model_config = pydantic.ConfigDict(extra='ignore', strict=True, frozen=True)
+
+
+class DaemonContext(StrictModel):
+    """Context for daemon mode — tracks the Claude process to monitor."""
+
+    session_id: str
+    jsonl_path: Path
+    claude_pid: int
 
 
 # ==============================================================================
@@ -107,6 +161,103 @@ def find_session(session_id_or_prefix: str) -> Path:
         sys.exit(1)
 
     return session_files[0]
+
+
+# ==============================================================================
+# Session Auto-Detection
+# ==============================================================================
+
+_SESSIONS_FILE = Path.home() / '.claude-workspace' / 'sessions.json'
+_SESSION_DB_ADAPTER = pydantic.TypeAdapter(SessionDatabase)
+
+
+def _find_ancestor_claude_pid() -> int | None:
+    """Walk process tree to find an ancestor Claude Code process.
+
+    Returns the PID if found, None if not running inside Claude Code.
+    Ported from src/services/claude_process.py:find_ancestor_claude_pid.
+    """
+    current = os.getppid()
+
+    for _ in range(20):
+        result = subprocess.run(
+            ['ps', '-p', str(current), '-o', 'ppid=,comm='],
+            capture_output=True,
+            text=True,
+        )
+        if not result.stdout.strip():
+            break
+
+        parts = result.stdout.strip().split(None, 1)
+        ppid = int(parts[0])
+        comm = parts[1] if len(parts) > 1 else ''
+
+        if 'claude' in comm.lower():
+            return current
+
+        current = ppid
+
+    return None
+
+
+def _resolve_session_id_from_pid(claude_pid: int, *, max_attempts: int = 3) -> str | None:
+    """Look up session ID for a Claude PID in sessions.json.
+
+    Returns session ID if found, None if no matching active session.
+    Ported from src/services/claude_process.py:resolve_session_id_from_pid.
+    """
+    for attempt in range(max_attempts):
+        if not _SESSIONS_FILE.exists():
+            if attempt < max_attempts - 1:
+                time.sleep(0.5)
+            continue
+
+        with _SESSIONS_FILE.open() as f:
+            db = _SESSION_DB_ADAPTER.validate_python(json.load(f))
+
+        matching = [s for s in db.sessions if s.state == 'active' and s.metadata.claude_pid == claude_pid]
+
+        if len(matching) == 1:
+            return matching[0].session_id
+        if len(matching) > 1:
+            ids = [s.session_id for s in matching]
+            raise RuntimeError(f'Multiple active sessions for PID {claude_pid}: {ids}')
+
+        if attempt < max_attempts - 1:
+            time.sleep(0.5)
+
+    return None
+
+
+def _auto_detect_session() -> DaemonContext | None:
+    """Auto-detect current Claude Code session.
+
+    Walks the process tree to find a Claude ancestor, then resolves
+    the session ID via sessions.json and locates the JSONL file.
+
+    Returns DaemonContext if successful, None if not running inside Claude Code.
+    """
+    pid = _find_ancestor_claude_pid()
+    if pid is None:
+        return None
+
+    session_id = _resolve_session_id_from_pid(pid)
+    if session_id is None:
+        return None
+
+    jsonl_path = find_session(session_id)
+    return DaemonContext(session_id=session_id, jsonl_path=jsonl_path, claude_pid=pid)
+
+
+def _is_process_alive(pid: int) -> bool:
+    """Check if a process is still running via kill -0."""
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True  # Exists but different user
+    return True
 
 
 # ==============================================================================
@@ -622,6 +773,7 @@ setTimeout(()=>{
   const tail = document.getElementById("live-tail");
   const scrollThreshold = 200;
   let lastEvent = Date.now();
+  let stopped = false;
 
   function isNearBottom(){
     return (document.documentElement.scrollHeight - window.innerHeight - window.scrollY) < scrollThreshold;
@@ -686,7 +838,17 @@ setTimeout(()=>{
       location.reload();
     });
 
+    es.addEventListener("session-ended", function(){
+      stopped = true;
+      es.close();
+      const banner = document.createElement("div");
+      banner.style.cssText = "position:fixed;bottom:0;left:0;right:0;padding:12px;background:#1a1a2e;color:#e0e0e0;text-align:center;font-size:14px;z-index:9999;border-top:2px solid #4a4a6a;";
+      banner.textContent = "Session ended. This viewer is no longer receiving updates.";
+      document.body.appendChild(banner);
+    });
+
     es.onerror = function(){
+      if(stopped) return;
       es.close();
       setTimeout(connectSSE, 3000);
     };
@@ -745,7 +907,13 @@ def regenerate(jsonl_path: Path, html_path: Path) -> float:
 # ==============================================================================
 
 
-def watch(jsonl_path: Path, interval: float, open_browser: bool) -> None:
+def watch(
+    jsonl_path: Path,
+    interval: float,
+    open_browser: bool,
+    *,
+    daemon: DaemonContext | None = None,
+) -> None:
     """Watch JSONL and stream new records via SSE."""
     html_path = jsonl_path.with_suffix('.html')
     session_id = jsonl_path.stem
@@ -763,6 +931,9 @@ def watch(jsonl_path: Path, interval: float, open_browser: bool) -> None:
     print(f'  {Colors.CYAN}File:{Colors.RESET}     {jsonl_path}')
     print(f'  {Colors.CYAN}Serving:{Colors.RESET}  {url}')
     print(f'  {Colors.CYAN}Polling:{Colors.RESET}  every {interval}s')
+    if daemon is not None:
+        print(f'  {Colors.CYAN}Mode:{Colors.RESET}    daemon (auto-close when session ends)')
+        print(f'  {Colors.CYAN}Claude:{Colors.RESET}  PID {daemon.claude_pid}')
     print()
 
     # Initial full generation
@@ -783,11 +954,34 @@ def watch(jsonl_path: Path, interval: float, open_browser: bool) -> None:
     tail.snapshot_end()
 
     print()
-    print(f'{Colors.DIM}Streaming via SSE... (Ctrl+C to stop){Colors.RESET}')
+    if daemon is not None:
+        print(f'{Colors.DIM}Streaming via SSE... (Ctrl+C to stop, or wait for session to end){Colors.RESET}')
+    else:
+        print(f'{Colors.DIM}Streaming via SSE... (Ctrl+C to stop){Colors.RESET}')
     print()
 
     while True:
         time.sleep(interval)
+
+        # Check for session closure (daemon mode)
+        if daemon is not None and not _is_process_alive(daemon.claude_pid):
+            ts = time.strftime('%H:%M:%S')
+            print(f'{Colors.DIM}[{ts}]{Colors.RESET} {Colors.YELLOW}Session ended, draining final records...{Colors.RESET}')
+            final_records = tail.read_new_records()
+            rendered_count = 0
+            for record in final_records:
+                for html_frag in render_record(record, msg_counter):
+                    broadcast_sse(server, html_frag, str(tail.byte_offset))
+                    rendered_count += 1
+            if rendered_count:
+                print(
+                    f'{Colors.DIM}[{ts}]{Colors.RESET} Drained {rendered_count} block(s) '
+                    f'from {len(final_records)} record(s)'
+                )
+            broadcast_event(server, 'session-ended', 'closed')
+            time.sleep(2)  # Let browser receive the event
+            print(f'{Colors.DIM}[{ts}]{Colors.RESET} Session closed. Exiting.')
+            break
 
         # Check for full refresh request
         if server.refresh_flag.is_set():  # type: ignore[attr-defined]
@@ -849,9 +1043,13 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description='Watch a Claude Code session with live SSE updates.',
     )
-    parser.add_argument('session', help='Session ID or prefix')
+    parser.add_argument(
+        'session', nargs='?', default=None, help='Session ID or prefix (omit to auto-detect current session)'
+    )
     parser.add_argument('--interval', type=float, default=1.0, help='Polling interval in seconds (default: 1.0)')
     parser.add_argument('--open-browser', action='store_true', help='Open HTML in browser after first generation')
+    parser.add_argument('--no-browser', action='store_true', help='Suppress auto-browser-open in daemon mode')
+    parser.add_argument('--no-auto-close', action='store_true', help='Disable auto-exit when session ends (daemon mode)')
 
     args = parser.parse_args()
 
@@ -859,8 +1057,24 @@ def main() -> None:
         print(f'{Colors.RED}Error:{Colors.RESET} uvx not found on PATH (install uv)')
         sys.exit(1)
 
-    jsonl_path = find_session(args.session)
-    watch(jsonl_path, args.interval, args.open_browser)
+    daemon: DaemonContext | None = None
+
+    if args.session is not None:
+        # Explicit session: normal mode (unchanged behavior)
+        jsonl_path = find_session(args.session)
+        open_browser = args.open_browser
+    else:
+        # Auto-detect mode
+        ctx = _auto_detect_session()
+        if ctx is None:
+            print(f'{Colors.RED}Error:{Colors.RESET} Could not auto-detect Claude Code session.')
+            print(f'{Colors.DIM}Run with a SESSION_ID argument, or run inside Claude Code.{Colors.RESET}')
+            sys.exit(1)
+        jsonl_path = ctx.jsonl_path
+        daemon = None if args.no_auto_close else ctx
+        open_browser = not args.no_browser  # Default ON in daemon mode
+
+    watch(jsonl_path, args.interval, open_browser, daemon=daemon)
 
 
 if __name__ == '__main__':
