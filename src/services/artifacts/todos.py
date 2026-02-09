@@ -24,7 +24,7 @@ Example:
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from pathlib import Path
 
 TODOS_DIR = Path.home() / '.claude' / 'todos'
@@ -95,44 +95,40 @@ def transform_todo_filename(
 
 
 def write_todos(
-    todos: Mapping[str, str],
-    old_session_id: str,
-    new_session_id: str,
-) -> Mapping[str, str]:
-    """
-    Write todos files with updated filenames.
+    todos: Iterable[tuple[str, str]],
+    *,
+    exist_ok: bool = False,
+) -> int:
+    """Write todo files to ~/.claude/todos/.
 
-    Creates the todos directory if it doesn't exist. Transforms each
-    filename using transform_todo_filename() and writes the content.
+    Mode-agnostic writer — caller computes target filenames.
 
-    The JSON content is written unchanged - only the filename is updated.
+    Examples:
+        # Clone (transform_todo_filename remaps session ID):
+        write_todos((transform_todo_filename(f, old_sid, new_sid), c) for f, c in todos.items())
+        # Restore non-in-place (remap both session ID and agent ID):
+        write_todos((f'{new_sid}-agent-{new_agent_id}.json', c) for ...)
+        # In-place/rollback (original filenames):
+        write_todos((f'{sid}-agent-{agent_id}.json', c) for ..., exist_ok=True)
 
     Args:
-        todos: Mapping of original_filename -> JSON content from archive/source
-        old_session_id: Original session ID (for filename transformation)
-        new_session_id: New session ID
+        todos: (target_filename, content) pairs
+        exist_ok: If True, silently overwrite existing files (for rollback).
+                  If False (default), raise FileExistsError on collision.
 
     Returns:
-        Mapping of old_filename -> new_filename (for logging/verification)
+        Number of files written
 
     Raises:
-        FileExistsError: If new filename already exists (collision)
+        FileExistsError: If exist_ok=False and a target file already exists
     """
-    if not todos:
-        return {}
-
-    TODOS_DIR.mkdir(parents=True, exist_ok=True)
-
-    filename_mapping: dict[str, str] = {}
-
-    for old_filename, content in todos.items():
-        new_filename = transform_todo_filename(old_filename, old_session_id, new_session_id)
-        new_path = TODOS_DIR / new_filename
-
-        if new_path.exists():
-            raise FileExistsError(f'Todo file already exists: {new_path}\nThis indicates a session ID collision.')
-
-        new_path.write_text(content, encoding='utf-8')
-        filename_mapping[old_filename] = new_filename
-
-    return filename_mapping
+    count = 0
+    for filename, content in todos:
+        if count == 0:
+            TODOS_DIR.mkdir(parents=True, exist_ok=True)
+        todo_path = TODOS_DIR / filename
+        if not exist_ok and todo_path.exists():
+            raise FileExistsError(f'Todo file already exists: {todo_path}\nThis indicates a session ID collision.')
+        todo_path.write_text(content, encoding='utf-8')
+        count += 1
+    return count

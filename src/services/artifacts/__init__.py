@@ -26,6 +26,7 @@ from .custom_title import (
     extract_custom_title_from_records,
     generate_clone_custom_title,
 )
+from .jsonl import write_jsonl
 from .paths import (
     MissingCwdError,
     extract_source_project_path,
@@ -45,8 +46,14 @@ from .session_env import (
     validate_session_env_empty,
 )
 from .tasks import (
+    TASK_METADATA_FILES,
     TASKS_DIR,
+    TaskDirectoryContents,
+    classify_task_directory,
+    collect_task_metadata,
+    iter_task_paths,
     iter_tasks,
+    write_task_metadata,
     write_tasks,
 )
 from .todos import (
@@ -102,8 +109,16 @@ __all__ = [
     'write_tool_results',
     # tasks
     'TASKS_DIR',
+    'TASK_METADATA_FILES',
+    'TaskDirectoryContents',
+    'classify_task_directory',
+    'collect_task_metadata',
+    'iter_task_paths',
     'iter_tasks',
+    'write_task_metadata',
     'write_tasks',
+    # jsonl
+    'write_jsonl',
     # paths
     'MissingCwdError',
     'extract_source_project_path',
