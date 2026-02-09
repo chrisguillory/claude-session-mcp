@@ -110,6 +110,7 @@ class SessionArchiveV2(StrictModel):
     tool_results: Sequence[ToolResultEntry] = ()
     todos: Sequence[TodoFileEntry] = ()
     tasks: Sequence[Task] = ()  # Canonical Task model from session/models.py
+    task_metadata: Mapping[str, str] = MappingProxyType({})  # filename -> content (.highwatermark, etc.)
 
     # Statistics (for quick inspection without iterating records)
     total_session_records: int

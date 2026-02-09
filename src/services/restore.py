@@ -32,13 +32,15 @@ from src.schemas.session import CustomTitleRecord, SessionRecord, SessionRecordA
 from src.services.artifacts import (
     TASKS_DIR,
     TODOS_DIR,
-    apply_agent_id_mapping,
-    apply_slug_mapping,
     create_session_env_dir,
     generate_agent_id_mapping,
     generate_clone_custom_title,
     generate_clone_slug,
+    write_jsonl,
+    write_plan_files,
+    write_task_metadata,
     write_tasks,
+    write_todos,
     write_tool_results,
 )
 from src.services.lineage import LineageService
@@ -307,9 +309,11 @@ class SessionRestoreService:
             else:
                 all_output_paths.extend(plans_dir / f'{new_slug}.md' for new_slug in slug_mapping.values())
 
-        # 6. Tasks (only for in_place - tasks dir structure)
-        if in_place and archive.tasks:
+        # 6. Tasks
+        if archive.tasks:
             all_output_paths.extend(TASKS_DIR / new_session_id / f'{task.id}.json' for task in archive.tasks)
+        if archive.task_metadata:
+            all_output_paths.extend(TASKS_DIR / new_session_id / filename for filename in archive.task_metadata)
 
         # Check ALL paths before writing ANYTHING
         existing_files = [p for p in all_output_paths if p.exists()]
@@ -336,25 +340,20 @@ class SessionRestoreService:
         todos_restored = 0
         tasks_restored = 0
 
-        # Write plan files (v2: entry.slug, entry.content)
+        # Write plan files (shared function handles mkdir)
         if archive.plan_files:
-            plans_dir.mkdir(parents=True, exist_ok=True)
             if in_place:
-                for plan in archive.plan_files:
-                    plan_path = plans_dir / f'{plan.slug}.md'
-                    plan_path.write_text(plan.content, encoding='utf-8')
+                plan_files_restored = write_plan_files((plan.slug, plan.content) for plan in archive.plan_files)
                 if logger:
-                    await logger.info(f'Restored {len(archive.plan_files)} plan files (in-place)')
+                    await logger.info(f'Restored {plan_files_restored} plan files (in-place)')
             else:
-                for plan in archive.plan_files:
-                    new_slug = slug_mapping[plan.slug]
-                    plan_path = plans_dir / f'{new_slug}.md'
-                    plan_path.write_text(plan.content, encoding='utf-8')
+                plan_files_restored = write_plan_files(
+                    (slug_mapping[plan.slug], plan.content) for plan in archive.plan_files
+                )
                 if logger:
-                    await logger.info(f'Restored {len(slug_mapping)} plan files')
+                    await logger.info(f'Restored {plan_files_restored} plan files')
                     for old_slug, new_slug in slug_mapping.items():
                         await logger.info(f'  {old_slug} -> {new_slug}')
-            plan_files_restored = len(archive.plan_files)
 
         # Write tool results (v2: entry.tool_use_id, entry.content)
         if archive.tool_results:
@@ -363,28 +362,34 @@ class SessionRestoreService:
             if logger:
                 await logger.info(f'Restored {tool_results_restored} tool result files')
 
-        # Write todos (v2: entry.agent_id, entry.content)
+        # Write todos (shared function handles mkdir)
         if archive.todos:
-            TODOS_DIR.mkdir(parents=True, exist_ok=True)
-            for todo in archive.todos:
-                if in_place:
-                    filename = f'{archive.session_id}-agent-{todo.agent_id}.json'
-                else:
-                    new_agent_id = agent_id_mapping.get(todo.agent_id, todo.agent_id)
-                    filename = f'{new_session_id}-agent-{new_agent_id}.json'
-                (TODOS_DIR / filename).write_text(todo.content, encoding='utf-8')
-            todos_restored = len(archive.todos)
+            if in_place:
+                todos_restored = write_todos(
+                    (f'{archive.session_id}-agent-{todo.agent_id}.json', todo.content) for todo in archive.todos
+                )
+            else:
+                todos_restored = write_todos(
+                    (f'{new_session_id}-agent-{agent_id_mapping.get(todo.agent_id, todo.agent_id)}.json', todo.content)
+                    for todo in archive.todos
+                )
             if logger:
                 await logger.info(f'Restored {todos_restored} todo files')
 
         # Create session-env directory
         create_session_env_dir(new_session_id)
 
-        # Restore tasks (only for in_place mode)
-        if in_place and archive.tasks:
+        # Restore tasks
+        if archive.tasks:
             tasks_restored = write_tasks(new_session_id, archive.tasks)
             if logger:
                 await logger.info(f'Restored {tasks_restored} tasks')
+
+        # Restore task metadata
+        if archive.task_metadata:
+            metadata_restored = write_task_metadata(new_session_id, archive.task_metadata)
+            if logger:
+                await logger.info(f'Restored {metadata_restored} task metadata files')
 
         # Restore main session file
         main_file_path = str(target_dir / f'{new_session_id}.jsonl')
@@ -396,9 +401,7 @@ class SessionRestoreService:
                 in_place,
             )
         )
-        await self._write_jsonl(
-            target_dir / f'{new_session_id}.jsonl', main_records, slug_mapping, agent_id_mapping, logger
-        )
+        write_jsonl(target_dir / f'{new_session_id}.jsonl', main_records, slug_mapping, agent_id_mapping)
         if logger:
             await logger.info(f'Restored main session: {len(main_records)} records')
 
@@ -433,7 +436,7 @@ class SessionRestoreService:
                     in_place,
                 )
             )
-            await self._write_jsonl(output_path, updated_records, slug_mapping, agent_id_mapping, logger)
+            write_jsonl(output_path, updated_records, slug_mapping, agent_id_mapping)
 
             agent_file_paths.append(str(output_path))
             total_agent_records += len(updated_records)
@@ -574,32 +577,6 @@ class SessionRestoreService:
                 updated_record = translator.translate_record(updated_record)
 
             yield updated_record
-
-    async def _write_jsonl(
-        self,
-        path: Path,
-        records: Sequence[SessionRecord],
-        slug_mapping: Mapping[str, str],
-        agent_id_mapping: Mapping[str, str],
-        logger: LoggerProtocol | None,
-    ) -> None:
-        """Write records to JSONL file, applying slug and agent ID mappings."""
-        with open(path, 'w', encoding='utf-8') as f:
-            for record in records:
-                # Use exclude_unset for round-trip fidelity
-                json_data = record.model_dump(exclude_unset=True, mode='json')
-                # Use compact separators for consistent, smaller output
-                json_str = json.dumps(json_data, separators=(',', ':'))
-
-                # Apply slug mapping first (longer strings, less collision risk)
-                if slug_mapping:
-                    json_str = apply_slug_mapping(json_str, slug_mapping)
-
-                # Apply agent ID mapping second
-                if agent_id_mapping:
-                    json_str = apply_agent_id_mapping(json_str, agent_id_mapping)
-
-                f.write(json_str + '\n')
 
     def _get_session_directory(self) -> Path:
         """Get the session directory for the current project."""

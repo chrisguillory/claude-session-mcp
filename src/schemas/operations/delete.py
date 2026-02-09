@@ -26,6 +26,8 @@ class ArtifactFile(StrictModel):
         'tool_result',  # ~/.claude/projects/<enc>/{sid}/tool-results/{tool_use_id}.txt
         'todo_file',  # ~/.claude/todos/{session_id}-agent-{agent_id}.json
         'task_file',  # ~/.claude/tasks/{session_id}/{task_id}.json
+        'task_metadata',  # ~/.claude/tasks/{session_id}/.highwatermark
+        'task_lock',  # ~/.claude/tasks/{session_id}/.lock (ephemeral, NOT backed up)
     ]
 
 

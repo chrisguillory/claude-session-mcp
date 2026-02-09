@@ -31,6 +31,7 @@ from src.schemas.operations.archive import (
 from src.schemas.session import SessionRecord
 from src.services.artifacts import (
     collect_plan_files,
+    collect_task_metadata,
     collect_todos,
     collect_tool_results,
     detect_agent_structure,
@@ -318,6 +319,11 @@ class SessionArchiveService:
         if tasks:
             await log.info(f'Collected {len(tasks)} tasks')
 
+        # Collect task metadata (.highwatermark, etc.)
+        task_metadata = collect_task_metadata(self.session_id)
+        if task_metadata:
+            await log.info(f'Collected {len(task_metadata)} task metadata files')
+
         # Build v2 explicit entry models
         main_filename = f'{self.session_id}.jsonl'
         main_records = files_data.get(main_filename, [])
@@ -387,6 +393,7 @@ class SessionArchiveService:
             tool_results=tool_result_entries,
             todos=todo_entries,
             tasks=tasks,
+            task_metadata=task_metadata,
             total_session_records=len(main_records) + total_agent_records,
             total_agent_records=total_agent_records,
         )
