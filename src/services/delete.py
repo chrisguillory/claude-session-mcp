@@ -52,8 +52,16 @@ from src.services.artifacts import (
     SESSION_ENV_DIR,
     TASKS_DIR,
     TODOS_DIR,
+    classify_task_directory,
+    create_session_env_dir,
     extract_slugs_from_records,
     get_tool_results_dir,
+    write_jsonl,
+    write_plan_files,
+    write_task_metadata,
+    write_tasks,
+    write_todos,
+    write_tool_results,
 )
 from src.services.parser import SessionParserService
 from src.storage.local import LocalFileSystemStorage
@@ -342,27 +350,40 @@ class SessionDeleteService:
             await logger.info(f'Found {len(todo_file_paths)} todo files')
 
         # 6. Task files (CLAUDE_CODE_ENABLE_TASKS mode)
-        tasks_session_dir = TASKS_DIR / session_id
-        if tasks_session_dir.exists():
-            for path in tasks_session_dir.iterdir():
-                if path.name == '.lock':
-                    continue  # Claude Code convention - skip lock file
-                if path.is_file():
-                    size = path.stat().st_size
-                    artifacts.append(
-                        ArtifactFile(
-                            path=str(path),
-                            size_bytes=size,
-                            artifact_type='task_file',
-                        )
+        task_contents = classify_task_directory(session_id)
+        if task_contents is not None:
+            # Task data files - backed up
+            for path in task_contents.task_files:
+                size = path.stat().st_size
+                artifacts.append(
+                    ArtifactFile(
+                        path=str(path),
+                        size_bytes=size,
+                        artifact_type='task_file',
                     )
-                    task_file_paths.append(str(path))
+                )
+                task_file_paths.append(str(path))
 
-            # Track tasks session directory for cleanup
+            # Metadata files - all deleted, .lock not backed up (ephemeral)
+            for path in task_contents.metadata_files:
+                size = path.stat().st_size
+                artifacts.append(
+                    ArtifactFile(
+                        path=str(path),
+                        size_bytes=size,
+                        artifact_type='task_metadata' if path.name != '.lock' else 'task_lock',
+                    )
+                )
+
+            # Unknown files - fail fast
+            unexpected_files.extend(str(path) for path in task_contents.unexpected_files)
+
+            # Track directory for cleanup
+            tasks_session_dir = TASKS_DIR / session_id
             directories_to_cleanup.append(str(tasks_session_dir))
 
         if logger and task_file_paths:
-            await logger.info(f'Found {len(task_file_paths)} task files')
+            await logger.info(f'Found {len(task_file_paths)} task files and metadata')
 
         # 7. Session-env - expected to be empty, any file is unexpected
         session_env_dir = SESSION_ENV_DIR / session_id
@@ -722,11 +743,10 @@ class SessionDeleteService:
         target_dir.mkdir(parents=True, exist_ok=True)
 
         # Restore main session file
+        # write_jsonl uses exclude_unset=True for round-trip fidelity
+        # Empty mappings ({}, {}) = identity (no slug/agent ID remapping for rollback)
         main_file_path = target_dir / f'{archive.session_id}.jsonl'
-        with open(main_file_path, 'w', encoding='utf-8') as f:
-            for record in archive.main_session.records:
-                record_dict = record.model_dump(mode='json', exclude_none=True)
-                f.write(json.dumps(record_dict, separators=(',', ':')) + '\n')
+        write_jsonl(main_file_path, archive.main_session.records, {}, {})
         logger.info(f'Restored: {main_file_path}')
 
         # Restore agent files (with nested structure support)
@@ -734,58 +754,49 @@ class SessionDeleteService:
             agent_filename = f'agent-{agent.agent_id}.jsonl'
 
             if agent.nested:
-                # Nested: <target>/<session_id>/subagents/agent-*.jsonl
                 agent_dir = target_dir / archive.session_id / 'subagents'
             else:
-                # Flat: <target>/agent-*.jsonl
                 agent_dir = target_dir
 
             agent_dir.mkdir(parents=True, exist_ok=True)
             agent_path = agent_dir / agent_filename
-
-            with open(agent_path, 'w', encoding='utf-8') as f:
-                for record in agent.records:
-                    record_dict = record.model_dump(mode='json', exclude_none=True)
-                    f.write(json.dumps(record_dict, separators=(',', ':')) + '\n')
+            write_jsonl(agent_path, agent.records, {}, {})
             logger.info(f'Restored: {agent_path}')
 
-        # Restore tool results
+        # Restore tool results (exist_ok=True: files may survive partial deletion)
         if archive.tool_results:
-            tool_results_dir = get_tool_results_dir(target_dir, archive.session_id)
-            tool_results_dir.mkdir(parents=True, exist_ok=True)
-            for tr in archive.tool_results:
-                file_path = tool_results_dir / f'{tr.tool_use_id}.txt'
-                file_path.write_text(tr.content, encoding='utf-8')
+            tool_results_mapping = {tr.tool_use_id: tr.content for tr in archive.tool_results}
+            write_tool_results(tool_results_mapping, target_dir, archive.session_id, exist_ok=True)
             logger.info(f'Restored {len(archive.tool_results)} tool result files')
 
-        # Restore todo files
+        # Restore todo files (exist_ok=True: files may survive partial deletion)
         if archive.todos:
-            TODOS_DIR.mkdir(parents=True, exist_ok=True)
-            for todo in archive.todos:
-                filename = f'{archive.session_id}-agent-{todo.agent_id}.json'
-                file_path = TODOS_DIR / filename
-                file_path.write_text(todo.content, encoding='utf-8')
+            write_todos(
+                ((f'{archive.session_id}-agent-{todo.agent_id}.json', todo.content) for todo in archive.todos),
+                exist_ok=True,
+            )
             logger.info(f'Restored {len(archive.todos)} todo files')
 
-        # Restore task files
+        # Restore task files (exist_ok=True: files may survive partial deletion)
         if archive.tasks:
-            from src.services.artifacts import write_tasks
-
-            tasks_restored = write_tasks(archive.session_id, archive.tasks)
+            tasks_restored = write_tasks(archive.session_id, archive.tasks, exist_ok=True)
             logger.info(f'Restored {tasks_restored} task files')
 
-        # Restore plan files
+        # Restore task metadata (exist_ok=True: files may survive partial deletion)
+        if archive.task_metadata:
+            metadata_restored = write_task_metadata(archive.session_id, archive.task_metadata, exist_ok=True)
+            logger.info(f'Restored {metadata_restored} task metadata files')
+
+        # Restore plan files (exist_ok=True: files may survive partial deletion)
         if archive.plan_files:
-            plans_dir = Path.home() / '.claude' / 'plans'
-            plans_dir.mkdir(parents=True, exist_ok=True)
-            for plan in archive.plan_files:
-                file_path = plans_dir / f'{plan.slug}.md'
-                file_path.write_text(plan.content, encoding='utf-8')
+            write_plan_files(
+                ((plan.slug, plan.content) for plan in archive.plan_files),
+                exist_ok=True,
+            )
             logger.info(f'Restored {len(archive.plan_files)} plan files')
 
-        # Recreate session-env directory (usually empty)
-        session_env_dir = SESSION_ENV_DIR / archive.session_id
-        session_env_dir.mkdir(parents=True, exist_ok=True)
+        # Recreate session-env directory
+        create_session_env_dir(archive.session_id)
 
         logger.info('Rollback completed successfully')
 

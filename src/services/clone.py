@@ -7,7 +7,6 @@ Faster than archive+restore for local cloning operations.
 
 from __future__ import annotations
 
-import json
 import subprocess
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
@@ -21,11 +20,11 @@ from src.schemas.operations.discovery import SessionInfo
 from src.schemas.operations.restore import RestoreResult
 from src.schemas.session import CustomTitleRecord, SessionRecord, SessionRecordAdapter
 from src.services.artifacts import (
+    TASKS_DIR,
     TODOS_DIR,
-    apply_agent_id_mapping,
-    apply_slug_mapping,
     collect_agent_file_info,
     collect_plan_files,
+    collect_task_metadata,
     collect_todos,
     collect_tool_results,
     create_session_env_dir,
@@ -36,8 +35,14 @@ from src.services.artifacts import (
     generate_agent_id_mapping,
     generate_clone_custom_title,
     generate_clone_slug,
+    iter_tasks,
     transform_todo_filename,
     validate_session_env_empty,
+    write_jsonl,
+    write_plan_files,
+    write_task_metadata,
+    write_tasks,
+    write_todos,
     write_tool_results,
 )
 from src.services.discovery import SessionDiscoveryService
@@ -139,6 +144,16 @@ class SessionCloneService:
         # Validate session-env is empty (fail fast if Claude starts using it)
         validate_session_env_empty(session_info.session_id)
 
+        # Collect tasks from source session
+        tasks = list(iter_tasks(session_info.session_id))
+        if logger and tasks:
+            await logger.info(f'Found {len(tasks)} tasks')
+
+        # Collect task metadata (.highwatermark, etc.)
+        task_metadata = collect_task_metadata(session_info.session_id)
+        if logger and task_metadata:
+            await logger.info(f'Found {len(task_metadata)} task metadata files')
+
         # Extract slugs and collect plan files from source session
         slugs = extract_slugs_from_records(files_data)
         plan_files = collect_plan_files(slugs)
@@ -219,6 +234,12 @@ class SessionCloneService:
         if plan_files:
             all_output_paths.extend(plans_dir / f'{new_slug}.md' for new_slug in slug_mapping.values())
 
+        # 6. Tasks
+        if tasks:
+            all_output_paths.extend(TASKS_DIR / new_session_id / f'{task.id}.json' for task in tasks)
+        if task_metadata:
+            all_output_paths.extend(TASKS_DIR / new_session_id / filename for filename in task_metadata)
+
         # Check ALL paths before writing ANYTHING
         existing_files = [p for p in all_output_paths if p.exists()]
         if existing_files:
@@ -241,15 +262,14 @@ class SessionCloneService:
         if logger:
             await logger.info(f'Target directory: {target_dir}')
 
-        # Write plan files
+        # Write plan files (shared function handles mkdir)
+        plan_files_cloned = 0
         if plan_files:
-            plans_dir.mkdir(parents=True, exist_ok=True)
-            for old_slug, content in plan_files.items():
-                new_slug = slug_mapping[old_slug]
-                plan_path = plans_dir / f'{new_slug}.md'
-                plan_path.write_text(content, encoding='utf-8')
+            plan_files_cloned = write_plan_files(
+                (slug_mapping[old_slug], content) for old_slug, content in plan_files.items()
+            )
             if logger:
-                await logger.info(f'Wrote {len(slug_mapping)} plan files with new slugs')
+                await logger.info(f'Wrote {plan_files_cloned} plan files with new slugs')
                 for old_slug, new_slug in slug_mapping.items():
                     await logger.info(f'  {old_slug} -> {new_slug}')
 
@@ -259,16 +279,28 @@ class SessionCloneService:
             if logger:
                 await logger.info(f'Wrote {tool_results_count} tool result files')
 
-        # Write todos with updated filenames
+        # Write todos (shared function handles mkdir + filename is pre-computed by caller)
         todos_cloned = 0
         if todos:
-            TODOS_DIR.mkdir(parents=True, exist_ok=True)
-            for old_filename, content in todos.items():
-                new_filename = transform_todo_filename(old_filename, session_info.session_id, new_session_id)
-                (TODOS_DIR / new_filename).write_text(content, encoding='utf-8')
-                todos_cloned += 1
+            todos_cloned = write_todos(
+                (transform_todo_filename(f, session_info.session_id, new_session_id), content)
+                for f, content in todos.items()
+            )
             if logger:
                 await logger.info(f'Wrote {todos_cloned} todo files')
+
+        # Write tasks
+        tasks_cloned = 0
+        if tasks:
+            tasks_cloned = write_tasks(new_session_id, tasks)
+            if logger:
+                await logger.info(f'Cloned {tasks_cloned} tasks')
+
+        # Write task metadata (.highwatermark, etc.)
+        if task_metadata:
+            metadata_written = write_task_metadata(new_session_id, task_metadata)
+            if logger:
+                await logger.info(f'Cloned {metadata_written} task metadata files')
 
         # Create session-env directory
         create_session_env_dir(new_session_id)
@@ -279,12 +311,11 @@ class SessionCloneService:
         main_file_path = str(target_dir / f'{new_session_id}.jsonl')
 
         updated_main_records = self._transform_records(main_records, new_session_id, translator)
-        await self._write_jsonl(
+        write_jsonl(
             target_dir / f'{new_session_id}.jsonl',
             updated_main_records,
             slug_mapping,
             agent_id_mapping,
-            logger,
         )
         main_records_cloned = len(updated_main_records)
 
@@ -310,7 +341,7 @@ class SessionCloneService:
 
             # Transform and write
             updated_records = self._transform_records(records, new_session_id, translator)
-            await self._write_jsonl(output_path, updated_records, slug_mapping, agent_id_mapping, logger)
+            write_jsonl(output_path, updated_records, slug_mapping, agent_id_mapping)
 
             agent_file_paths.append(str(output_path))
             agent_records_cloned += len(updated_records)
@@ -344,10 +375,10 @@ class SessionCloneService:
             agent_files=agent_file_paths,
             main_records_restored=main_records_cloned,
             agent_records_restored=agent_records_cloned,
-            plan_files_restored=len(plan_files),
+            plan_files_restored=plan_files_cloned,
             tool_results_restored=len(tool_results),
             todos_restored=todos_cloned,
-            tasks_restored=0,  # Clone ALWAYS skips tasks (fresh start)
+            tasks_restored=tasks_cloned,
             paths_translated=translator is not None,
             slug_mappings_applied=len(slug_mapping),
             agent_id_mappings_applied=len(agent_id_mapping),
@@ -469,32 +500,6 @@ class SessionCloneService:
             updated_records.append(updated_record)
 
         return updated_records
-
-    async def _write_jsonl(
-        self,
-        path: Path,
-        records: Sequence[SessionRecord],
-        slug_mapping: Mapping[str, str],
-        agent_id_mapping: Mapping[str, str],
-        logger: LoggerProtocol | None,
-    ) -> None:
-        """Write records to JSONL file, applying slug and agent ID mappings."""
-        with open(path, 'w', encoding='utf-8') as f:
-            for record in records:
-                # Use exclude_unset for round-trip fidelity
-                json_data = record.model_dump(exclude_unset=True, mode='json')
-                # Use compact separators for consistent, smaller output
-                json_str = json.dumps(json_data, separators=(',', ':'))
-
-                # Apply slug mapping first (longer strings, less collision risk)
-                if slug_mapping:
-                    json_str = apply_slug_mapping(json_str, slug_mapping)
-
-                # Apply agent ID mapping second
-                if agent_id_mapping:
-                    json_str = apply_agent_id_mapping(json_str, agent_id_mapping)
-
-                f.write(json_str + '\n')
 
     def _get_session_directory(self) -> Path:
         """Get the session directory for the target project."""

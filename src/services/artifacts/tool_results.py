@@ -72,47 +72,43 @@ def write_tool_results(
     tool_results: Mapping[str, str],
     target_dir: Path,
     new_session_id: str,
+    *,
+    exist_ok: bool = False,
 ) -> int:
-    """
-    Write tool result files to new session location.
+    """Write tool result files to new session location.
 
     Creates the tool-results subdirectory structure and writes each
     tool result file. Tool use IDs are preserved unchanged since they
     are nested under the session ID directory.
 
     Directory structure created:
-    {target_dir}/{new_session_id}/tool-results/{tool_use_id}.txt
+        {target_dir}/{new_session_id}/tool-results/{tool_use_id}.txt
 
     Args:
         tool_results: Mapping of tool_use_id -> content from archive/source
         target_dir: Target project directory under ~/.claude/projects/
         new_session_id: New session ID for directory structure
+        exist_ok: If True, silently overwrite existing files (for rollback).
+                  If False (default), raise FileExistsError on collision.
 
     Returns:
         Number of files written
 
     Raises:
-        FileExistsError: If tool-results directory already contains files
-            (indicates cloning into existing session - should not happen)
+        FileExistsError: If exist_ok=False and a target file already exists
     """
     if not tool_results:
         return 0
 
     tool_results_dir = get_tool_results_dir(target_dir, new_session_id)
-
-    # Check for existing files
-    if tool_results_dir.exists() and any(tool_results_dir.iterdir()):
-        raise FileExistsError(
-            f'Tool results directory already contains files: {tool_results_dir}\n'
-            'This indicates cloning into an existing session.'
-        )
-
-    # Create directory structure
     tool_results_dir.mkdir(parents=True, exist_ok=True)
 
-    # Write files
     for tool_use_id, content in tool_results.items():
         file_path = tool_results_dir / f'{tool_use_id}.txt'
+        if not exist_ok and file_path.exists():
+            raise FileExistsError(
+                f'Tool result file already exists: {file_path}\nThis indicates cloning into an existing session.'
+            )
         file_path.write_text(content, encoding='utf-8')
 
     return len(tool_results)

@@ -18,7 +18,7 @@ When cloning a clone, we extract the base slug first to avoid accumulation:
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence, Set
+from collections.abc import Iterable, Mapping, Sequence, Set
 from pathlib import Path
 
 from src.schemas.session import (
@@ -133,39 +133,37 @@ def generate_clone_slug(old_slug: str, new_session_id: str) -> str:
 
 
 def write_plan_files(
-    plan_files: Mapping[str, str],
-    new_session_id: str,
-) -> Mapping[str, str]:
-    """
-    Write plan files to new locations with clone slugs.
+    plans: Iterable[tuple[str, str]],
+    *,
+    exist_ok: bool = False,
+) -> int:
+    """Write plan files to ~/.claude/plans/.
+
+    Mode-agnostic writer — caller computes target slugs.
+
+    Examples:
+        Clone/restore:     write_plan_files((new_slug, content) for ...)
+        In-place/rollback: write_plan_files((slug, content) for ..., exist_ok=True)
 
     Args:
-        plan_files: Mapping of old_slug -> content from archive/source
-        new_session_id: New session ID for provenance
+        plans: (target_slug, content) pairs
+        exist_ok: If False (default), raises FileExistsError on collision.
+            Rollback passes True since files may not have been deleted yet.
 
     Returns:
-        Mapping of old_slug -> new_slug
-
-    Raises:
-        FileExistsError: If new plan file path already exists (slug collision)
+        Number of files written
     """
     plans_dir = Path.home() / '.claude' / 'plans'
-    plans_dir.mkdir(parents=True, exist_ok=True)
-    mapping: dict[str, str] = {}
-
-    for old_slug, content in plan_files.items():
-        new_slug = generate_clone_slug(old_slug, new_session_id)
-        new_path = plans_dir / f'{new_slug}.md'
-
-        if new_path.exists():
-            raise FileExistsError(
-                f'Plan file already exists: {new_path}\nThis indicates a slug collision. Please investigate.'
-            )
-
-        new_path.write_text(content, encoding='utf-8')
-        mapping[old_slug] = new_slug
-
-    return mapping
+    count = 0
+    for slug, content in plans:
+        if count == 0:
+            plans_dir.mkdir(parents=True, exist_ok=True)
+        plan_path = plans_dir / f'{slug}.md'
+        if not exist_ok and plan_path.exists():
+            raise FileExistsError(f'Plan file already exists: {plan_path}')
+        plan_path.write_text(content, encoding='utf-8')
+        count += 1
+    return count
 
 
 def apply_slug_mapping(json_str: str, slug_mapping: Mapping[str, str]) -> str:
