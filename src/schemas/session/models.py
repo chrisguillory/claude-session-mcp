@@ -964,6 +964,7 @@ class TokenUsage(StrictModel):
     service_tier: Literal['standard'] | None = None  # Only value: 'standard' (19018 occurrences) - null for synthetic
     server_tool_use: ServerToolUse | None = None  # Server-side tool use tracking (0.5% present)
     inference_geo: str | None = None  # Inference geography (Claude Code 2.1.31+, e.g. 'not_available')
+    research_preview_2026_02: str | None = None  # Research preview feature flag (e.g. 'active')
 
 
 # ==============================================================================
@@ -1636,6 +1637,13 @@ class EnterPlanModeToolResult(StrictModel):
     message: str  # Plan mode entry confirmation
 
 
+class SkillToolResult(StrictModel):
+    """Result from Skill tool execution."""
+
+    success: bool
+    commandName: str  # Skill name (e.g. 'canvas-design')
+
+
 # ==============================================================================
 # MCP Tool Result (Third-Party Tools)
 # ==============================================================================
@@ -1697,6 +1705,7 @@ ToolResult = Annotated[
     | KillShellMessageResult  # Message variant (has message + shell_id)
     | KillShellToolResult  # Original variant (has success + shellId)
     | HandoffCommandResult  # Handoff command
+    | SkillToolResult  # Skill tool result
     | MCPToolResult,  # Fallback for MCP tools (PermissiveModel for observability)
     pydantic.Field(union_mode='left_to_right'),
 ]
@@ -1770,6 +1779,7 @@ class UserRecord(BaseRecord):
     permissionMode: Literal['default', 'acceptEdits', 'plan', 'bypassPermissions'] | None = pydantic.Field(
         None, description='Permission mode for the request (Claude Code 2.1.15+)'
     )
+    planContent: str | None = pydantic.Field(None, description='Plan content for plan mode submissions')
     mcpMeta: McpMeta | None = pydantic.Field(
         None, description='MCP tool structured content metadata (Claude Code 2.1.19+)'
     )
