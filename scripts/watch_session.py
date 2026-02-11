@@ -40,6 +40,7 @@ import tempfile
 import threading
 import time
 import webbrowser
+from collections.abc import Sequence
 from html import escape as html_escape
 from pathlib import Path
 from typing import Any
@@ -107,7 +108,7 @@ class SessionEntry(StrictModel):
 class SessionDatabase(StrictModel):
     """Subset of claude-workspace SessionDatabase."""
 
-    sessions: list[SessionEntry]
+    sessions: Sequence[SessionEntry]
 
     model_config = pydantic.ConfigDict(extra='ignore', strict=True, frozen=True)
 
@@ -966,7 +967,9 @@ def watch(
         # Check for session closure (daemon mode)
         if daemon is not None and not _is_process_alive(daemon.claude_pid):
             ts = time.strftime('%H:%M:%S')
-            print(f'{Colors.DIM}[{ts}]{Colors.RESET} {Colors.YELLOW}Session ended, draining final records...{Colors.RESET}')
+            print(
+                f'{Colors.DIM}[{ts}]{Colors.RESET} {Colors.YELLOW}Session ended, draining final records...{Colors.RESET}'
+            )
             final_records = tail.read_new_records()
             rendered_count = 0
             for record in final_records:
@@ -1049,7 +1052,9 @@ def main() -> None:
     parser.add_argument('--interval', type=float, default=1.0, help='Polling interval in seconds (default: 1.0)')
     parser.add_argument('--open-browser', action='store_true', help='Open HTML in browser after first generation')
     parser.add_argument('--no-browser', action='store_true', help='Suppress auto-browser-open in daemon mode')
-    parser.add_argument('--no-auto-close', action='store_true', help='Disable auto-exit when session ends (daemon mode)')
+    parser.add_argument(
+        '--no-auto-close', action='store_true', help='Disable auto-exit when session ends (daemon mode)'
+    )
 
     args = parser.parse_args()
 

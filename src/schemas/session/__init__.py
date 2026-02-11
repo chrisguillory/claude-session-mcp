@@ -18,13 +18,13 @@ from src.schemas.session.models import (
     # Schema version
     SCHEMA_VERSION,
     VALIDATION_RECORD_COUNT,
-    # Tool results (alphabetical)
-    AgentCompletedState,
     # Tool inputs (alphabetical)
     AgentOutputToolInput,
     # Progress data
     AgentProgressData,
     AgentsRetrievalResult,
+    # Tool results (alphabetical)
+    AgentState,
     # API errors
     ApiError,
     ApiErrorDetail,
@@ -38,6 +38,7 @@ from src.schemas.session.models import (
     BackgroundTask,
     BaseRecord,
     BashOutputToolInput,
+    BashOutputToolResult,
     BashProgressData,
     BashToolInput,
     BashToolResult,
@@ -87,6 +88,7 @@ from src.schemas.session.models import (
     MalformedWriteToolInput,
     McpMeta,
     McpResource,
+    McpResourceContent,
     MCPSearchToolInput,
     MCPStructuredContent,
     MCPToolInput,
@@ -106,6 +108,7 @@ from src.schemas.session.models import (
     QueueOperationRecord,
     ReadImageToolResult,
     ReadMcpResourceToolInput,
+    ReadMcpResourceToolResult,
     ReadPdfToolResult,
     ReadTextToolResult,
     ReadToolInput,
@@ -250,12 +253,13 @@ __all__ = [
     'ImageDimensions',
     'PatchHunk',
     # Tool results (alphabetical)
-    'AgentCompletedState',
+    'AgentState',
     'AgentsRetrievalResult',
     'AskUserQuestionToolResult',
     'AsyncTaskLaunchResult',
     'BackgroundTask',
     'BashToolResult',
+    'BashOutputToolResult',
     'EditToolResult',
     'EnterPlanModeToolResult',
     'ExitPlanModeToolResult',
@@ -265,8 +269,10 @@ __all__ = [
     'KillShellMessageResult',
     'KillShellToolResult',
     'McpResource',
+    'McpResourceContent',
     'QuestionOption',
     'ReadTextToolResult',
+    'ReadMcpResourceToolResult',
     'ReadPdfToolResult',
     'ReadImageToolResult',
     'TaskOutputPollingResult',

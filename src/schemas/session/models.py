@@ -28,6 +28,9 @@ CLAUDE CODE VERSION COMPATIBILITY:
 - Schema v0.2.8: Added timeoutMs to BashProgressData (2.1.25+)
 - Schema v0.2.9: Added inference_geo to TokenUsage, claude-opus-4-6 model ID,
                  PrLinkRecord, SavedHookContextRecord (2.1.32+)
+- Schema v0.2.10: Added iterations to TokenUsage, BashOutputToolResult, ReadMcpResourceToolResult,
+                  noOutputExpected to BashToolResult, 'killed' status, addBlocks to TaskUpdateToolInput,
+                  command to TaskStopToolResult, appliedOffset to GrepToolResult, AgentState (2.1.38+)
 - If validation fails, Claude Code schema may have changed - update models accordingly
 
 NEW FIELDS IN CLAUDE CODE 2.0.51+ (Schema v0.1.3):
@@ -97,11 +100,11 @@ from src.schemas.types import BaseStrictModel, EmptyDict, EmptySequence, ModelId
 # Schema Version
 # ==============================================================================
 
-SCHEMA_VERSION = '0.2.9'
+SCHEMA_VERSION = '0.2.10'
 CLAUDE_CODE_MIN_VERSION = '2.0.35'
-CLAUDE_CODE_MAX_VERSION = '2.1.32'
-LAST_VALIDATED = '2026-01-30'
-VALIDATION_RECORD_COUNT = 255_102
+CLAUDE_CODE_MAX_VERSION = '2.1.38'
+LAST_VALIDATED = '2026-02-10'
+VALIDATION_RECORD_COUNT = 484_259
 
 
 # ==============================================================================
@@ -442,6 +445,7 @@ class TaskUpdateToolInput(StrictModel):
     description: str | None = None  # Updated task description
     activeForm: str | None = None  # Updated spinner text
     owner: str | None = None
+    addBlocks: Sequence[str] | None = None  # Task IDs that this task blocks
     addBlockedBy: Sequence[str] | None = None
 
 
@@ -964,6 +968,7 @@ class TokenUsage(StrictModel):
     service_tier: Literal['standard'] | None = None  # Only value: 'standard' (19018 occurrences) - null for synthetic
     server_tool_use: ServerToolUse | None = None  # Server-side tool use tracking (0.5% present)
     inference_geo: str | None = None  # Inference geography (Claude Code 2.1.31+, e.g. 'not_available')
+    iterations: EmptySequence | None = None  # Always null or [] in observed data (Claude Code 2.1.38+)
     research_preview_2026_02: str | None = None  # Research preview feature flag (e.g. 'active')
 
 
@@ -1232,6 +1237,7 @@ class BashToolResult(StrictModel):
     timestamp: str | None = None
     status: Literal['running', 'completed', 'failed'] | None = None
     filterPattern: str | None = None
+    noOutputExpected: bool | None = None  # Bash tool hint (Claude Code 2.1.38+)
 
 
 class ReadTextToolResult(StrictModel):
@@ -1276,6 +1282,7 @@ class GrepToolResult(StrictModel):
     numLines: int | None = None
     numMatches: int | None = None
     appliedLimit: int | None = None
+    appliedOffset: int | None = None  # Offset applied to results (Claude Code 2.1.38+)
 
 
 class EditToolResult(StrictModel):
@@ -1357,7 +1364,7 @@ class TaskSingleToolResult(StrictModel):
 class StatusChange(StrictModel):
     """Status transition details."""
 
-    from_: str = pydantic.Field(alias='from')
+    from_: str = pydantic.Field(validation_alias=pydantic.AliasChoices('from', 'from_'))
     to: str
 
 
@@ -1490,6 +1497,20 @@ class McpResource(StrictModel):
 # This is handled by UserRecord.toolUseResult: list[McpResource] variant
 
 
+class McpResourceContent(StrictModel):
+    """A single resource content item from ReadMcpResourceTool."""
+
+    uri: str
+    mimeType: str
+    text: str
+
+
+class ReadMcpResourceToolResult(StrictModel):
+    """Result from ReadMcpResourceTool execution."""
+
+    contents: Sequence[McpResourceContent]
+
+
 class KillShellToolResult(StrictModel):
     """Result from KillShell tool execution."""
 
@@ -1503,6 +1524,7 @@ class TaskStopToolResult(StrictModel):
     message: str
     task_id: str
     task_type: Literal['local_bash', 'local_agent']
+    command: str | None = None  # Shell command (for local_bash tasks, Claude Code 2.1.38+)
 
 
 class ToolSearchToolResult(StrictModel):
@@ -1515,7 +1537,23 @@ class ToolSearchToolResult(StrictModel):
     total_mcp_tools: int | None = None
 
 
-# NOTE: BashOutput tool uses BashToolResult (same structure)
+class BashOutputToolResult(StrictModel):
+    """Result from BashOutput tool (background shell output).
+
+    Different from BashToolResult: requires shellId/command/status/exitCode
+    but does NOT have interrupted/isImage fields.
+    """
+
+    shellId: str
+    command: str
+    status: Literal['running', 'completed', 'failed', 'killed']
+    exitCode: int | None  # null when status='running'
+    stdout: str
+    stderr: str
+    stdoutLines: int
+    stderrLines: int
+    timestamp: str
+    filterPattern: str | None = None
 
 
 # ==============================================================================
@@ -1528,10 +1566,10 @@ class BackgroundTask(StrictModel):
 
     task_id: str
     task_type: Literal['local_bash', 'local_agent']
-    status: Literal['running', 'completed', 'failed']
+    status: Literal['running', 'completed', 'failed', 'killed']
     description: str
     output: str
-    exitCode: int | None = None  # For bash tasks, null when running
+    exitCode: int | None = None  # For bash tasks, null when running/killed
     prompt: str | None = None  # For agent tasks
     result: str | None = None  # For agent tasks
     error: str | None = None  # For failed agent tasks
@@ -1565,20 +1603,20 @@ class AsyncTaskLaunchResult(StrictModel):
 # ==============================================================================
 
 
-class AgentCompletedState(StrictModel):
-    """State of a completed background agent."""
+class AgentState(StrictModel):
+    """State of a background agent (may be running or completed)."""
 
-    status: Literal['completed']
+    status: Literal['running', 'completed', 'failed']
     description: str
     prompt: str
-    result: str
+    result: str | None = None  # null when still running
 
 
 class AgentsRetrievalResult(StrictModel):
     """Result from retrieving multiple agent states."""
 
     retrieval_status: Literal['not_ready', 'success', 'timeout']
-    agents: Mapping[str, AgentCompletedState]  # Empty dict when not_ready
+    agents: Mapping[str, AgentState]  # Empty dict when not_ready
 
 
 # ==============================================================================
@@ -1677,7 +1715,8 @@ class MCPToolResult(PermissiveModel):
 # Observability is provided by find_fallbacks() in validate_models.py instead.
 ToolResult = Annotated[
     # Core tool results (most specific first)
-    BashToolResult  # Also handles BashOutput
+    BashToolResult  # Bash tool (requires interrupted/isImage)
+    | BashOutputToolResult  # BashOutput tool (background shell, no interrupted/isImage)
     | ReadTextToolResult  # Read text files
     | ReadPdfToolResult  # Read PDF files
     | ReadImageToolResult  # Read image files
@@ -1704,6 +1743,7 @@ ToolResult = Annotated[
     | EnterPlanModeToolResult  # Plan mode entry
     | KillShellMessageResult  # Message variant (has message + shell_id)
     | KillShellToolResult  # Original variant (has success + shellId)
+    | ReadMcpResourceToolResult  # ReadMcpResourceTool result
     | HandoffCommandResult  # Handoff command
     | SkillToolResult  # Skill tool result
     | MCPToolResult,  # Fallback for MCP tools (PermissiveModel for observability)
