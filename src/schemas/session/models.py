@@ -183,6 +183,7 @@ class ReadToolInput(StrictModel):
     file_path: PathField
     limit: int | None = None  # Max lines to read
     offset: int | str | None = None  # Start line (1-indexed), can be malformed string like "\\248"
+    pages: str | None = None  # Page range for PDF files (e.g. '1-10') (Claude Code 2.1.41+)
 
 
 class WriteToolInput(StrictModel):
@@ -969,6 +970,7 @@ class TokenUsage(StrictModel):
     server_tool_use: ServerToolUse | None = None  # Server-side tool use tracking (0.5% present)
     inference_geo: str | None = None  # Inference geography (Claude Code 2.1.31+, e.g. 'not_available')
     iterations: EmptySequence | None = None  # Always null or [] in observed data (Claude Code 2.1.38+)
+    speed: None = None  # Always null in observed data (Claude Code 2.1.41+)
     research_preview_2026_02: str | None = None  # Research preview feature flag (e.g. 'active')
 
 
