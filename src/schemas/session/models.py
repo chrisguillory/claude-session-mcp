@@ -31,6 +31,7 @@ CLAUDE CODE VERSION COMPATIBILITY:
 - Schema v0.2.10: Added iterations to TokenUsage, BashOutputToolResult, ReadMcpResourceToolResult,
                   noOutputExpected to BashToolResult, 'killed' status, addBlocks to TaskUpdateToolInput,
                   command to TaskStopToolResult, appliedOffset to GrepToolResult, AgentState (2.1.38+)
+- Schema v0.2.11: Added speed to TokenUsage, pages to ReadToolInput (2.1.41+)
 - If validation fails, Claude Code schema may have changed - update models accordingly
 
 NEW FIELDS IN CLAUDE CODE 2.0.51+ (Schema v0.1.3):
@@ -100,11 +101,11 @@ from src.schemas.types import BaseStrictModel, EmptyDict, EmptySequence, ModelId
 # Schema Version
 # ==============================================================================
 
-SCHEMA_VERSION = '0.2.10'
+SCHEMA_VERSION = '0.2.11'
 CLAUDE_CODE_MIN_VERSION = '2.0.35'
-CLAUDE_CODE_MAX_VERSION = '2.1.38'
-LAST_VALIDATED = '2026-02-10'
-VALIDATION_RECORD_COUNT = 484_259
+CLAUDE_CODE_MAX_VERSION = '2.1.41'
+LAST_VALIDATED = '2026-02-13'
+VALIDATION_RECORD_COUNT = 503_371
 
 
 # ==============================================================================
@@ -970,7 +971,7 @@ class TokenUsage(StrictModel):
     server_tool_use: ServerToolUse | None = None  # Server-side tool use tracking (0.5% present)
     inference_geo: str | None = None  # Inference geography (Claude Code 2.1.31+, e.g. 'not_available')
     iterations: EmptySequence | None = None  # Always null or [] in observed data (Claude Code 2.1.38+)
-    speed: None = None  # Always null in observed data (Claude Code 2.1.41+)
+    speed: Literal['standard'] | None = None  # Speed tier (Claude Code 2.1.41+)
     research_preview_2026_02: str | None = None  # Research preview feature flag (e.g. 'active')
 
 
