@@ -32,6 +32,8 @@ CLAUDE CODE VERSION COMPATIBILITY:
                   noOutputExpected to BashToolResult, 'killed' status, addBlocks to TaskUpdateToolInput,
                   command to TaskStopToolResult, appliedOffset to GrepToolResult, AgentState (2.1.38+)
 - Schema v0.2.11: Added speed to TokenUsage, pages to ReadToolInput (2.1.41+)
+- Schema v0.2.12: Added totalBytes/taskId to BashProgressData, persistedOutputPath/persistedOutputSize
+                  to BashToolResult, annotations to AskUserQuestionToolResult (2.1.45+)
 - If validation fails, Claude Code schema may have changed - update models accordingly
 
 NEW FIELDS IN CLAUDE CODE 2.0.51+ (Schema v0.1.3):
@@ -101,11 +103,11 @@ from src.schemas.types import BaseStrictModel, EmptyDict, EmptySequence, ModelId
 # Schema Version
 # ==============================================================================
 
-SCHEMA_VERSION = '0.2.11'
+SCHEMA_VERSION = '0.2.12'
 CLAUDE_CODE_MIN_VERSION = '2.0.35'
-CLAUDE_CODE_MAX_VERSION = '2.1.41'
-LAST_VALIDATED = '2026-02-13'
-VALIDATION_RECORD_COUNT = 503_371
+CLAUDE_CODE_MAX_VERSION = '2.1.45'
+LAST_VALIDATED = '2026-02-18'
+VALIDATION_RECORD_COUNT = 400_822
 
 
 # ==============================================================================
@@ -1241,6 +1243,8 @@ class BashToolResult(StrictModel):
     status: Literal['running', 'completed', 'failed'] | None = None
     filterPattern: str | None = None
     noOutputExpected: bool | None = None  # Bash tool hint (Claude Code 2.1.38+)
+    persistedOutputPath: PathField | None = None  # Path to persisted large output file (Claude Code 2.1.45+)
+    persistedOutputSize: int | None = None  # Size of persisted output in bytes (Claude Code 2.1.45+)
 
 
 class ReadTextToolResult(StrictModel):
@@ -1439,11 +1443,19 @@ class UserQuestion(StrictModel):
     multiSelect: bool
 
 
+class QuestionAnnotation(StrictModel):
+    """Annotation on a user's answer to a question (Claude Code 2.1.45+)."""
+
+    markdown: str | None = None  # Markdown preview content of the selected option
+    notes: str | None = None  # Free-text notes the user added to their selection
+
+
 class AskUserQuestionToolResult(StrictModel):
     """Result from AskUserQuestion tool execution."""
 
     questions: Sequence[UserQuestion]
     answers: Mapping[str, str]  # Mapping of question text to user's answer
+    annotations: Mapping[str, QuestionAnnotation] | None = None  # Per-question annotations (Claude Code 2.1.45+)
 
 
 # ==============================================================================
@@ -2165,6 +2177,8 @@ class BashProgressData(StrictModel):
     fullOutput: str
     elapsedTimeSeconds: int
     totalLines: int
+    totalBytes: int | None = None  # Byte count of output (Claude Code 2.1.45+)
+    taskId: str | None = None  # Background task ID (Claude Code 2.1.45+)
     timeoutMs: int | None = None  # Present when command has explicit timeout
 
 
