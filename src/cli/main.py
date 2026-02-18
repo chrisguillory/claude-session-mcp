@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
+import subprocess
 import tempfile
 import traceback
 from collections.abc import Sequence
@@ -70,22 +72,81 @@ def _resolve_session_id(session_id: str | None) -> str:
     return detected
 
 
+def _is_session_id(value: str) -> bool:
+    """Check if a string looks like a session ID (8+ hex digits/hyphens)."""
+    return len(value) >= 8 and bool(re.fullmatch(r'[0-9a-f][0-9a-f-]*', value))
+
+
+def _get_github_token_cli(gist_token: str | None) -> str | None:
+    """Resolve GitHub token from flag, environment, or gh CLI.
+
+    Checks in order:
+    1. --gist-token flag value
+    2. GITHUB_TOKEN environment variable
+    3. `gh auth token` command (GitHub CLI)
+    """
+    if gist_token:
+        return gist_token
+    token = os.environ.get('GITHUB_TOKEN')
+    if token:
+        return token
+    try:
+        result = subprocess.run(
+            ['gh', 'auth', 'token'],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip()
+    except FileNotFoundError:
+        pass  # gh CLI not installed
+    return None
+
+
 @app.command()
 def archive(
-    session_id: str = typer.Argument(..., help='Session ID to archive'),
-    output: str = typer.Argument(..., help='Output path or Gist URL (gist://<gist-id> or gist:// or file path)'),
+    session_id: str | None = typer.Argument(None, help='Session ID to archive (auto-detected inside Claude Code)'),
+    output: str | None = typer.Argument(None, help='Output path or gist:// (default: gist://)'),
     format: ArchiveFormat | None = typer.Option(
         None, '--format', '-f', help='Archive format: json or zst', callback=_validate_archive_format
     ),
-    gist_token: str | None = typer.Option(None, '--gist-token', help='GitHub token (or use GITHUB_TOKEN env)'),
+    gist_token: str | None = typer.Option(
+        None, '--gist-token', help='GitHub token (or use GITHUB_TOKEN env or gh CLI)'
+    ),
     gist_visibility: Literal['public', 'secret'] = typer.Option(
         'secret', '--gist-visibility', help='Gist visibility (public or secret)'
     ),
     gist_description: str = typer.Option('Claude Code Session Archive', '--gist-description', help='Gist description'),
     verbose: bool = typer.Option(False, '--verbose', '-v', help='Verbose output'),
 ) -> None:
-    """Archive a Claude Code session to local file or GitHub Gist."""
-    asyncio.run(_archive_async(session_id, output, format, gist_token, gist_visibility, gist_description, verbose))
+    """Archive a Claude Code session to local file or GitHub Gist.
+
+    When run inside Claude Code, session ID is auto-detected if not provided.
+    When output is omitted, defaults to uploading to a new GitHub Gist.
+
+    Examples:
+        claude-session archive                           # auto-detect session, new gist
+        claude-session archive gist://                   # same as above
+        claude-session archive gist://abc123             # auto-detect session, update gist
+        claude-session archive 019c406c                  # specific session, new gist
+        claude-session archive 019c406c gist://          # specific session, new gist
+        claude-session archive 019c406c output.json      # specific session, local file
+    """
+    # Disambiguate positional args: if session_id looks like an output target, shift it
+    if session_id is not None and output is None and not _is_session_id(session_id):
+        output = session_id
+        session_id = None
+
+    # Resolve session ID (auto-detect if needed)
+    resolved_session_id = _resolve_session_id(session_id)
+
+    # Default output to gist://
+    if output is None:
+        output = 'gist://'
+
+    asyncio.run(
+        _archive_async(resolved_session_id, output, format, gist_token, gist_visibility, gist_description, verbose)
+    )
 
 
 @app.command(context_settings={'allow_extra_args': True, 'ignore_unknown_options': True})
@@ -143,13 +204,16 @@ async def _archive_async(
             # Extract gist ID if provided: gist://abc123 or just gist://
             gist_id = output[7:] if len(output) > 7 else None
 
-            # Get token from CLI or environment
-            token = gist_token or os.environ.get('GITHUB_TOKEN')
+            # Get token from CLI flag, environment, or gh CLI
+            token = _get_github_token_cli(gist_token)
             if not token:
                 typer.secho('Error: GitHub token required for Gist storage.', fg=typer.colors.RED, err=True)
-                typer.echo('Provide via --gist-token or set GITHUB_TOKEN environment variable.')
+                typer.echo('Provide via one of:')
+                typer.echo('  1. gh auth login (GitHub CLI - recommended)')
+                typer.echo('  2. Set GITHUB_TOKEN environment variable')
+                typer.echo('  3. Pass --gist-token flag')
                 typer.echo()
-                typer.echo('To create a token:')
+                typer.echo('To create a token manually:')
                 typer.echo('  1. Go to https://github.com/settings/tokens')
                 typer.echo('  2. Generate new token (classic)')
                 typer.echo("  3. Select 'gist' scope")
@@ -256,7 +320,7 @@ async def _restore_async(
                 raise typer.Exit(1)
 
             # Get token (public gists don't need auth for reading, but use it if provided)
-            token = gist_token or os.environ.get('GITHUB_TOKEN') or ''
+            token = _get_github_token_cli(gist_token) or ''
 
             await logger.info(f'Downloading from Gist: {gist_id}')
 
@@ -385,7 +449,7 @@ async def _restore_async(
 @app.command(context_settings={'allow_extra_args': True, 'ignore_unknown_options': True})
 def clone(
     ctx: typer.Context,
-    session_id: str = typer.Argument(..., help='Session ID to clone (full UUID or prefix)'),
+    session_id: str | None = typer.Argument(None, help='Session ID to clone (auto-detected inside Claude Code)'),
     project: Path | None = typer.Option(None, '--project', '-p', help='Target project directory (default: current)'),
     no_translate: bool = typer.Option(False, '--no-translate', help="Don't translate file paths"),
     launch: bool = typer.Option(False, '--launch', '-l', help='Launch Claude Code after clone'),
@@ -393,11 +457,24 @@ def clone(
 ) -> None:
     """Clone a session directly (no archive file needed).
 
-    Extra arguments after -- are passed to claude CLI:
+    When run inside Claude Code, session ID is auto-detected if not provided.
 
-        claude-session clone SESSION_ID --launch -- --chrome
+    Examples:
+        claude-session clone                              # clone current session
+        claude-session clone SESSION_ID                   # clone specific session
+        claude-session clone SESSION_ID --launch          # clone and launch immediately
     """
-    asyncio.run(_clone_async(session_id, project, not no_translate, launch, verbose, ctx.args))
+    detected = auto_detect_session_id()
+    if launch and detected is not None:
+        typer.secho('Error: --launch cannot be used inside Claude Code.', fg=typer.colors.RED, err=True)
+        typer.echo('Use claude --resume <session-id> after cloning instead.', err=True)
+        raise typer.Exit(1)
+
+    # Use cached detection result to avoid a second process tree walk
+    if session_id is None:
+        session_id = detected
+
+    asyncio.run(_clone_async(_resolve_session_id(session_id), project, not no_translate, launch, verbose, ctx.args))
 
 
 async def _clone_async(
