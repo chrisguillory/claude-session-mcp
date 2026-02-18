@@ -405,6 +405,67 @@ pairs adjacent when sorted alphabetically.
 
 See `docs/intercepting-claude-api.md` for detailed exploration notes.
 
+## Claude Code Binary Analysis
+
+How to investigate Claude Code's internal behavior by examining its compiled binary. This methodology was used to discover the settings.json env allowlist, credential reader memoization, and init sequence documented in the README.
+
+### Binary Location & Structure
+
+Claude Code is distributed as a Node.js Single Executable Application (SEA):
+
+| Property  | Value (v2.1.44)                                           |
+|-----------|-----------------------------------------------------------|
+| Symlink   | `~/.local/bin/claude`                                     |
+| Binary    | `~/.local/share/claude/versions/<version>`                |
+| Format    | Mach-O arm64 (macOS), ~175MB                              |
+| JS bundle | Embedded at ~59.6MB offset, ~10MB minified (~7,474 lines) |
+
+### Extraction Patterns
+
+```bash
+# Extract all readable strings
+strings $(which claude) > /tmp/claude-strings.txt
+
+# Find all env var reads
+strings $(which claude) | grep -oE 'process\.env\.[A-Z_0-9]+' | sort -u
+
+# Search for specific behavior
+strings $(which claude) | grep -i 'CLAUDE_CODE_OAUTH'
+
+# Find keychain-related code
+strings $(which claude) | grep -i 'Claude Code-credentials'
+```
+
+The JS is heavily minified — function names are 2-4 character identifiers (`dB`, `b7T`, `$90`, `KTT`). These change between versions. Search by known string literals (env var names, error messages, keychain service names) rather than function names.
+
+### Investigation Workflow
+
+1. **Start with the symptom** — identify an observable behavior (error message, env var name, API endpoint)
+2. **Search for string literals** — `strings | grep` for known constants related to the behavior
+3. **Extract surrounding context** — use `grep -A5 -B5` to see code near the match
+4. **Trace function calls** — follow variable references through the minified code
+5. **Identify patterns** — look for `memoize`, `cache`, allowlists, and init ordering
+
+### Key Discoveries Reference
+
+Findings from binary analysis that affect how tools and sessions interact with Claude Code:
+
+| Discovery                                     | Impact                                      | Details                                             |
+|-----------------------------------------------|---------------------------------------------|-----------------------------------------------------|
+| Credential reader is lodash-memoized          | Auth set after init is invisible            | See README: Authentication Architecture             |
+| Settings.json env has security allowlist      | Credentials can't go in settings.json       | See README: Settings.json Env Allowlist             |
+| Two-phase env loading                         | `/status` can show tokens that auth ignores | `$90` (filtered, early) vs `KTT` (unfiltered, late) |
+| `CLAUDE_CONFIG_DIR` creates isolated keychain | Separate credentials per config dir         | SHA-256 hash suffix on keychain service name        |
+
+### Version-Specific Notes
+
+Minified identifiers change between versions. When updating analysis for a new version:
+
+1. Re-extract strings: `strings ~/.local/share/claude/versions/<new-version> > /tmp/claude-strings-new.txt`
+2. Search by known constants (env var names, service names), not old function names
+3. Verify the allowlist hasn't changed: search for the list of allowed env var names
+4. Check if credential reader memoization is still present: search for `memoize` near `CLAUDE_CODE_OAUTH_TOKEN`
+
 ## Checking Claude Code Changelog
 
 When investigating new features or schema changes:
@@ -436,13 +497,57 @@ MCPSearch is an undocumented built-in tool for dynamic MCP tool discovery, intro
 
 **For user-facing information**, including how to disable, known issues, and accuracy concerns, see `docs/mcpsearch-guide.md`.
 
-## Schema Updates
+## Schema Validation Fix Workflow
 
-When Claude Code updates break validation:
-1. Run `./scripts/validate_models.py` to find failures
-2. Inspect failing records using the command above
-3. Update `src/schemas/session/models.py` with new fields/types
-4. Bump schema version in models.py header
+When Claude Code updates or new session data introduces schema drift:
+
+### 1. Validate
+```bash
+./scripts/validate_models.py                    # Summary first
+./scripts/validate_models.py --errors           # Grouped error details
+./scripts/validate_models.py -e path/to/file    # Single file investigation
+```
+
+### 2. Inspect failing records
+```bash
+cd ~/.claude/projects && find . -name "<session-id>.jsonl" \
+  -exec sed -n "<line>p" {} \; | jq .
+```
+
+### 3. Fix models
+Edit `src/schemas/session/models.py`. Common fixes:
+- New optional fields: `fieldName: Type | None = None`
+- New record/tool types: add model class + wire into discriminated union
+- Expanded Literals: add new values to existing `Literal[...]` types
+- Union ordering: ensure more-specific types come before less-specific
+
+**Rules:**
+- Only model fields/values actually observed in data (no speculation)
+- Always use fully typed models, never `dict` fallbacks
+- Minimize churn -- don't reorganize existing fields
+
+### 4. Verify 100% pass rate
+```bash
+./scripts/validate_models.py
+```
+Iterate steps 2-4 until all records validate. Multiple rounds are normal.
+
+### 5. Bump version (ONLY after 100% pass rate)
+Update four constants in `models.py`:
+```python
+SCHEMA_VERSION = '0.2.XX'
+CLAUDE_CODE_MAX_VERSION = '2.1.XX'
+LAST_VALIDATED = 'YYYY-MM-DD'
+VALIDATION_RECORD_COUNT = NNN_NNN
+```
+Add a changelog line to the module docstring header.
+
+### 6. Commit
+```bash
+uv run pre-commit run --all-files
+git add src/schemas/session/models.py
+git commit -m "Schema vX.Y.Z: Fix validation for Claude Code X.Y.Z"
+```
 
 ## Model Definition Ordering
 
