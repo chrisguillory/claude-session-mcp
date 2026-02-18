@@ -566,6 +566,140 @@ Set in `~/.claude/settings.json` (takes precedence over inline env vars):
 | `DISABLE_INTERLEAVED_THINKING` | Disable extended thinking entirely |
 | `DISABLE_AUTOUPDATER`          | Disable auto-updates               |
 
+### Settings.json Env Allowlist (v2.1.44)
+
+The `env` block in settings.json passes through a **security allowlist filter** (`b7T`/`UKR` in minified source). Only
+approved variables reach `process.env`. All credential-bearing variables are silently dropped.
+
+**Excluded (credential-bearing):**
+
+| Variable                                  | Purpose            |
+|-------------------------------------------|--------------------|
+| `CLAUDE_CODE_OAUTH_TOKEN`                 | OAuth access token |
+| `ANTHROPIC_API_KEY`                       | API key            |
+| `ANTHROPIC_AUTH_TOKEN`                    | Auth token         |
+| `CLAUDE_CODE_OAUTH_TOKEN_FILE_DESCRIPTOR` | OAuth token via FD |
+| `CLAUDE_CODE_API_KEY_FILE_DESCRIPTOR`     | API key via FD     |
+
+**Security rationale:** Project-level `.claude/settings.json` can be committed to repositories. Allowing credential env
+vars there would enable a malicious repo to hijack authentication by routing API calls through an attacker-controlled
+account. The same filter applies to user-level `~/.claude/settings.json` for consistency.
+
+<details>
+<summary><b>Full allowlist (~50 variables)</b></summary>
+
+```
+ANTHROPIC_CUSTOM_HEADERS
+ANTHROPIC_DEFAULT_HAIKU_MODEL
+ANTHROPIC_DEFAULT_OPUS_MODEL
+ANTHROPIC_DEFAULT_SONNET_MODEL
+ANTHROPIC_FOUNDRY_API_KEY
+ANTHROPIC_MODEL
+ANTHROPIC_SMALL_FAST_MODEL_AWS_REGION
+ANTHROPIC_SMALL_FAST_MODEL
+AWS_DEFAULT_REGION
+AWS_PROFILE
+AWS_REGION
+BASH_DEFAULT_TIMEOUT_MS
+BASH_MAX_OUTPUT_LENGTH
+BASH_MAX_TIMEOUT_MS
+CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR
+CLAUDE_BASH_NO_LOGIN
+CLAUDE_CODE_API_KEY_HELPER_TTL_MS
+CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS
+CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC
+CLAUDE_CODE_DISABLE_TERMINAL_TITLE
+CLAUDE_CODE_ENABLE_TELEMETRY
+CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS
+CLAUDE_CODE_IDE_SKIP_AUTO_INSTALL
+CLAUDE_CODE_MAX_OUTPUT_TOKENS
+CLAUDE_CODE_SKIP_BEDROCK_AUTH
+CLAUDE_CODE_SKIP_FOUNDRY_AUTH
+CLAUDE_CODE_SKIP_VERTEX_AUTH
+CLAUDE_CODE_SUBAGENT_MODEL
+CLAUDE_CODE_USE_BEDROCK
+CLAUDE_CODE_USE_FOUNDRY
+CLAUDE_CODE_USE_VERTEX
+DISABLE_AUTOUPDATER
+DISABLE_BUG_COMMAND
+DISABLE_COST_WARNINGS
+DISABLE_ERROR_REPORTING
+DISABLE_TELEMETRY
+ENABLE_EXPERIMENTAL_MCP_CLI
+ENABLE_TOOL_SEARCH
+MAX_MCP_OUTPUT_TOKENS
+MAX_THINKING_TOKENS
+MCP_TIMEOUT
+MCP_TOOL_TIMEOUT
+OTEL_EXPORTER_OTLP_HEADERS
+USE_BUILTIN_RIPGREP
+```
+
+Plus various `OTEL_*` and `VERTEX_REGION_*` variables.
+
+</details>
+
+**Two-phase env loading:** Settings.json env vars are applied in two phases during startup:
+
+1. **Early (filtered via `$90`):** During init, only allowlisted vars reach `process.env`
+2. **Late (unfiltered via `KTT`):** During command setup, ALL vars are applied—but after the credential reader has already memoized
+
+This explains why `/status` can show a credential set via settings.json (reads `process.env` directly after phase 2), while authentication fails (credential reader memoized `null` during phase 1).
+
+## Authentication Architecture
+
+How Claude Code reads and caches credentials at startup (v2.1.44).
+
+### Credential Reader Priority
+
+The credential reader (`dB` in minified source) checks sources in order, returning the first match:
+
+| Priority | Source                                    | Mechanism                           |
+|----------|-------------------------------------------|-------------------------------------|
+| 1        | `process.env.CLAUDE_CODE_OAUTH_TOKEN`     | Shell environment variable          |
+| 2        | `CLAUDE_CODE_OAUTH_TOKEN_FILE_DESCRIPTOR` | File descriptor read                |
+| 3        | macOS Keychain                            | `"Claude Code-credentials"` service |
+
+**Critical:** The reader is **lodash-memoized** with no arguments (cache key: `undefined`). Once it returns a value (or `null`), that result is cached for the entire process lifetime. No subsequent changes to `process.env` or keychain will be detected without a process restart.
+
+### Keychain Service Names
+
+| Service                   | Account             | Stores                       |
+|---------------------------|---------------------|------------------------------|
+| `Claude Code-credentials` | `oauth_credentials` | OAuth tokens (from `/login`) |
+| `Claude Code`             | `api_key`           | API keys                     |
+
+When `CLAUDE_CONFIG_DIR` is set, a SHA-256 hash suffix is appended to the service name (e.g., `Claude Code-credentials-a1b2c3...`), creating isolated credential stores per config directory.
+
+### Setup Tokens (`claude setup-token`)
+
+| Property | Value                                    |
+|----------|------------------------------------------|
+| Format   | `sk-ant-oat01-*` (OAuth Access Token v1) |
+| Expiry   | 1 year (server-side)                     |
+| Refresh  | None (access token only)                 |
+| Accounts | Subscription only (not Console/prepaid)  |
+| Scopes   | `user:inference`                         |
+
+Setup tokens bypass keychain when set as `CLAUDE_CODE_OAUTH_TOKEN`. They're long-lived access tokens with no refresh capability—when they expire, generate a new one.
+
+### Init Sequence
+
+The startup order matters for understanding auth behavior:
+
+```
+1. cNT()    Load configs
+2. $90()    Apply FILTERED env vars from settings.json (credentials blocked)
+3. k49()    Initialize credential reader → memoized dB() runs here
+4.          JetBrains/IDE detection
+5.          Remote settings check
+6.          mTLS configuration
+--- command handler starts ---
+7. KTT()    Apply UNFILTERED env vars (too late for credential reader)
+8. qmA()    Start auth refresh
+9.          API calls begin (using memoized dB() result from step 3)
+```
+
 ## Claude Code Version Sources
 
 Authoritative sources for checking Claude Code versions:
