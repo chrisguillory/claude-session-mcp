@@ -153,6 +153,7 @@ ModelId = Literal[
     'claude-opus-4-1-20250805',
     'claude-opus-4-5-20251101',
     'claude-opus-4-6',
+    'claude-sonnet-4-6',
     'claude-sonnet-4-5-20250929',
     'haiku',
     'opus',
@@ -199,6 +200,7 @@ _AllModelIds = Literal[
     'claude-sonnet-4-5',
     'claude-sonnet-4-5-20250929',
     'claude-sonnet-4-5@20250929',
+    'claude-sonnet-4-6',
     'claude-sonnet-4@20250514',
     # Short aliases (used in Task tool input.model)
     'haiku',

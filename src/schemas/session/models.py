@@ -34,6 +34,8 @@ CLAUDE CODE VERSION COMPATIBILITY:
 - Schema v0.2.11: Added speed to TokenUsage, pages to ReadToolInput (2.1.41+)
 - Schema v0.2.12: Added totalBytes/taskId to BashProgressData, persistedOutputPath/persistedOutputSize
                   to BashToolResult, annotations to AskUserQuestionToolResult (2.1.45+)
+- Schema v0.2.13: Added claude-sonnet-4-6 model ID, max_tokens stop_reason,
+                  canReadOutputFile to AsyncTaskLaunchResult (2.1.47+)
 - If validation fails, Claude Code schema may have changed - update models accordingly
 
 NEW FIELDS IN CLAUDE CODE 2.0.51+ (Schema v0.1.3):
@@ -103,11 +105,11 @@ from src.schemas.types import BaseStrictModel, EmptyDict, EmptySequence, ModelId
 # Schema Version
 # ==============================================================================
 
-SCHEMA_VERSION = '0.2.12'
+SCHEMA_VERSION = '0.2.13'
 CLAUDE_CODE_MIN_VERSION = '2.0.35'
-CLAUDE_CODE_MAX_VERSION = '2.1.45'
-LAST_VALIDATED = '2026-02-18'
-VALIDATION_RECORD_COUNT = 400_822
+CLAUDE_CODE_MAX_VERSION = '2.1.47'
+LAST_VALIDATED = '2026-02-19'
+VALIDATION_RECORD_COUNT = 521_225
 
 
 # ==============================================================================
@@ -925,9 +927,10 @@ class Message(StrictModel):
         None, description='Claude model identifier (e.g., claude-sonnet-4-5-20250929)'
     )
     id: str | None = pydantic.Field(None, description='Message ID from Claude API')
-    stop_reason: Literal['tool_use', 'stop_sequence', 'end_turn', 'refusal', 'model_context_window_exceeded'] | None = (
-        pydantic.Field(None, description='Reason why the model stopped generating')
-    )
+    stop_reason: (
+        Literal['tool_use', 'stop_sequence', 'end_turn', 'refusal', 'max_tokens', 'model_context_window_exceeded']
+        | None
+    ) = pydantic.Field(None, description='Reason why the model stopped generating')
     stop_sequence: str | None = pydantic.Field(
         None, description='The actual stop sequence string that triggered stopping'
     )
@@ -1611,6 +1614,7 @@ class AsyncTaskLaunchResult(StrictModel):
     description: str
     prompt: str
     outputFile: str | None = None  # Path to output file (sometimes missing)
+    canReadOutputFile: bool | None = None  # Whether the output file can be read (2.1.47+)
 
 
 # ==============================================================================
