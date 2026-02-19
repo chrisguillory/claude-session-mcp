@@ -24,6 +24,7 @@ import typer
 from src.cli.logger import CLILogger
 from src.exceptions import ClaudeSessionError
 from src.launcher import launch_claude_with_session
+from src.schemas.operations.lineage import LineageTree
 from src.services.archive import SessionArchiveService
 from src.services.claude_process import auto_detect_session_id
 from src.services.clone import SessionCloneService
@@ -691,6 +692,32 @@ async def _delete_async(
         raise typer.Exit(1)
 
 
+def _render_lineage_tree(tree: LineageTree) -> None:
+    """Render a LineageTree with proper box-drawing characters."""
+
+    def render_node(node_id: str, prefix: str, is_last: bool, is_root: bool) -> None:
+        if is_root:
+            connector = ''
+            child_prefix = ''
+        else:
+            connector = '└─ ' if is_last else '├─ '
+            child_prefix = prefix + ('   ' if is_last else '│  ')
+
+        node = tree.nodes[node_id]
+        title_suffix = f' ({node.custom_title})' if node.custom_title else ''
+        line = f'{prefix}{connector}{node_id}{title_suffix}'
+        if node_id == tree.queried_session_id:
+            typer.secho(line, fg=typer.colors.GREEN)
+        else:
+            typer.echo(line)
+
+        children = tree.nodes[node_id].children
+        for i, child_id in enumerate(children):
+            render_node(child_id, child_prefix, is_last=i == len(children) - 1, is_root=False)
+
+    render_node(tree.root_session_id, '', is_last=True, is_root=True)
+
+
 @app.command()
 def lineage(
     session_id: str | None = typer.Argument(
@@ -712,52 +739,48 @@ def lineage(
     session_id = _resolve_session_id(session_id)
     try:
         lineage_service = LineageService()
+        tree = lineage_service.get_full_tree(session_id)
+
+        if tree is None:
+            typer.secho(f'No lineage found for {session_id}', fg=typer.colors.YELLOW)
+            typer.echo('(This is either a native session or lineage tracking was not enabled)')
+            return
 
         if format == 'text':
-            entry = lineage_service.get_entry(session_id)
-            if entry:
-                typer.echo(f'Session: {entry.child_session_id}')
-                typer.echo(f'Parent:  {entry.parent_session_id}')
-                typer.echo(f'Cloned:  {entry.cloned_at}')
-                typer.echo(f'Method:  {entry.method}')
-                typer.echo(f'Source:  {entry.parent_project_path}')
-                typer.echo(f'Target:  {entry.target_project_path}')
-                typer.echo(f'Machine: {entry.target_machine_id}')
-                if entry.parent_machine_id:
-                    if entry.parent_machine_id != entry.target_machine_id:
-                        typer.secho(
-                            f'Source Machine: {entry.parent_machine_id} (cross-machine)', fg=typer.colors.YELLOW
-                        )
+            node = tree.nodes[tree.queried_session_id]
+            typer.echo(f'Session: {node.session_id}')
+            if node.custom_title:
+                typer.echo(f'Title:   {node.custom_title}')
+            if node.cloned_at is not None:
+                # Child node — show operation metadata
+                typer.echo(f'Parent:  {node.parent_id}')
+                typer.echo(f'Cloned:  {node.cloned_at}')
+                typer.echo(f'Method:  {node.method}')
+                typer.echo(f'Source:  {node.parent_project_path}')
+                typer.echo(f'Target:  {node.target_project_path}')
+                typer.echo(f'Machine: {node.target_machine_id}')
+                if node.parent_machine_id:
+                    if node.is_cross_machine:
+                        typer.secho(f'Source Machine: {node.parent_machine_id} (cross-machine)', fg=typer.colors.YELLOW)
                     else:
-                        typer.echo(f'Source Machine: {entry.parent_machine_id} (same machine)')
-                if entry.archive_path:
-                    typer.echo(f'Archive: {entry.archive_path}')
-                if entry.paths_translated:
+                        typer.echo(f'Source Machine: {node.parent_machine_id} (same machine)')
+                if node.archive_path:
+                    typer.echo(f'Archive: {node.archive_path}')
+                if node.paths_translated:
                     typer.secho('Paths translated: yes', fg=typer.colors.CYAN)
             else:
-                typer.secho(f'No lineage entry found for {session_id}', fg=typer.colors.YELLOW)
-                typer.echo('(This is either a native session or lineage tracking was not enabled)')
+                # Root node — no operation metadata
+                typer.secho(f'Root session with {len(node.children)} clone(s)', fg=typer.colors.CYAN)
+                for child_id in node.children:
+                    child_node = tree.nodes[child_id]
+                    title_suffix = f' ({child_node.custom_title})' if child_node.custom_title else ''
+                    typer.echo(f'  └─ {child_id}{title_suffix}')
 
         elif format == 'tree':
-            ancestry = lineage_service.get_ancestry(session_id)
-            if not ancestry:
-                typer.secho(f'No lineage found for {session_id}', fg=typer.colors.YELLOW)
-            else:
-                for i, ancestor_id in enumerate(ancestry):
-                    indent = '  ' * i
-                    prefix = '└─ ' if i > 0 else ''
-                    # Highlight the requested session
-                    if ancestor_id == session_id or ancestor_id.startswith(session_id):
-                        typer.secho(f'{indent}{prefix}{ancestor_id}', fg=typer.colors.GREEN)
-                    else:
-                        typer.echo(f'{indent}{prefix}{ancestor_id}')
+            _render_lineage_tree(tree)
 
         elif format == 'json':
-            entry = lineage_service.get_entry(session_id)
-            if entry:
-                typer.echo(entry.model_dump_json(indent=2))
-            else:
-                typer.echo('null')
+            typer.echo(tree.model_dump_json(indent=2))
 
     except ClaudeSessionError as e:
         typer.secho(f'Error: {e}', fg=typer.colors.RED, err=True)

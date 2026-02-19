@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import getpass
 import json
+import mmap
 import socket
+import subprocess
 from datetime import datetime
 from pathlib import Path
 from typing import Literal
@@ -17,12 +19,16 @@ from typing import Literal
 from filelock import FileLock
 
 from src.exceptions import AmbiguousSessionError
-from src.schemas.operations.lineage import LineageEntry, LineageFile, LineageResult
+from src.schemas.operations.lineage import (
+    LineageEntry,
+    LineageFile,
+    LineageTree,
+    LineageTreeNode,
+)
 
 __all__ = [
     'LineageEntry',
     'LineageFile',
-    'LineageResult',
     'LineageService',
     'get_machine_id',
 ]
@@ -189,6 +195,186 @@ class LineageService:
         # Reverse to get root-first order
         ancestry.reverse()
         return ancestry
+
+    def get_full_tree(self, session_id: str) -> LineageTree | None:
+        """Build the complete lineage tree containing session_id.
+
+        Walks UP to find the root ancestor, then DOWN to collect all
+        descendants. Returns None if session_id is not part of any lineage.
+
+        Args:
+            session_id: Any session ID in the tree (full or prefix).
+
+        Returns:
+            LineageTree with all nodes, or None if not part of any lineage.
+        """
+        lineage = self._read_lineage_file() if self.lineage_file.exists() else LineageFile()
+
+        # Resolve session_id (may be a prefix, may be a root that only appears as parent)
+        resolved = self._resolve_in_lineage(session_id, lineage)
+        if resolved is None:
+            return None
+
+        # Walk up to root
+        root = resolved
+        visited_up: set[str] = {root}
+        while root in lineage.sessions:
+            parent = lineage.sessions[root].parent_session_id
+            if parent in visited_up:
+                break  # Cycle
+            visited_up.add(parent)
+            root = parent
+
+        # Check: if root has no entry AND no children referencing it, it's not in any lineage
+        children_index: dict[str, list[str]] = {}
+        for child_id, entry in lineage.sessions.items():
+            children_index.setdefault(entry.parent_session_id, []).append(child_id)
+
+        if root not in lineage.sessions and root not in children_index:
+            return None
+
+        # Sort children deterministically: by cloned_at, then session ID
+        for parent_id in children_index:
+            children_index[parent_id].sort(key=lambda cid: (lineage.sessions[cid].cloned_at.isoformat(), cid))
+
+        # Build session file index for title resolution
+        session_files = self._find_session_files(
+            [root, *children_index.get(root, [])] + [cid for kids in children_index.values() for cid in kids]
+        )
+
+        # BFS from root to build all nodes
+        nodes: dict[str, LineageTreeNode] = {}
+        queue: list[tuple[str, str | None, int]] = [(root, None, 0)]
+        visited: set[str] = set()
+
+        while queue:
+            current_id, current_parent_id, current_depth = queue.pop(0)
+            if current_id in visited:
+                continue
+            visited.add(current_id)
+
+            node_entry = lineage.sessions.get(current_id)
+            children = children_index.get(current_id, [])
+
+            # Compute cross-machine status
+            is_cross: bool | None = None
+            if node_entry and node_entry.parent_machine_id is not None:
+                is_cross = node_entry.target_machine_id != node_entry.parent_machine_id
+
+            # Resolve custom title from session file
+            session_file = session_files.get(current_id)
+            custom_title = self._extract_title(session_file) if session_file else None
+
+            nodes[current_id] = LineageTreeNode(
+                session_id=current_id,
+                parent_id=current_parent_id,
+                children=tuple(children),
+                depth=current_depth,
+                cloned_at=node_entry.cloned_at if node_entry else None,
+                method=node_entry.method if node_entry else None,
+                parent_project_path=node_entry.parent_project_path if node_entry else None,
+                parent_machine_id=node_entry.parent_machine_id if node_entry else None,
+                target_project_path=node_entry.target_project_path if node_entry else None,
+                target_machine_id=node_entry.target_machine_id if node_entry else None,
+                paths_translated=node_entry.paths_translated if node_entry else None,
+                archive_path=node_entry.archive_path if node_entry else None,
+                is_cross_machine=is_cross,
+                custom_title=custom_title,
+            )
+
+            queue.extend((child_id, current_id, current_depth + 1) for child_id in children)
+
+        return LineageTree(
+            root_session_id=root,
+            queried_session_id=resolved,
+            nodes=nodes,
+        )
+
+    def _resolve_in_lineage(self, session_id: str, lineage: LineageFile) -> str | None:
+        """Resolve a session ID prefix within the lineage file.
+
+        Checks both child_session_id keys and parent_session_id values.
+
+        Returns:
+            Full session ID, or None if not found in lineage at all.
+
+        Raises:
+            AmbiguousSessionError: If prefix matches multiple sessions.
+        """
+        # Exact match as child
+        if session_id in lineage.sessions:
+            return session_id
+
+        # Prefix match as child
+        child_matches = [sid for sid in lineage.sessions if sid.startswith(session_id)]
+        if len(child_matches) > 1:
+            raise AmbiguousSessionError(session_id, child_matches)
+        if len(child_matches) == 1:
+            return child_matches[0]
+
+        # Exact match as parent
+        all_parent_ids = {entry.parent_session_id for entry in lineage.sessions.values()}
+        if session_id in all_parent_ids:
+            return session_id
+
+        # Prefix match as parent
+        parent_matches = [pid for pid in all_parent_ids if pid.startswith(session_id)]
+        if len(parent_matches) > 1:
+            raise AmbiguousSessionError(session_id, parent_matches)
+        if len(parent_matches) == 1:
+            return parent_matches[0]
+
+        return None
+
+    @staticmethod
+    def _find_session_files(session_ids: list[str]) -> dict[str, Path]:
+        """Find JSONL session files for the given session IDs.
+
+        Uses a single rg call to find all files efficiently.
+
+        Returns:
+            Mapping of session_id -> Path for files found locally.
+        """
+        claude_projects = Path.home() / '.claude' / 'projects'
+        if not claude_projects.exists():
+            return {}
+
+        # Single rg call with glob alternatives: {id1,id2,...}.jsonl
+        glob_pattern = '{' + ','.join(session_ids) + '}.jsonl'
+        result = subprocess.run(
+            ['rg', '--files', '--glob', glob_pattern, str(claude_projects)],
+            capture_output=True,
+            text=True,
+        )
+
+        if not result.stdout.strip():
+            return {}
+
+        files: dict[str, Path] = {}
+        for line in result.stdout.strip().split('\n'):
+            path = Path(line)
+            files[path.stem] = path
+        return files
+
+    @staticmethod
+    def _extract_title(session_file: Path) -> str | None:
+        """Extract custom title from a session file using mmap rfind.
+
+        Searches backwards for the last custom-title record without parsing
+        the entire JSONL. Only parses the single matching line.
+        """
+        try:
+            with session_file.open('rb') as f, mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ) as mm:
+                pos = mm.rfind(b'"custom-title"')
+                if pos == -1:
+                    return None
+                line_start = mm.rfind(b'\n', 0, pos) + 1
+                line_end = mm.find(b'\n', pos)
+                if line_end == -1:
+                    line_end = len(mm)
+                return json.loads(mm[line_start:line_end]).get('customTitle')  # type: ignore[no-any-return]
+        except (OSError, json.JSONDecodeError, ValueError):
+            return None
 
     def is_cross_machine(self, session_id: str) -> bool | None:
         """Check if session was restored from a different machine.

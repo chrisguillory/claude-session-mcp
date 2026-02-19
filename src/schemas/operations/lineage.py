@@ -7,6 +7,7 @@ Extracted from services/lineage.py for reuse.
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from typing import Literal
 
 import pydantic
@@ -52,40 +53,50 @@ class LineageEntry(StrictModel):
     archive_path: str | None  # Archive path (restore operations only)
 
 
-class LineageResult(StrictModel):
-    """API response for session lineage query.
+class LineageTree(StrictModel):
+    """Complete lineage tree from root ancestor to all leaf descendants.
 
-    Separate from LineageEntry (storage model) to allow independent evolution
-    of the API contract and storage format. Contains computed fields that are
-    not persisted to storage.
+    Built by LineageService.get_full_tree(). Given any session ID in a lineage
+    graph, walks up to the root and down to all leaves.
 
-    Field ordering matches LineageEntry plus computed fields at the end.
+    This is the sole return type for lineage queries — it subsumes the
+    per-entry view. Access tree.nodes[tree.queried_session_id] for the
+    queried node's full metadata.
     """
 
-    # Identity
-    child_session_id: str
-    parent_session_id: str
+    root_session_id: str  # Root ancestor (may be a native session with no lineage entry)
+    queried_session_id: str  # The session ID that was originally queried (for highlighting)
+    nodes: Mapping[str, LineageTreeNode]  # All nodes keyed by session ID
 
-    # Temporal
-    cloned_at: JsonDatetime
 
-    # Operation
-    method: Literal['clone', 'restore']
+class LineageTreeNode(StrictModel):
+    """Single node in a lineage tree.
 
-    # Parent context (source)
-    parent_project_path: str
+    All operation metadata fields are None for root/native sessions
+    (they have no lineage entry of their own).
+    """
+
+    # Tree structure
+    session_id: str
+    parent_id: str | None  # None for root
+    children: Sequence[str]  # Ordered child session IDs (by cloned_at, then session ID)
+    depth: int  # 0 for root, increments per level
+
+    # Operation metadata (from LineageEntry; all None for root)
+    cloned_at: JsonDatetime | None
+    method: Literal['clone', 'restore'] | None
+    parent_project_path: str | None
     parent_machine_id: str | None
-
-    # Target context (destination)
-    target_project_path: str
-    target_machine_id: str
-
-    # Operational flags
-    paths_translated: bool
+    target_project_path: str | None
+    target_machine_id: str | None
+    paths_translated: bool | None
     archive_path: str | None
 
-    # Computed (not in storage)
-    is_cross_machine: bool | None  # True=cross-machine, False=same-machine, None=unknown (clones)
+    # Computed
+    is_cross_machine: bool | None  # True=cross-machine, False=same, None=unknown/root
+
+    # Display (resolved from session files, None if file not found locally)
+    custom_title: str | None
 
 
 class LineageFile(StrictModel):

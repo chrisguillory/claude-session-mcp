@@ -34,7 +34,7 @@ from src.schemas.operations.archive import ArchiveMetadata
 from src.schemas.operations.context import SessionContext
 from src.schemas.operations.delete import DeleteResult
 from src.schemas.operations.gist import GistArchiveResult
-from src.schemas.operations.lineage import LineageResult
+from src.schemas.operations.lineage import LineageTree
 from src.schemas.operations.restore import RestoreResult
 from src.services.archive import SessionArchiveService
 from src.services.claude_process import find_ancestor_claude_pid, resolve_session_id_from_pid
@@ -452,26 +452,27 @@ def register_tools(state: ServerState) -> None:
     async def session_lineage(
         session_id: str | None = None,
         ctx: Context[Any, Any, Any] | None = None,
-    ) -> LineageResult | None:
+    ) -> LineageTree | None:
         """
-        Get lineage information for a session.
+        Get lineage tree for a session.
 
-        Shows parent-child relationships, cross-machine detection, and session
-        provenance. Useful for understanding where a session came from.
+        Returns the complete lineage tree containing the queried session —
+        all ancestors and descendants with full operation metadata per node.
+        Access tree.nodes[tree.queried_session_id] for the queried node's details.
 
         Args:
             session_id: Session ID to look up. Accepts full UUID or prefix.
                        If None, uses the current session.
 
         Returns:
-            LineageResult with session provenance, or None if session has no
-            lineage (native session, never cloned/restored).
+            LineageTree with all nodes, or None if session has no lineage
+            (native session with no clones).
 
         Examples:
-            # Get lineage for current session
+            # Get lineage tree for current session
             result = await session_lineage()
 
-            # Get lineage for specific session
+            # Get lineage tree for specific session
             result = await session_lineage('019b5232')
         """
         if ctx is None:
@@ -487,31 +488,15 @@ def register_tools(state: ServerState) -> None:
 
         await logger.info(f'Looking up lineage for session: {target_id[:12]}...')
 
-        # Query storage via service
         lineage_service = LineageService()
-        entry = lineage_service.get_entry(target_id)
+        tree = lineage_service.get_full_tree(target_id)
 
-        if entry is None:
-            await logger.info('No lineage found (native session)')
+        if tree is None:
+            await logger.info('No lineage found (native session, no clones)')
             return None
 
-        # Compute cross-machine status
-        is_cross = lineage_service.is_cross_machine(target_id)
-
-        # MCP handler creates API response model
-        result = LineageResult(
-            **entry.model_dump(),
-            is_cross_machine=is_cross,
-        )
-
-        if result.is_cross_machine:
-            await logger.info(f'Cross-machine restore: {result.parent_machine_id} -> {result.target_machine_id}')
-        elif result.is_cross_machine is False:
-            await logger.info('Same-machine operation')
-        else:
-            await logger.info(f'Method: {result.method} (no machine tracking)')
-
-        return result
+        await logger.info(f'Lineage tree: {len(tree.nodes)} nodes, root={tree.root_session_id[:12]}...')
+        return tree
 
     @server.tool()
     async def get_session_info(
