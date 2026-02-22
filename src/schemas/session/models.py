@@ -1808,14 +1808,34 @@ class UserRecord(BaseRecord):
     agentId: str | None = pydantic.Field(
         None, description='Agent ID for subprocess/agent records (references agent-{agentId}.jsonl)'
     )
-    isMeta: bool | None = pydantic.Field(None, description='Indicates meta messages (system-level information)')
+    # --- Message visibility tiers ---
+    # Two flags control where a message appears:
+    #   Fully visible (default):     shown in terminal UI, sent to Claude API, saved to JSONL
+    #   isMeta=True:                 hidden from terminal, sent to Claude API, saved to JSONL
+    #   isVisibleInTranscriptOnly:   hidden from terminal, saved to JSONL only (archival record)
+    isMeta: bool | None = pydantic.Field(
+        None,
+        description='UI visibility flag: true = sent to Claude API but hidden from user terminal. '
+        'Primary source: skill/command content injection (the full SKILL.md content Claude acts on). '
+        'Also: local-command caveats, auto-resume prompts, system context injection. '
+        'Absent/false = visible in terminal.',
+    )
     thinkingMetadata: ThinkingMetadata | SimpleThinkingMetadata | None = pydantic.Field(
         None, description='Extended thinking configuration (Claude 3.7+, simplified format in 2.1.19+)'
     )
     isVisibleInTranscriptOnly: bool | None = pydantic.Field(
-        None, description='Message visible only in transcript, not in session history'
+        None,
+        description='Archival record: saved to JSONL but hidden from terminal UI. '
+        'Claude Code manages API inclusion during context reconstruction (e.g., on session resume). '
+        'Only observed with isCompactSummary=True (compact summary UserRecords).',
     )
-    isCompactSummary: bool | None = pydantic.Field(None, description='Indicates this is a compacted session summary')
+    isCompactSummary: bool | None = pydantic.Field(
+        None,
+        description='Marks this as a compact summary. Always paired with isVisibleInTranscriptOnly=True. '
+        'The two-record compaction pattern: compact_boundary system record followed immediately by '
+        'a UserRecord with this flag containing the summary text. '
+        'This replaced the standalone SummaryRecord mechanism.',
+    )
     toolUseResult: Annotated[
         Sequence[ToolResultContentBlock]  # TextContent/ImageContent with 'type' discriminator - must come first
         | Sequence[McpResource]  # MCP resources (no 'type' field, has 'name', 'uri', etc.)
@@ -1893,7 +1913,12 @@ class AssistantRecord(BaseRecord):
 
 
 class SummaryRecord(StrictModel):
-    """Session summary record (minimal schema, no uuid/timestamp)."""
+    """Session summary record (minimal schema, no uuid/timestamp).
+
+    NOTE: Zero occurrences observed in recent sessions (50+ files, 521K+ records).
+    Compaction now uses UserRecord with isCompactSummary=True instead.
+    This type may be from an earlier Claude Code version. Kept for backward compatibility.
+    """
 
     type: Literal['summary']
     summary: str
@@ -1929,7 +1954,7 @@ class LocalCommandSystemRecord(BaseRecord):
     subtype: Literal['local_command']
     content: str  # Command output XML
     level: Literal['info', 'error', 'warning', 'suggestion'] | None = None
-    isMeta: bool
+    isMeta: bool  # UI visibility flag: true = internal plumbing hidden from terminal
     isSidechain: bool
     userType: str
     version: str
