@@ -4,7 +4,7 @@
 # ///
 """Fix broken `claude --resume` caused by orphan parentUuid pointers.
 
-Problem:
+Problem 1 - Orphan pointers:
     Claude Code's prompt_suggestion agents write turn_duration and other
     records into the main session JSONL with parentUuid pointing into agent
     sidechain files (agent-aprompt_suggestion-*.jsonl). When one of these
@@ -14,14 +14,29 @@ Problem:
 
     See: https://github.com/anthropics/claude-code/issues/23375
 
+Problem 2 - Duplicate UUIDs from saved_hook_context:
+    saved_hook_context records reuse the same UUID across multiple entries,
+    updating parentUuid after each turn. The uuid_index (last-write-wins)
+    creates artificial cycles: the last occurrence points to a conversation
+    record which points back to the same UUID. Fixed by excluding duplicate
+    UUIDs from the index — affected records become orphans and get rewired
+    to the previous valid record in file order.
+
+Problem 3 - Stale parent after resume:
+    When a session is resumed, the new user record's parentUuid sometimes
+    latches onto a record from an old compaction segment instead of the
+    latest one. The chain from tail is structurally intact (no broken
+    pointers) but skips newer compact_boundary segments containing the
+    actual recent conversation. Detected but not auto-fixed.
+
 Fix:
     Rewires orphan parentUuid pointers to the previous record in the main
     session file, reconnecting the linked list so --resume can walk the
-    full chain back to root.
+    full chain back to root. Stale-parent issues require manual rewiring.
 
 Prevention:
     Set CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=false in ~/.claude/settings.json
-    to prevent prompt_suggestion agents from creating these records.
+    to prevent prompt_suggestion agents from creating orphan records.
 
 Usage:
     fix_broken_session_resume.py scan              # Check all sessions
@@ -31,7 +46,7 @@ Usage:
 
 Exit codes:
     0 - Healthy / success
-    1 - Broken, fixable
+    1 - Broken or stale, fixable
     2 - Broken, unfixable
     3 - Error
 """
@@ -67,6 +82,19 @@ class Orphan:
 
 
 @dataclass
+class StaleSegment:
+    """A compact_boundary segment unreachable from the tail chain.
+
+    Indicates the resume created a parentUuid pointing to an older compaction
+    segment, skipping newer segments that contain the actual recent conversation.
+    """
+
+    root_line: int
+    root_uuid: str
+    deepest_line: int  # upper bound: line before next boundary or EOF
+
+
+@dataclass
 class AnalysisResult:
     file_path: Path
     status: str  # "healthy", "fixable", "unfixable", "error"
@@ -78,6 +106,8 @@ class AnalysisResult:
     chain_break_uuid: str | None = None
     last_line: int | None = None
     fixed_steps: int | None = None
+    stale_segments: list[StaleSegment] = field(default_factory=list)
+    duplicate_uuids: dict[str, int] = field(default_factory=dict)  # uuid -> occurrence count
 
     @property
     def prompt_suggestion_count(self) -> int:
@@ -88,14 +118,22 @@ class AnalysisResult:
         return sum(1 for o in self.orphans if o.source_agent and 'prompt_suggestion' not in o.source_agent)
 
     @property
+    def duplicate_uuid_orphan_count(self) -> int:
+        return sum(1 for o in self.orphans if o.old_parent in self.duplicate_uuids)
+
+    @property
     def unattributed_count(self) -> int:
-        return sum(1 for o in self.orphans if not o.source_agent)
+        return sum(1 for o in self.orphans if not o.source_agent and o.old_parent not in self.duplicate_uuids)
 
     @property
     def exit_code(self) -> int:
-        return {'healthy': EXIT_HEALTHY, 'fixable': EXIT_FIXABLE, 'unfixable': EXIT_UNFIXABLE, 'error': EXIT_ERROR}[
-            self.status
-        ]
+        return {
+            'healthy': EXIT_HEALTHY,
+            'fixable': EXIT_FIXABLE,
+            'stale': EXIT_FIXABLE,
+            'unfixable': EXIT_UNFIXABLE,
+            'error': EXIT_ERROR,
+        }[self.status]
 
 
 # ---------------------------------------------------------------------------
@@ -190,6 +228,7 @@ def analyze_session(file_path: Path) -> AnalysisResult:
 
     # Parse records (skip blank lines but preserve line numbering)
     uuid_index: dict[str, int] = {}
+    uuid_counts: dict[str, int] = {}
     records: list[dict[str, Any] | None] = []  # None for blank lines
     for i, line in enumerate(raw_lines):
         if not line.strip():
@@ -204,7 +243,14 @@ def analyze_session(file_path: Path) -> AnalysisResult:
         records.append(rec)
         uuid = rec.get('uuid')
         if uuid:
+            uuid_counts[uuid] = uuid_counts.get(uuid, 0) + 1
             uuid_index[uuid] = i
+
+    # Exclude duplicate UUIDs — they can't be reliably resolved (e.g. saved_hook_context
+    # records reuse the same UUID across entries, creating artificial cycles).
+    dup_uuids = {u: c for u, c in uuid_counts.items() if c > 1}
+    for u in dup_uuids:
+        del uuid_index[u]
 
     # Find orphans
     orphans: list[Orphan] = []
@@ -265,11 +311,17 @@ def analyze_session(file_path: Path) -> AnalysisResult:
     if not last_uuid:
         return AnalysisResult(file_path=file_path, status='error', error_message='no records with uuid')
 
-    # Walk unpatched chain
+    # Walk unpatched chain (with cycle detection)
     current = last_uuid
     chain_steps = 0
     chain_break_uuid = None
+    chain_visited: set[str] = set()
     while current:
+        if current in chain_visited:
+            # Cycle — treat as broken
+            chain_break_uuid = current
+            break
+        chain_visited.add(current)
         if current in uuid_index:
             chain_rec = records[uuid_index[current]]
             assert chain_rec is not None  # Records in uuid_index are never blank lines
@@ -282,14 +334,53 @@ def analyze_session(file_path: Path) -> AnalysisResult:
     chain_healthy = current is None
 
     if chain_healthy:
+        # Detect stale-parent resume: chain reaches root but skips newer segments.
+        # Find compact_boundary roots not reachable from the tail chain.
+        chain_uuids: set[str] = set()
+        walk = last_uuid
+        while walk and walk in uuid_index and walk not in chain_uuids:
+            chain_uuids.add(walk)
+            rec = records[uuid_index[walk]]
+            assert rec is not None
+            walk = rec.get('parentUuid') or None
+
+        chain_lines = {uuid_index[u] for u in chain_uuids}
+        chain_min_line = min(chain_lines) if chain_lines else 0
+
+        # Find compact_boundary roots newer than the chain but not in it.
+        # Use the next boundary (or EOF) as a cheap upper-bound for the segment
+        # extent — avoids an expensive BFS over potentially thousands of records.
+        all_boundaries = [
+            (i, rec)
+            for i, rec in enumerate(records)
+            if rec is not None
+            and rec.get('type') == 'system'
+            and rec.get('subtype') == 'compact_boundary'
+            and rec.get('uuid')
+        ]
+
+        stale_segments: list[StaleSegment] = []
+        for bi, (i, rec) in enumerate(all_boundaries):
+            if rec['uuid'] in chain_uuids or i <= chain_min_line:
+                continue
+            # Segment extends from this boundary to the next (or EOF)
+            if bi + 1 < len(all_boundaries):
+                deepest = all_boundaries[bi + 1][0] - 1
+            else:
+                deepest = len(records) - 1
+            stale_segments.append(StaleSegment(root_line=i + 1, root_uuid=rec['uuid'], deepest_line=deepest + 1))
+
+        status = 'stale' if stale_segments else 'healthy'
         return AnalysisResult(
             file_path=file_path,
-            status='healthy',
+            status=status,
             total_records=sum(1 for r in records if r is not None),
             total_uuids=len(uuid_index),
             orphans=orphans,
             chain_steps=chain_steps,
             last_line=last_line,
+            stale_segments=stale_segments,
+            duplicate_uuids=dup_uuids,
         )
 
     # Simulate fix
@@ -311,7 +402,11 @@ def analyze_session(file_path: Path) -> AnalysisResult:
 
     current = last_uuid
     fixed_steps = 0
+    fix_visited: set[str] = set()
     while current:
+        if current in fix_visited:
+            break  # Cycle
+        fix_visited.add(current)
         if current in uuid_index:
             current = parent_map.get(current) or None
         else:
@@ -331,6 +426,7 @@ def analyze_session(file_path: Path) -> AnalysisResult:
         chain_break_uuid=chain_break_uuid,
         last_line=last_line,
         fixed_steps=fixed_steps if fix_works else None,
+        duplicate_uuids=dup_uuids,
     )
 
 
@@ -346,13 +442,24 @@ def print_check(r: AnalysisResult) -> None:
         return
 
     print(f'Session: {r.file_path}')
-    print(f'Records: {r.total_records} | UUIDs: {r.total_uuids} | Orphans: {len(r.orphans)}')
+    dup_str = f' | Dup UUIDs: {len(r.duplicate_uuids)}' if r.duplicate_uuids else ''
+    print(f'Records: {r.total_records} | UUIDs: {r.total_uuids} | Orphans: {len(r.orphans)}{dup_str}')
 
     if r.status == 'healthy':
         print(f'Chain from tail (L{r.last_line}): HEALTHY ({r.chain_steps} steps to root)')
         if r.orphans:
             print(f'Note: {len(r.orphans)} orphans exist on dead branches (not affecting active chain)')
         print('Status: HEALTHY')
+        return
+
+    if r.status == 'stale':
+        print(f'Chain from tail (L{r.last_line}): STALE ({r.chain_steps} steps to root)')
+        print(f'\nResume latched onto an old compaction segment, skipping {len(r.stale_segments)} newer segment(s):')
+        for seg in r.stale_segments:
+            print(f'  Segment root L{seg.root_line} (uuid={seg.root_uuid[:16]}...) extends to L{seg.deepest_line}')
+        print('\nThe tail parentUuid points to a valid but outdated record. Newer conversation')
+        print('content exists in unreachable segments. Manual rewiring required.')
+        print('Status: STALE')
         return
 
     orphan_id = r.chain_break_uuid[:16] if r.chain_break_uuid else '?'
@@ -367,6 +474,8 @@ def print_check(r: AnalysisResult) -> None:
 
     # Cause summary
     causes = []
+    if r.duplicate_uuid_orphan_count:
+        causes.append(f'{r.duplicate_uuid_orphan_count} duplicate_uuid')
     if r.prompt_suggestion_count:
         causes.append(f'{r.prompt_suggestion_count} prompt_suggestion')
     if r.other_agent_count:
@@ -458,6 +567,7 @@ def cmd_scan(args: argparse.Namespace) -> int:
     print(f'Scanning {len(files)} session files...\n')
 
     healthy: list[AnalysisResult] = []
+    stale: list[AnalysisResult] = []
     fixable: list[AnalysisResult] = []
     unfixable: list[AnalysisResult] = []
     errors: list[AnalysisResult] = []
@@ -466,6 +576,8 @@ def cmd_scan(args: argparse.Namespace) -> int:
         r = analyze_session(f)
         if r.status == 'healthy':
             healthy.append(r)
+        elif r.status == 'stale':
+            stale.append(r)
         elif r.status == 'fixable':
             fixable.append(r)
         elif r.status == 'unfixable':
@@ -474,16 +586,28 @@ def cmd_scan(args: argparse.Namespace) -> int:
             errors.append(r)
 
     print(f'Healthy:    {len(healthy):>4d}')
+    print(f'Stale:      {len(stale):>4d}  (resume skipped newer segments)')
     print(f'Fixable:    {len(fixable):>4d}')
     print(f'Unfixable:  {len(unfixable):>4d}')
     print(f'Errors:     {len(errors):>4d}  (empty/stub files)')
 
+    if stale:
+        print('\nStale sessions (resume skipped newer compaction segments):')
+        for r in stale:
+            proj = r.file_path.parent.name
+            segs = len(r.stale_segments)
+            print(f'  {r.file_path.stem}  {segs} skipped segment{"s" if segs != 1 else ""}  [{proj}]')
+        print('\nStale sessions require manual rewiring (see `check <id>` for details).')
+
     if fixable:
         # Summarize causes
+        total_dup = sum(r.duplicate_uuid_orphan_count for r in fixable)
         total_ps = sum(r.prompt_suggestion_count for r in fixable)
         total_other = sum(r.other_agent_count for r in fixable)
         total_unattr = sum(r.unattributed_count for r in fixable)
         causes = []
+        if total_dup:
+            causes.append(f'{total_dup} duplicate_uuid')
         if total_ps:
             causes.append(f'{total_ps} prompt_suggestion')
         if total_other:
@@ -508,7 +632,7 @@ def cmd_scan(args: argparse.Namespace) -> int:
     # Return exit code based on findings
     if unfixable:
         return EXIT_UNFIXABLE
-    if fixable:
+    if fixable or stale:
         return EXIT_FIXABLE
     return EXIT_HEALTHY
 
@@ -589,6 +713,10 @@ def cmd_fix(args: argparse.Namespace) -> int:
     if r.status == 'healthy':
         print(f'Session {file_path.stem} is already healthy, nothing to fix.')
         return EXIT_HEALTHY
+    if r.status == 'stale':
+        print(f'Session {file_path.stem} has stale-parent resume (not auto-fixable).')
+        print_check(r)
+        return EXIT_FIXABLE
     if r.status == 'unfixable':
         print(f"Session {file_path.stem} is unfixable (rewiring doesn't produce a clean chain).")
         print_check(r)
