@@ -11,8 +11,9 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from datetime import datetime
-from types import MappingProxyType
 from typing import Literal
+
+import pydantic
 
 from src.schemas.base import StrictModel
 from src.schemas.session.models import SessionRecord, Task
@@ -110,7 +111,9 @@ class SessionArchiveV2(StrictModel):
     tool_results: Sequence[ToolResultEntry] = ()
     todos: Sequence[TodoFileEntry] = ()
     tasks: Sequence[Task] = ()  # Canonical Task model from session/models.py
-    task_metadata: Mapping[str, str] = MappingProxyType({})  # filename -> content (.highwatermark, etc.)
+    task_metadata: Mapping[str, str] = pydantic.Field(
+        default_factory=dict
+    )  # filename -> content (.highwatermark, etc.)
 
     # Statistics (for quick inspection without iterating records)
     total_session_records: int
@@ -218,9 +221,9 @@ class SessionArchiveV1(StrictModel):
     original_project_path: str
     claude_code_version: str | None  # Can be None in v1
     files: Mapping[str, Sequence[SessionRecord]]  # filename -> records
-    plan_files: Mapping[str, str] = MappingProxyType({})  # slug -> content
-    tool_results: Mapping[str, str] = MappingProxyType({})  # tool_use_id -> content
-    todos: Mapping[str, str] = MappingProxyType({})  # filename -> JSON content
+    plan_files: Mapping[str, str] = pydantic.Field(default_factory=dict)  # slug -> content
+    tool_results: Mapping[str, str] = pydantic.Field(default_factory=dict)  # tool_use_id -> content
+    todos: Mapping[str, str] = pydantic.Field(default_factory=dict)  # filename -> JSON content
     machine_id: str | None = None
     custom_title: str | None = None
 
@@ -315,6 +318,7 @@ def migrate_v1_to_v2(v1: SessionArchiveV1) -> SessionArchiveV2:
         tool_results=tool_result_entries,
         todos=todo_entries,
         tasks=[],  # v1 has no tasks
+        task_metadata={},  # v1 has no task metadata
         total_session_records=len(main_records) + agent_total_records,
         total_agent_records=agent_total_records,
     )
