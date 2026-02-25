@@ -34,6 +34,7 @@ Record types found in session files (schema v0.2.9):
 | `informational` | General system notifications | `content`, `level` |
 | `turn_duration` | Turn timing data (v0.2.0) | `durationMs` |
 | `stop_hook_summary` | Hook execution summaries (v0.2.6) | `hookCount`, `hookInfos`, `hookErrors`, `stopReason` |
+| `bridge_status` | Remote-control bridge status (v0.2.14) | `content`, `url`, `isMeta` |
 
 ### Quick Reference: Message Content Types
 
@@ -502,16 +503,29 @@ When Claude Code updates or new session data introduces schema drift:
 
 ### 1. Validate
 ```bash
-./scripts/validate_models.py                    # Summary first
+./scripts/validate_models.py --fast             # Quick pass/fail
 ./scripts/validate_models.py --errors           # Grouped error details
 ./scripts/validate_models.py -e path/to/file    # Single file investigation
 ```
 
-### 2. Inspect failing records
+### 2. Research & Inspect (parallel)
+
+**Run these concurrently** when errors are found or `CLAUDE_CODE_MAX_VERSION` is behind `claude --version`:
+
+**a) Research changelog delta** (launch as unrestricted-worker subagent):
+- Fetch official changelog: `gh api repos/anthropics/claude-code/contents/CHANGELOG.md --jq '.content' | base64 -d`
+- Fetch community changelog: `https://www.claudelog.com/claude-code-changelog/`
+- Focus on versions between `CLAUDE_CODE_MAX_VERSION` (in models.py) and current `claude --version`
+- Summarize: new features, new tools, behavioral changes, anything schema-relevant
+- Map each validation error to its likely feature origin (e.g., "bridge_status → /remote-control feature")
+
+**b) Inspect failing records** (in main context):
 ```bash
 cd ~/.claude/projects && find . -name "<session-id>.jsonl" \
   -exec sed -n "<line>p" {} \; | jq .
 ```
+
+The research context informs better fixes: knowing a field is from a major feature (model carefully) vs. a one-off patch (optional field) changes the modeling approach.
 
 ### 3. Fix models
 Edit `src/schemas/session/models.py`. Common fixes:
