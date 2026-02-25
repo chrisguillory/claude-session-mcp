@@ -36,6 +36,9 @@ CLAUDE CODE VERSION COMPATIBILITY:
                   to BashToolResult, annotations to AskUserQuestionToolResult (2.1.45+)
 - Schema v0.2.13: Added claude-sonnet-4-6 model ID, max_tokens stop_reason,
                   canReadOutputFile to AsyncTaskLaunchResult (2.1.47+)
+- Schema v0.2.14: Added BridgeStatusSystemRecord for /remote-control feature,
+                  TaskGetToolResult, markdown to QuestionOption,
+                  pending_mcp_servers to ToolSearchToolResult (2.1.51+)
 - If validation fails, Claude Code schema may have changed - update models accordingly
 
 NEW FIELDS IN CLAUDE CODE 2.0.51+ (Schema v0.1.3):
@@ -105,11 +108,11 @@ from src.schemas.types import BaseStrictModel, EmptyDict, EmptySequence, ModelId
 # Schema Version
 # ==============================================================================
 
-SCHEMA_VERSION = '0.2.13'
+SCHEMA_VERSION = '0.2.14'
 CLAUDE_CODE_MIN_VERSION = '2.0.35'
-CLAUDE_CODE_MAX_VERSION = '2.1.47'
-LAST_VALIDATED = '2026-02-19'
-VALIDATION_RECORD_COUNT = 521_225
+CLAUDE_CODE_MAX_VERSION = '2.1.51'
+LAST_VALIDATED = '2026-02-25'
+VALIDATION_RECORD_COUNT = 697_917
 
 
 # ==============================================================================
@@ -1388,6 +1391,23 @@ class TaskUpdateSuccessResult(StrictModel):
     error: str | None = None  # Present when update fails
 
 
+class TaskGetItem(StrictModel):
+    """A task item in TaskGet results (full detail)."""
+
+    id: str
+    subject: str
+    description: str
+    status: Literal['pending', 'in_progress', 'completed']
+    blocks: Sequence[str]
+    blockedBy: Sequence[str]
+
+
+class TaskGetToolResult(StrictModel):
+    """Result from TaskGet tool - single task with full details."""
+
+    task: TaskGetItem
+
+
 class LSPToolResult(StrictModel):
     """Result from LSP tool execution."""
 
@@ -1435,6 +1455,7 @@ class QuestionOption(StrictModel):
 
     label: str
     description: str
+    markdown: str | None = None  # Markdown preview of the option (Claude Code 2.1.50+)
 
 
 class UserQuestion(StrictModel):
@@ -1553,6 +1574,7 @@ class ToolSearchToolResult(StrictModel):
     # Field name changed over versions - data has one or the other
     total_deferred_tools: int | None = None
     total_mcp_tools: int | None = None
+    pending_mcp_servers: Sequence[str] | None = None  # Servers still connecting (Claude Code 2.1.51+)
 
 
 class BashOutputToolResult(StrictModel):
@@ -1749,6 +1771,7 @@ ToolResult = Annotated[
     | AsyncTaskLaunchResult  # Launched async task
     | AgentsRetrievalResult  # Multi-agent polling
     | TaskListToolResult  # TaskList result (2.1.17+)
+    | TaskGetToolResult  # TaskGet result - full task details (2.1.50+)
     | TaskSingleToolResult  # TaskCreate/TaskUpdate result (2.1.17+)
     | TaskUpdateSuccessResult  # Alternative TaskUpdate result (success-based)
     | TaskStopToolResult  # TaskStop result (2.1.25+)
@@ -2081,6 +2104,23 @@ class StopHookSummarySystemRecord(BaseRecord):
     slug: str | None = None  # Human-readable session slug
 
 
+class BridgeStatusSystemRecord(BaseRecord):
+    """System record for remote-control bridge status (subtype=bridge_status, Claude Code 2.1.51+)."""
+
+    type: Literal['system']
+    cwd: PathField
+    parentUuid: str | None
+    subtype: Literal['bridge_status']
+    content: str  # e.g., "/remote-control is active. Code in CLI or at https://claude.ai/code/..."
+    url: str  # claude.ai/code session URL
+    isMeta: bool
+    isSidechain: bool
+    userType: str
+    version: str
+    gitBranch: str
+    slug: str | None = None
+
+
 # Union of system subtype records
 SystemSubtypeRecord = Annotated[
     LocalCommandSystemRecord
@@ -2089,7 +2129,8 @@ SystemSubtypeRecord = Annotated[
     | ApiErrorSystemRecord
     | InformationalSystemRecord
     | TurnDurationSystemRecord
-    | StopHookSummarySystemRecord,
+    | StopHookSummarySystemRecord
+    | BridgeStatusSystemRecord,
     pydantic.Field(discriminator='subtype'),
 ]
 
@@ -2341,6 +2382,7 @@ SessionRecord = Annotated[
     | InformationalSystemRecord  # Must be before SystemRecord!
     | TurnDurationSystemRecord  # Must be before SystemRecord!
     | StopHookSummarySystemRecord  # Must be before SystemRecord!
+    | BridgeStatusSystemRecord  # Must be before SystemRecord!
     | SystemRecord
     | FileHistorySnapshotRecord
     | QueueOperationRecord

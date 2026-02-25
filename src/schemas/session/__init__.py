@@ -42,6 +42,7 @@ from src.schemas.session.models import (
     BashProgressData,
     BashToolInput,
     BashToolResult,
+    BridgeStatusSystemRecord,
     # Token usage
     CacheCreation,
     # Thinking edit
@@ -129,6 +130,8 @@ from src.schemas.session.models import (
     SystemRecord,
     SystemSubtypeRecord,
     Task,
+    TaskGetItem,
+    TaskGetToolResult,
     TaskOutputPollingResult,
     TaskOutputToolInput,
     TaskStopToolResult,
@@ -277,6 +280,8 @@ __all__ = [
     'ReadPdfToolResult',
     'ReadImageToolResult',
     'TaskOutputPollingResult',
+    'TaskGetItem',
+    'TaskGetToolResult',
     'TaskStopToolResult',
     'TaskToolResult',
     'ToolSearchToolResult',
@@ -310,6 +315,7 @@ __all__ = [
     'InformationalSystemRecord',
     'TurnDurationSystemRecord',
     'StopHookSummarySystemRecord',
+    'BridgeStatusSystemRecord',
     'HookInfo',
     'SystemSubtypeRecord',
     'Task',
