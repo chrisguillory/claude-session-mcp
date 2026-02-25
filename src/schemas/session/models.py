@@ -2356,6 +2356,73 @@ SessionRecordAdapter: pydantic.TypeAdapter[SessionRecord] = pydantic.TypeAdapter
 
 
 # ==============================================================================
+# Fast Dispatch Validation
+# ==============================================================================
+
+# Per-type TypeAdapters bypass the 17-member left-to-right union scan.
+# When adding a new record type to SessionRecord, also add a branch below.
+_user_adapter = pydantic.TypeAdapter(UserRecord)
+_assistant_adapter = pydantic.TypeAdapter(AssistantRecord)
+_summary_adapter = pydantic.TypeAdapter(SummaryRecord)
+# Explicit annotations needed: these wrap union/Annotated types where mypy can't infer
+_system_subtype_adapter: pydantic.TypeAdapter[SystemSubtypeRecord] = pydantic.TypeAdapter(SystemSubtypeRecord)
+_system_fallback_adapter: pydantic.TypeAdapter[SystemRecord] = pydantic.TypeAdapter(SystemRecord)
+_file_history_adapter = pydantic.TypeAdapter(FileHistorySnapshotRecord)
+_queue_operation_adapter = pydantic.TypeAdapter(QueueOperationRecord)
+_custom_title_adapter = pydantic.TypeAdapter(CustomTitleRecord)
+_progress_adapter = pydantic.TypeAdapter(ProgressRecord)
+_pr_link_adapter = pydantic.TypeAdapter(PrLinkRecord)
+_saved_hook_context_adapter = pydantic.TypeAdapter(SavedHookContextRecord)
+
+
+def validate_session_record(data: dict[str, Any]) -> SessionRecord:
+    """Validate a session record dict using type-dispatch for performance.
+
+    Dispatches to per-type TypeAdapters based on the 'type' field, avoiding
+    the full 17-member left-to-right union scan. Branches are ordered by
+    frequency (assistant 33%, queue-operation 27%, user 22%, progress 17%).
+
+    For 'system' records, uses SystemSubtypeRecord (discriminator='subtype')
+    first, falling back to generic SystemRecord if subtype is unknown.
+
+    Falls back to SessionRecordAdapter for completely unknown types,
+    preserving forward compatibility.
+
+    This is the recommended entry point for validating session records.
+    SessionRecordAdapter.validate_python() is equivalent but slower.
+    """
+    record_type = data.get('type')
+
+    if record_type == 'assistant':
+        return _assistant_adapter.validate_python(data)
+    elif record_type == 'queue-operation':
+        return _queue_operation_adapter.validate_python(data)
+    elif record_type == 'user':
+        return _user_adapter.validate_python(data)
+    elif record_type == 'progress':
+        return _progress_adapter.validate_python(data)
+    elif record_type == 'system':
+        try:
+            return _system_subtype_adapter.validate_python(data)
+        except pydantic.ValidationError:
+            # Unknown subtype or malformed subtype record -- SystemRecord's extra='forbid'
+            # will also reject known-subtype fields, producing equivalent errors to the union scan
+            return _system_fallback_adapter.validate_python(data)
+    elif record_type == 'summary':
+        return _summary_adapter.validate_python(data)
+    elif record_type == 'custom-title':
+        return _custom_title_adapter.validate_python(data)
+    elif record_type == 'file-history-snapshot':
+        return _file_history_adapter.validate_python(data)
+    elif record_type == 'pr-link':
+        return _pr_link_adapter.validate_python(data)
+    elif record_type == 'saved_hook_context':
+        return _saved_hook_context_adapter.validate_python(data)
+    else:
+        return SessionRecordAdapter.validate_python(data)
+
+
+# ==============================================================================
 # Session Metadata
 # ==============================================================================
 

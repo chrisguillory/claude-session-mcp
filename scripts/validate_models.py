@@ -1,6 +1,6 @@
 #!/usr/bin/env -S uv run --no-project
 # /// script
-# dependencies = ["pydantic>=2.0.0", "lazy-object-proxy>=1.10.0"]
+# dependencies = ["pydantic>=2.0.0", "lazy-object-proxy>=1.10.0", "orjson>=3.10.0"]
 # ///
 
 """
@@ -15,12 +15,17 @@ Usage:
 Options:
     --errors, -e     Show detailed error information with grouping and actual values
     --full, -f       Show complete values without truncation (implies --errors)
+    --fast           Fast mode: skip fallback detection and error enrichment
+    -j N, --workers N  Number of parallel workers (default: min(cpu_count, 8))
     --help, -h       Show this help message
 
 Examples:
     ./scripts/validate_models.py                    # Summary mode (default)
     ./scripts/validate_models.py --errors           # Debugging mode with grouped errors
     ./scripts/validate_models.py --errors --full    # Full values for AI/detailed analysis
+    ./scripts/validate_models.py --fast             # Quick pass/fail validation
+    ./scripts/validate_models.py --fast -j 4        # Quick validation, 4 workers
+    ./scripts/validate_models.py -j 1              # Sequential (no parallelism)
     ./scripts/validate_models.py -e path/to/file.jsonl  # Investigate specific file
 """
 
@@ -29,11 +34,15 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 import sys
 from collections import Counter, defaultdict
 from collections.abc import Mapping
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any, TypedDict
+
+import orjson
 
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -41,12 +50,12 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import pydantic
 from pydantic import ValidationError
 
-from src.schemas.session import SessionRecordAdapter
 from src.schemas.session.models import (
     AssistantRecord,
     ToolResultContent,
     ToolUseContent,
     UserRecord,
+    validate_session_record,
 )
 from src.schemas.types import PermissiveModel
 
@@ -257,9 +266,8 @@ def extract_value_at_path(data: dict[str, Any], loc: tuple[str | int, ...]) -> A
                         return {'__missing__': part, '__parent_keys__': list(current.keys())}
                 else:
                     # Key doesn't exist - might be a Pydantic type annotation
-                    if (
-                        part_str
-                        and part_str[0].isupper()
+                    if part_str and (
+                        part_str[0].isupper()
                         or part_str.endswith('Record')
                         or part_str.endswith('Content')
                         or 'Tool' in part_str
@@ -432,6 +440,31 @@ def group_errors(errors: list[EnrichedFieldError]) -> list[ErrorGroup]:
 # ==============================================================================
 
 
+def _may_contain_fallbacks(record: Any) -> bool:
+    """Quick pre-check: can this record possibly contain PermissiveModel instances?
+
+    Only user records with tool_result content and assistant records with
+    tool_use content can contain PermissiveModel fallbacks. All other record
+    types (system, summary, queue-operation, progress, etc.) cannot.
+
+    This avoids the expensive recursive walk of find_fallbacks() for ~67% of records.
+    """
+    if isinstance(record, AssistantRecord):
+        if record.message and isinstance(record.message.content, list):
+            return any(isinstance(block, ToolUseContent) for block in record.message.content)
+        return False
+
+    if isinstance(record, UserRecord):
+        if record.mcpMeta is not None:
+            return True
+        if record.message and isinstance(record.message.content, list):
+            if any(isinstance(block, ToolResultContent) for block in record.message.content):
+                return True
+        return record.toolUseResult is not None
+
+    return False
+
+
 def find_fallbacks(
     obj: Any,
     path: str = '',
@@ -544,7 +577,7 @@ def find_all_session_files() -> list[Path]:
     return sorted(session_files)
 
 
-def validate_session_file(session_file: Path) -> FileValidationResult:
+def validate_session_file(session_file: Path, *, fast: bool = False) -> FileValidationResult:
     """Validate a single session file and return statistics."""
     results: FileValidationResult = {
         'file': str(session_file),
@@ -565,144 +598,157 @@ def validate_session_file(session_file: Path) -> FileValidationResult:
     # Track tool_use_id -> tool_name for cross-record correlation
     tool_use_map: dict[str, str] = {}
 
-    with open(session_file) as f:
+    with open(session_file, 'rb') as f:
         for line_num, line in enumerate(f, 1):
-            if not line.strip():
+            if not line or line == b'\n':
                 continue
 
             results['total_records'] += 1
             record_type = 'UNKNOWN'
 
             try:
-                record_data = json.loads(line)
+                record_data = orjson.loads(line)
                 record_type = record_data.get('type', 'UNKNOWN')
                 results['record_types'][record_type] += 1
 
-                # Try to parse with Pydantic
-                record = SessionRecordAdapter.validate_python(record_data)
+                # Validate using type-dispatch (avoids 17-member union scan)
+                record = validate_session_record(record_data)
                 results['valid_records'] += 1
 
-                # Extract tool uses from AssistantRecords for correlation
-                if isinstance(record, AssistantRecord) and record.message:
-                    if isinstance(record.message.content, list):
-                        for block in record.message.content:
-                            if isinstance(block, ToolUseContent):
-                                tool_use_map[block.id] = block.name
+                if not fast:
+                    # Extract tool uses from AssistantRecords for correlation
+                    if isinstance(record, AssistantRecord) and record.message:
+                        if isinstance(record.message.content, list):
+                            for block in record.message.content:
+                                if isinstance(block, ToolUseContent):
+                                    tool_use_map[block.id] = block.name
 
-                # Check for PermissiveModel fallbacks in the validated record
-                for path, fb_type, tool_name, extra_fields in find_fallbacks(record):
-                    # For MCPToolResult, check if it's actually a Claude Code tool
-                    if fb_type == 'MCPToolResult' and isinstance(record, UserRecord):
-                        actual_tool_name = resolve_tool_name_for_result(record, tool_use_map)
-                        if actual_tool_name and not actual_tool_name.startswith('mcp__'):
-                            # Claude Code tool fell through - this is a validation error!
-                            results['invalid_records'] += 1
-                            results['valid_records'] -= 1
-                            error_msg = (
-                                f'Line {line_num} ({record_type}): ⚠️  Claude Code tool '
-                                f"'{actual_tool_name}' result fell through to MCPToolResult. "
-                                f'Fields: {list(extra_fields.keys())}'
+                    # Check for PermissiveModel fallbacks (only tool-containing records)
+                    if _may_contain_fallbacks(record):
+                        reclassified_as_invalid = False
+                        for path, fb_type, tool_name, extra_fields in find_fallbacks(record):
+                            # For MCPToolResult, check if it's actually a Claude Code tool
+                            if fb_type == 'MCPToolResult' and isinstance(record, UserRecord):
+                                actual_tool_name = resolve_tool_name_for_result(record, tool_use_map)
+                                if actual_tool_name and not actual_tool_name.startswith('mcp__'):
+                                    if not reclassified_as_invalid:
+                                        # Claude Code tool fell through - reclassify once
+                                        results['invalid_records'] += 1
+                                        results['valid_records'] -= 1
+                                        reclassified_as_invalid = True
+                                    error_msg = (
+                                        f'Line {line_num} ({record_type}): ⚠️  Claude Code tool '
+                                        f"'{actual_tool_name}' result fell through to MCPToolResult. "
+                                        f'Fields: {list(extra_fields.keys())}'
+                                    )
+                                    results['errors'].append(error_msg)
+                                    continue  # Don't also add to fallbacks
+
+                            results['fallbacks'].append(
+                                {
+                                    'file': session_filename,
+                                    'line': line_num,
+                                    'path': path,
+                                    'fallback_type': fb_type,
+                                    'tool_name': tool_name,
+                                    'extra_fields': extra_fields,
+                                }
                             )
-                            results['errors'].append(error_msg)
-                            continue  # Don't also add to fallbacks
-
-                    results['fallbacks'].append(
-                        {
-                            'file': session_filename,
-                            'line': line_num,
-                            'path': path,
-                            'fallback_type': fb_type,
-                            'tool_name': tool_name,
-                            'extra_fields': extra_fields,
-                        }
-                    )
 
             except ValidationError as e:
                 results['invalid_records'] += 1
 
-                # Check if this is a validator error about unmodeled tools
-                is_validator_error = False
-                for error in e.errors():
-                    error_msg_str = str(error.get('ctx', {}).get('error', ''))
-                    if 'fell through to MCPToolInput' in error_msg_str:
-                        is_validator_error = True
-                        error_msg = f'Line {line_num} ({record_type}): ⚠️  VALIDATOR ERROR: {error_msg_str}'
+                if fast:
+                    results['errors'].append(f'Line {line_num} ({record_type}): {len(e.errors())} validation errors')
+                else:
+                    # Check if this is a validator error about unmodeled tools
+                    is_validator_error = False
+                    for error in e.errors():
+                        error_msg_str = str(error.get('ctx', {}).get('error', ''))
+                        if 'fell through to MCPToolInput' in error_msg_str:
+                            is_validator_error = True
+                            error_msg = f'Line {line_num} ({record_type}): ⚠️  VALIDATOR ERROR: {error_msg_str}'
+                            results['errors'].append(error_msg)
+                            break
+
+                    if not is_validator_error:
+                        # Regular validation error - extract enriched info
+                        error_msg = f'Line {line_num} ({record_type}): {len(e.errors())} validation errors'
                         results['errors'].append(error_msg)
-                        break
 
-                if not is_validator_error:
-                    # Regular validation error - extract enriched info
-                    error_msg = f'Line {line_num} ({record_type}): {len(e.errors())} validation errors'
-                    results['errors'].append(error_msg)
+                        for err in e.errors():
+                            loc = err['loc']
+                            value = extract_value_at_path(record_data, loc)
 
-                    for err in e.errors():
-                        loc = err['loc']
-                        value = extract_value_at_path(record_data, loc)
-
-                        results['enriched_errors'].append(
-                            {
-                                'file': session_filename,
-                                'file_path': session_file,
-                                'line': line_num,
-                                'record_type': record_type,
-                                'loc': loc,
-                                'loc_str': '.'.join(str(x) for x in loc),
-                                'normalized_loc': normalize_path(loc),
-                                'generalized_loc': generalize_path(loc),
-                                'msg': err['msg'],
-                                'error_type': err['type'],
-                                'value': value,
-                                'value_keys': list(value.keys())
-                                if isinstance(value, dict) and '__missing__' not in value
-                                else None,
-                                'value_type': type(value).__name__ if value is not None else 'null',
-                            }
-                        )
+                            results['enriched_errors'].append(
+                                {
+                                    'file': session_filename,
+                                    'file_path': session_file,
+                                    'line': line_num,
+                                    'record_type': record_type,
+                                    'loc': loc,
+                                    'loc_str': '.'.join(str(x) for x in loc),
+                                    'normalized_loc': normalize_path(loc),
+                                    'generalized_loc': generalize_path(loc),
+                                    'msg': err['msg'],
+                                    'error_type': err['type'],
+                                    'value': value,
+                                    'value_keys': list(value.keys())
+                                    if isinstance(value, dict) and '__missing__' not in value
+                                    else None,
+                                    'value_type': type(value).__name__ if value is not None else 'null',
+                                }
+                            )
 
             except Exception as e:
                 results['invalid_records'] += 1
                 error_msg = f'Line {line_num} ({record_type}): {str(e)[:500]}'
                 results['errors'].append(error_msg)
 
-                # Track unknown types and fields
-                try:
-                    if 'type' in record_data:
-                        known_types = [
-                            'user',
-                            'assistant',
-                            'summary',
-                            'system',
-                            'file-history-snapshot',
-                            'queue-operation',
-                            'custom-title',
-                        ]
-                        if record_data['type'] not in known_types:
-                            results['unknown_types'].add(record_data['type'])
+                if not fast:
+                    # Track unknown types and fields
+                    try:
+                        if 'type' in record_data:
+                            known_types = [
+                                'user',
+                                'assistant',
+                                'summary',
+                                'system',
+                                'file-history-snapshot',
+                                'queue-operation',
+                                'custom-title',
+                                'progress',
+                                'pr-link',
+                                'saved_hook_context',
+                            ]
+                            if record_data['type'] not in known_types:
+                                results['unknown_types'].add(record_data['type'])
 
-                    # Track unknown content types
-                    if record_type in ['user', 'assistant']:
-                        msg = record_data.get('message', {})
-                        content = msg.get('content', [])
-                        if isinstance(content, list):
-                            for item in content:
-                                if isinstance(item, dict) and 'type' in item:
-                                    item_type = item['type']
-                                    known_content_types = [
-                                        'thinking',
-                                        'text',
-                                        'tool_use',
-                                        'tool_result',
-                                        'image',
-                                        'document',
-                                    ]
-                                    if item_type not in known_content_types:
-                                        results['unknown_content_types'].add(item_type)
+                        # Track unknown content types
+                        if record_type in ['user', 'assistant']:
+                            msg = record_data.get('message', {})
+                            content = msg.get('content', [])
+                            if isinstance(content, list):
+                                for item in content:
+                                    if isinstance(item, dict) and 'type' in item:
+                                        item_type = item['type']
+                                        known_content_types = [
+                                            'thinking',
+                                            'text',
+                                            'tool_use',
+                                            'tool_result',
+                                            'tool_reference',
+                                            'image',
+                                            'document',
+                                        ]
+                                        if item_type not in known_content_types:
+                                            results['unknown_content_types'].add(item_type)
 
-                    # Track missing fields
-                    if 'Validation error' in str(e) or 'Field required' in str(e):
-                        results['missing_fields'][record_type].append(str(e)[:150])
-                except Exception:
-                    pass  # Ignore errors in error handling
+                        # Track missing fields
+                        if 'Validation error' in str(e) or 'Field required' in str(e):
+                            results['missing_fields'][record_type].append(str(e)[:150])
+                    except Exception:
+                        pass  # Ignore errors in error handling
 
     return results
 
@@ -814,9 +860,8 @@ def print_summary_mode(
     print(f'Total files processed: {total_stats["files"]}')
     print(f'Total records: {total_stats["total_records"]}')
 
-    # Use floor for valid% (never overstate) and ceil for invalid% (never understate)
-    valid_pct = math.floor(total_stats['valid_records'] / total_stats['total_records'] * 10000) / 100
-    invalid_pct = math.ceil(total_stats['invalid_records'] / total_stats['total_records'] * 10000) / 100
+    valid_pct = _format_pct(total_stats['valid_records'], total_stats['total_records'], floor=True)
+    invalid_pct = _format_pct(total_stats['invalid_records'], total_stats['total_records'], floor=False)
     print(f'Valid records: {total_stats["valid_records"]} ({valid_pct:.2f}%)')
     print(f'Invalid records: {total_stats["invalid_records"]} ({invalid_pct:.2f}%)')
     print()
@@ -889,11 +934,6 @@ def print_summary_mode(
                     print(f'      ... and {len(tool_patterns) - 10} more tools')
 
 
-# ==============================================================================
-# Main
-# ==============================================================================
-
-
 def parse_args() -> argparse.Namespace:
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
@@ -905,6 +945,9 @@ Examples:
   %(prog)s --errors             Debugging mode with grouped errors
   %(prog)s --errors --full      Full values for AI/detailed analysis
   %(prog)s -ef                  Short form of --errors --full
+  %(prog)s --fast               Quick pass/fail validation
+  %(prog)s --fast -j 4          Quick validation, 4 workers
+  %(prog)s -j 1                 Sequential (no parallelism)
   %(prog)s -e path/to/file.jsonl   Investigate specific file
         """,
     )
@@ -931,7 +974,43 @@ Examples:
         help='Show complete values without truncation (implies --errors)',
     )
 
-    return parser.parse_args()
+    parser.add_argument(
+        '--fast',
+        action='store_true',
+        help='Fast mode: skip fallback detection and error enrichment (just validate counts)',
+    )
+
+    parser.add_argument(
+        '-j',
+        '--workers',
+        type=int,
+        default=None,
+        help='Number of parallel workers (default: min(cpu_count, 8), use 1 for sequential)',
+    )
+
+    args = parser.parse_args()
+
+    if args.fast and (args.errors or args.full):
+        parser.error('--fast cannot be combined with --errors or --full')
+
+    return args
+
+
+# ==============================================================================
+# Main
+# ==============================================================================
+
+
+def _aggregate_result(total_stats: TotalStats, results: FileValidationResult) -> None:
+    """Aggregate a single file's results into total stats."""
+    total_stats['files'] += 1
+    total_stats['total_records'] += results['total_records']
+    total_stats['valid_records'] += results['valid_records']
+    total_stats['invalid_records'] += results['invalid_records']
+    total_stats['record_types'].update(results['record_types'])
+    total_stats['unknown_types'].update(results['unknown_types'])
+    total_stats['unknown_content_types'].update(results['unknown_content_types'])
+    total_stats['fallbacks'].extend(results['fallbacks'])
 
 
 def main() -> None:
@@ -974,21 +1053,52 @@ def main() -> None:
         'fallbacks': [],
     }
 
-    for session_file in session_files:
-        results = validate_session_file(session_file)
-        all_results.append(results)
+    max_workers = args.workers if args.workers is not None else min(os.cpu_count() or 4, 8)
 
-        total_stats['files'] += 1
-        total_stats['total_records'] += results['total_records']
-        total_stats['valid_records'] += results['valid_records']
-        total_stats['invalid_records'] += results['invalid_records']
-        total_stats['record_types'].update(results['record_types'])
-        total_stats['unknown_types'].update(results['unknown_types'])
-        total_stats['unknown_content_types'].update(results['unknown_content_types'])
-        total_stats['fallbacks'].extend(results['fallbacks'])
+    if args.file or len(session_files) <= 1 or max_workers <= 1:
+        # Sequential validation (single file, or -j 1)
+        for session_file in session_files:
+            results = validate_session_file(session_file, fast=args.fast)
+            all_results.append(results)
+            _aggregate_result(total_stats, results)
+    else:
+        # Parallel validation across files
+        completed = 0
+
+        with ProcessPoolExecutor(max_workers=max_workers) as executor:
+            future_to_file = {executor.submit(validate_session_file, f, fast=args.fast): f for f in session_files}
+
+            for future in as_completed(future_to_file):
+                results = future.result()
+                all_results.append(results)
+                _aggregate_result(total_stats, results)
+
+                completed += 1
+                if sys.stdout.isatty():
+                    print(
+                        f'\r  Validated {completed}/{len(session_files)} files...',
+                        end='',
+                        flush=True,
+                    )
+
+        if sys.stdout.isatty():
+            print()  # Newline after progress
+
+        # Sort for deterministic output (as_completed returns in completion order)
+        all_results.sort(key=lambda r: r['file'])
 
     # Output based on mode
-    if args.errors:
+    if args.fast:
+        # Minimal output in fast mode
+        print('SUMMARY')
+        print('-' * 80)
+        print(f'Total files processed: {total_stats["files"]}')
+        print(f'Total records: {total_stats["total_records"]}')
+        valid_pct = _format_pct(total_stats['valid_records'], total_stats['total_records'], floor=True)
+        invalid_pct = _format_pct(total_stats['invalid_records'], total_stats['total_records'], floor=False)
+        print(f'Valid records: {total_stats["valid_records"]} ({valid_pct:.2f}%)')
+        print(f'Invalid records: {total_stats["invalid_records"]} ({invalid_pct:.2f}%)')
+    elif args.errors:
         print_errors_mode(all_results, full=args.full)
         print()
         # Also print fallback info in errors mode
@@ -1025,6 +1135,14 @@ def main() -> None:
         print()
         print(f'{Colors.RED}✗ Validation failed for {total_stats["invalid_records"]} records{Colors.RESET}')
         sys.exit(1)
+
+
+def _format_pct(numerator: int, denominator: int, *, floor: bool) -> float:
+    """Format a percentage with floor (never overstate) or ceil (never understate)."""
+    if denominator == 0:
+        return 0.0
+    raw = numerator / denominator * 10000
+    return math.floor(raw) / 100 if floor else math.ceil(raw) / 100
 
 
 if __name__ == '__main__':

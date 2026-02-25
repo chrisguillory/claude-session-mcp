@@ -164,6 +164,7 @@ from src.schemas.session.models import (
     WebSearchToolResult,
     WriteToolInput,
     WriteToolResult,
+    validate_session_record,
     validated_copy,
 )
 
@@ -323,6 +324,7 @@ __all__ = [
     # Main union
     'SessionRecord',
     'SessionRecordAdapter',
+    'validate_session_record',
     # Metadata/Analysis
     'SessionMetadata',
     'SessionAnalysis',

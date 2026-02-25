@@ -159,7 +159,9 @@ jq -r 'select(.type=="summary") | .summary' ~/.claude/projects/*/*.jsonl | rg -i
 ## Validation
 
 ```bash
-./scripts/validate_models.py
+./scripts/validate_models.py --fast             # Quick pass/fail
+./scripts/validate_models.py --errors           # Grouped error details
+./scripts/validate_models.py -e path/to/file    # Single file investigation
 ```
 
 Validates all session files against Pydantic models. 100% pass rate expected.
@@ -175,17 +177,14 @@ cd ~/.claude/projects && find . -name "<session-id>.jsonl" -exec sed -n "<line>p
 
 ```python
 from pathlib import Path
-from pydantic import TypeAdapter
-from src.schemas.session import SessionRecord, UserRecord, AssistantRecord, CompactBoundarySystemRecord
+from src.schemas.session import validate_session_record, UserRecord, AssistantRecord, CompactBoundarySystemRecord
 import json
-
-adapter = TypeAdapter(SessionRecord)
 
 # Parse session with Pydantic
 records = []
 with open(session_path) as f:
     for line in f:
-        record = adapter.validate_python(json.loads(line))
+        record = validate_session_record(json.loads(line))
         records.append(record)
 
 # Find last compact_boundary
@@ -517,7 +516,7 @@ cd ~/.claude/projects && find . -name "<session-id>.jsonl" \
 ### 3. Fix models
 Edit `src/schemas/session/models.py`. Common fixes:
 - New optional fields: `fieldName: Type | None = None`
-- New record/tool types: add model class + wire into discriminated union
+- New record/tool types: add model class + wire into discriminated union + add dispatch branch in `validate_session_record()`
 - Expanded Literals: add new values to existing `Literal[...]` types
 - Union ordering: ensure more-specific types come before less-specific
 
@@ -528,7 +527,7 @@ Edit `src/schemas/session/models.py`. Common fixes:
 
 ### 4. Verify 100% pass rate
 ```bash
-./scripts/validate_models.py
+./scripts/validate_models.py --fast
 ```
 Iterate steps 2-4 until all records validate. Multiple rounds are normal.
 
