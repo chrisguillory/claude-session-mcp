@@ -392,8 +392,8 @@ def register_tools(state: ServerState) -> None:
         session_info = await info_service.resolve_session(session_id)
         full_session_id = session_info.session_id
 
-        # Create delete service for current project
-        delete_service = SessionDeleteService(state.project_path)
+        # Create delete service - use discovered session_folder for correct path resolution
+        delete_service = SessionDeleteService(session_folder=session_info.session_folder)
 
         # Determine if termination is needed
         is_self_delete = full_session_id == state.session_id

@@ -103,11 +103,44 @@ class SessionDeleteService:
     # - IsADirectoryError: wrong operation = bug in our code
     EXPECTED_DELETION_ERRORS = (PermissionError,)
 
-    def __init__(self, project_path: Path) -> None:
-        """Initialize delete service."""
-        self.project_path = project_path.resolve()
+    def __init__(
+        self,
+        *,
+        project_path: Path | None = None,
+        session_folder: Path | None = None,
+    ) -> None:
+        """
+        Initialize delete service.
+
+        Args:
+            project_path: Project directory (used to find session folder via encoding)
+            session_folder: Session folder directly (bypasses encoding, use when discovered)
+
+        Note: Provide either project_path OR session_folder.
+        - CLI delete command has session_folder from discovery - use that
+        - MCP handler can also pass session_folder from discovery
+        """
+        if not project_path and not session_folder:
+            raise ValueError('Either project_path or session_folder must be provided')
+
+        self.project_path = project_path.resolve() if project_path else None
         self.claude_sessions_dir = Path.home() / '.claude' / 'projects'
         self.parser_service = SessionParserService()
+        self._session_folder: Path | None = session_folder
+
+    def _get_session_dir(self) -> Path:
+        """
+        Get the session directory in ~/.claude/projects/.
+
+        If session_folder was provided directly, returns it.
+        Otherwise, computes from project_path via encoding.
+        """
+        if self._session_folder is not None:
+            return self._session_folder
+
+        assert self.project_path is not None  # Ensured by __init__ validation
+        encoded_path = encode_path(self.project_path)
+        return self.claude_sessions_dir / encoded_path
 
     @asynccontextmanager
     async def _atomic_deletion(self, backup_path: Path) -> AsyncGenerator[None]:
@@ -202,8 +235,7 @@ class SessionDeleteService:
             await logger.info(f'Discovering artifacts for session: {session_id}')
 
         # Get session directory
-        encoded_path = encode_path(self.project_path)
-        session_dir = self.claude_sessions_dir / encoded_path
+        session_dir = self._get_session_dir()
 
         # Find main session file
         main_file = session_dir / f'{session_id}.jsonl'
@@ -684,6 +716,7 @@ class SessionDeleteService:
             temp_dir=self.DELETED_SESSIONS_DIR,
             parser_service=self.parser_service,
             project_path=self.project_path,
+            session_folder=self._session_folder,
         )
 
         storage = LocalFileSystemStorage(self.DELETED_SESSIONS_DIR)

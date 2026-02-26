@@ -589,15 +589,6 @@ async def _delete_async(
     logger = CLILogger(verbose=verbose)
 
     try:
-        # Determine project path
-        if project:
-            project_path = project.resolve()
-            if not project_path.exists():
-                typer.secho(f'Error: Project directory does not exist: {project_path}', fg=typer.colors.RED, err=True)
-                raise typer.Exit(1)
-        else:
-            project_path = Path.cwd()
-
         # Resolve session ID prefix to full ID
         info_service = SessionInfoService()
         session_info = await info_service.resolve_session(session_id)
@@ -625,7 +616,16 @@ async def _delete_async(
                 await logger.info(f'Session is running (PID {running_pid}), will terminate before deletion')
 
         # Initialize delete service
-        delete_service = SessionDeleteService(project_path)
+        # When --project is explicit, use it (user intent wins over discovery)
+        # Otherwise, use discovered session_folder (handles cross-directory correctly)
+        if project:
+            project_path = project.resolve()
+            if not project_path.exists():
+                typer.secho(f'Error: Project directory does not exist: {project_path}', fg=typer.colors.RED, err=True)
+                raise typer.Exit(1)
+            delete_service = SessionDeleteService(project_path=project_path)
+        else:
+            delete_service = SessionDeleteService(session_folder=session_info.session_folder)
 
         # Pass PID to terminate if running and --terminate was specified
         terminate_pid = running_pid if is_running and terminate and not dry_run else None
