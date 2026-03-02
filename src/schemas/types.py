@@ -140,6 +140,16 @@ type JsonDatetime = Annotated[datetime, pydantic.Field(strict=False)]
 type PathStr = str
 """A filesystem path (file or directory) as a string."""
 
+ToolResultExtension = Literal['.txt', '.json']
+"""Known file extensions for tool result files in Claude Code sessions.
+
+Tool results are stored as individual files under:
+    ~/.claude/projects/<encoded-path>/<session-id>/tool-results/<tool-use-id>{extension}
+
+Defined here (not in services layer) to avoid circular imports:
+schemas.operations.archive needs this type, but services imports from schemas.
+"""
+
 
 # ==============================================================================
 # Model ID Types

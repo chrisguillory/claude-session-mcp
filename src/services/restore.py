@@ -32,6 +32,7 @@ from src.schemas.session import CustomTitleRecord, SessionRecord, SessionRecordA
 from src.services.artifacts import (
     TASKS_DIR,
     TODOS_DIR,
+    ToolResultFile,
     create_session_env_dir,
     generate_agent_id_mapping,
     generate_clone_custom_title,
@@ -289,7 +290,7 @@ class SessionRestoreService:
         # 3. Tool results
         if archive.tool_results:
             tool_results_dir = target_dir / new_session_id / 'tool-results'
-            all_output_paths.extend(tool_results_dir / f'{tr.tool_use_id}.txt' for tr in archive.tool_results)
+            all_output_paths.extend(tool_results_dir / f'{tr.tool_use_id}{tr.extension}' for tr in archive.tool_results)
 
         # 4. Todos
         if archive.todos:
@@ -355,10 +356,13 @@ class SessionRestoreService:
                     for old_slug, new_slug in slug_mapping.items():
                         await logger.info(f'  {old_slug} -> {new_slug}')
 
-        # Write tool results (v2: entry.tool_use_id, entry.content)
+        # Write tool results (v2: entry.tool_use_id, entry.content, entry.extension)
         if archive.tool_results:
-            tool_results_mapping = {tr.tool_use_id: tr.content for tr in archive.tool_results}
-            tool_results_restored = write_tool_results(tool_results_mapping, target_dir, new_session_id)
+            tool_result_files = [
+                ToolResultFile(tool_use_id=tr.tool_use_id, content=tr.content, extension=tr.extension)
+                for tr in archive.tool_results
+            ]
+            tool_results_restored = write_tool_results(tool_result_files, target_dir, new_session_id)
             if logger:
                 await logger.info(f'Restored {tool_results_restored} tool result files')
 

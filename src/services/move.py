@@ -181,7 +181,7 @@ class SessionMoveService:
         # Tool results
         if tool_results:
             tool_results_dir = target_dir / sid / 'tool-results'
-            all_output_paths.extend(tool_results_dir / f'{tool_use_id}.txt' for tool_use_id in tool_results)
+            all_output_paths.extend(tool_results_dir / tr.filename for tr in tool_results)
 
         # Session memory
         if session_memory:
@@ -309,8 +309,8 @@ class SessionMoveService:
                 files_deleted += 1
 
             # Delete tool results
-            for tool_use_id in tool_results:
-                tr_path = source_session_dir / sid / 'tool-results' / f'{tool_use_id}.txt'
+            for tr in tool_results:
+                tr_path = source_session_dir / sid / 'tool-results' / tr.filename
                 tr_path.unlink()
                 files_deleted += 1
 

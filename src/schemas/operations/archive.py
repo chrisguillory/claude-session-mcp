@@ -17,7 +17,7 @@ import pydantic
 
 from src.schemas.base import StrictModel
 from src.schemas.session.models import SessionRecord, Task
-from src.schemas.types import JsonDatetime
+from src.schemas.types import JsonDatetime, ToolResultExtension
 
 # ==============================================================================
 # Archive Format Version
@@ -177,12 +177,13 @@ class ToolResultEntry(StrictModel):
     """Tool result file content.
 
     Derived fields:
-    - filename: f"{tool_use_id}.txt"
-    - location: projects/<enc>/<sid>/tool-results/{tool_use_id}.txt
+    - filename: f"{tool_use_id}{extension}"
+    - location: projects/<enc>/<sid>/tool-results/{filename}
     """
 
     tool_use_id: str
     content: str
+    extension: ToolResultExtension
 
 
 class TodoFileEntry(StrictModel):
@@ -293,9 +294,9 @@ def migrate_v1_to_v2(v1: SessionArchiveV1) -> SessionArchiveV2:
     # Convert plan_files
     plan_entries = [PlanFileEntry(slug=slug, content=content) for slug, content in v1.plan_files.items()]
 
-    # Convert tool_results
+    # Convert tool_results (v1 only had .txt files)
     tool_result_entries = [
-        ToolResultEntry(tool_use_id=tid, content=content) for tid, content in v1.tool_results.items()
+        ToolResultEntry(tool_use_id=tid, content=content, extension='.txt') for tid, content in v1.tool_results.items()
     ]
 
     # Convert todos - parse agent_id from filename

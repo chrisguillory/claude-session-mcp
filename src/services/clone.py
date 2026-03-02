@@ -222,7 +222,7 @@ class SessionCloneService:
         # 3. Tool results
         if tool_results:
             tool_results_dir = target_dir / new_session_id / 'tool-results'
-            all_output_paths.extend(tool_results_dir / f'{tool_use_id}.txt' for tool_use_id in tool_results)
+            all_output_paths.extend(tool_results_dir / tr.filename for tr in tool_results)
 
         # 4. Todos
         if todos:

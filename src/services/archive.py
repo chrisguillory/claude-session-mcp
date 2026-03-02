@@ -356,7 +356,8 @@ class SessionArchiveService:
         plan_entries = [PlanFileEntry(slug=slug, content=content) for slug, content in plan_files.items()]
 
         tool_result_entries = [
-            ToolResultEntry(tool_use_id=tool_use_id, content=content) for tool_use_id, content in tool_results.items()
+            ToolResultEntry(tool_use_id=tr.tool_use_id, content=tr.content, extension=tr.extension)
+            for tr in tool_results
         ]
 
         # Extract agent_id from todo filename: {session_id}-agent-{agent_id}.json

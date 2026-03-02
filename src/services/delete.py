@@ -52,6 +52,8 @@ from src.services.artifacts import (
     SESSION_ENV_DIR,
     TASKS_DIR,
     TODOS_DIR,
+    TOOL_RESULT_EXTENSIONS,
+    ToolResultFile,
     classify_task_directory,
     create_session_env_dir,
     extract_slugs_from_records,
@@ -92,9 +94,8 @@ class SessionDeleteService:
     # Backup location - separate from ~/.claude/
     DELETED_SESSIONS_DIR = Path.home() / '.claude-session-mcp' / 'deleted'
 
-    # Expected file extensions in tool-results directory
-    # If new extensions appear, Claude Code changed and we need to update
-    EXPECTED_TOOL_RESULT_EXTENSIONS = frozenset({'.txt'})
+    # Expected file extensions in tool-results directory (shared with collect_tool_results)
+    EXPECTED_TOOL_RESULT_EXTENSIONS = TOOL_RESULT_EXTENSIONS
 
     # Only permission errors are truly "expected" - environment issue, not a bug
     # Other errors indicate unexpected state and should propagate after rollback:
@@ -798,8 +799,11 @@ class SessionDeleteService:
 
         # Restore tool results (exist_ok=True: files may survive partial deletion)
         if archive.tool_results:
-            tool_results_mapping = {tr.tool_use_id: tr.content for tr in archive.tool_results}
-            write_tool_results(tool_results_mapping, target_dir, archive.session_id, exist_ok=True)
+            tool_result_files = [
+                ToolResultFile(tool_use_id=tr.tool_use_id, content=tr.content, extension=tr.extension)
+                for tr in archive.tool_results
+            ]
+            write_tool_results(tool_result_files, target_dir, archive.session_id, exist_ok=True)
             logger.info(f'Restored {len(archive.tool_results)} tool result files')
 
         # Restore todo files (exist_ok=True: files may survive partial deletion)

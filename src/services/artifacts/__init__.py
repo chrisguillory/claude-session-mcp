@@ -7,6 +7,9 @@ session-specific artifacts like tool results, todos, plan files, etc.
 
 from __future__ import annotations
 
+# ToolResultExtension lives in src/schemas/types (avoids circular import)
+from src.schemas.types import ToolResultExtension
+
 from .agent_ids import (
     AGENT_FILENAME_PATTERN,
     AgentFileInfo,
@@ -68,6 +71,8 @@ from .todos import (
     write_todos,
 )
 from .tool_results import (
+    TOOL_RESULT_EXTENSIONS,
+    ToolResultFile,
     collect_tool_results,
     get_tool_results_dir,
     write_tool_results,
@@ -109,6 +114,9 @@ __all__ = [
     'transform_todo_filename',
     'write_todos',
     # tool_results
+    'TOOL_RESULT_EXTENSIONS',
+    'ToolResultExtension',
+    'ToolResultFile',
     'get_tool_results_dir',
     'collect_tool_results',
     'write_tool_results',
