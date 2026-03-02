@@ -45,6 +45,11 @@ from .session_env import (
     create_session_env_dir,
     validate_session_env_empty,
 )
+from .session_memory import (
+    SESSION_MEMORY_DIRNAME,
+    collect_session_memory,
+    write_session_memory,
+)
 from .tasks import (
     TASK_METADATA_FILES,
     TASKS_DIR,
@@ -122,4 +127,8 @@ __all__ = [
     # paths
     'MissingCwdError',
     'extract_source_project_path',
+    # session_memory
+    'SESSION_MEMORY_DIRNAME',
+    'collect_session_memory',
+    'write_session_memory',
 ]

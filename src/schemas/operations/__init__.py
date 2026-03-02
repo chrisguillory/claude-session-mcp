@@ -23,6 +23,7 @@ from src.schemas.operations.lineage import (
     LineageTree,
     LineageTreeNode,
 )
+from src.schemas.operations.move import MoveResult
 from src.schemas.operations.restore import RestoreResult
 
 __all__ = [
@@ -48,6 +49,8 @@ __all__ = [
     'LineageFile',
     'LineageTree',
     'LineageTreeNode',
+    # Move
+    'MoveResult',
     # Restore
     'RestoreResult',
 ]

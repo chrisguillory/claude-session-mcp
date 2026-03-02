@@ -81,6 +81,12 @@ claude-session restore archive.json --launch
 # Restore from Gist
 claude-session restore gist://<gist-id> --launch
 
+# Move a session to another project
+claude-session move <session-id> -p ~/other-project
+
+# Move and immediately resume
+claude-session move <session-id> --launch
+
 # Delete a cloned session (auto-backup created)
 claude-session delete <session-id>
 
@@ -91,12 +97,13 @@ claude-session restore --in-place ~/.claude-session-mcp/deleted/<backup>.json
 ## Features
 
 - **Lossless forking**: Clone sessions while preserving parent immutability
-- **Complete artifact capture**: Session files, agent files, plan files, tool results, and todos
+- **Complete artifact capture**: Session files, agent files, plan files, tool results, todos, and session memory
 - **Lineage tracking**: Records parent-child relationships when sessions are cloned or restored
 - **Local storage**: Save sessions as JSON or compressed (zstd)
 - **GitHub Gist**: Private/public Gist storage (100MB limit)
 - **Path translation**: Automatically translates file paths when restoring to different directories
 - **Cross-machine tracking**: Archives include machine ID for detecting cross-machine restores
+- **Move sessions**: Relocate sessions between projects with path translation, preserving session identity
 - **Delete with safety**: Auto-backup before deletion, native sessions require `--force`
 - **Fail-fast checks**: Prevents partial writes if any output file already exists
 - **UUIDv7 session IDs**: Cloned/restored sessions use time-ordered UUIDv7 (vs Claude's random UUIDv4)
@@ -226,6 +233,69 @@ claude-session delete <session-id>
 - Auto-backup created at `~/.claude-session-mcp/deleted/` before deletion (unless `--no-backup`)
 - Use `restore --in-place <backup>` to undo a delete
 
+### Move
+
+Relocate a session from one project to another:
+
+```bash
+claude-session move <session-id>
+
+# Arguments:
+#   session-id     Session ID (full UUID or prefix). Auto-detected inside Claude Code.
+
+# Options:
+#   --project, -p      Target project directory (default: current)
+#   --force, -f        Required to move native (UUIDv4) sessions
+#   --terminate, -t    Terminate running Claude process before move
+#   --no-backup        Skip auto-backup before source deletion
+#   --dry-run          Preview what would be moved
+#   --launch, -l       Launch Claude Code in target project after move
+#   --verbose, -v      Verbose output
+```
+
+Extra arguments after `--` are passed to `claude` CLI when using `--launch`:
+```bash
+claude-session move 019b5232 --launch -- --chrome
+```
+
+**What moves (project-specific):**
+- Main session JSONL and agent JSONLs (with path translation)
+- Tool results
+- Session memory (`session-memory/summary.md`)
+
+**What stays (global, session-ID-keyed):**
+- Plans, todos, tasks, session-env, debug logs
+
+**Safety features:**
+- By default, only cloned/restored sessions (UUIDv7) can be moved
+- Native Claude sessions (UUIDv4) require `--force`
+- Auto-backup at `~/.claude-session-mcp/deleted/` before source deletion (unless `--no-backup`)
+- Two-phase: write to target first, then delete source
+- Running sessions require `--terminate`
+- Use `restore --in-place <backup>` to undo a move
+
+**Examples:**
+
+```bash
+# Move to current directory's project
+claude-session move 019b5232
+
+# Move to a specific project
+claude-session move 019b5232 -p ~/other-project
+
+# Preview what would happen
+claude-session move 019b5232 --dry-run
+
+# Move and resume immediately
+claude-session move 019b5232 -p ~/other-project --launch
+
+# Move a native session
+claude-session move a1b2c3d4 --force
+
+# Move a running session
+claude-session move 019b5232 --terminate
+```
+
 ### Lineage
 
 View parent-child relationships for cloned/restored sessions:
@@ -296,6 +366,7 @@ MCP tools are session-aware - they automatically know the current session ID and
 | `restore_session`      | Restore from archive with new UUIDv7 ID                               |
 | `clone_session`        | Clone session directly. Defaults to current session ("fork yourself") |
 | `delete_session`       | Delete session with auto-backup. Native sessions require `force=True` |
+| `move_session`         | Move session between projects. Defaults target to current project     |
 | `session_lineage`      | Get lineage info. Defaults to current session                         |
 
 **Note**: Unlike CLI, MCP tools can't auto-launch Claude after operations.
@@ -338,16 +409,17 @@ Archives are backwards compatible - older archives can be restored by newer vers
 
 Complete inventory of session-specific data in `~/.claude/`:
 
-| Artifact      | Location                                         | Transferred | Notes                                          |
-|---------------|--------------------------------------------------|-------------|------------------------------------------------|
-| Session JSONL | `projects/<enc-path>/<session-id>.jsonl`         | ✅           | Main conversation history                      |
-| Agent JSONL   | `projects/<enc-path>/agent-<agent-id>.jsonl`     | ✅           | Sidechain conversations (via sessionId search) |
-| Plan files    | `plans/<slug>.md`                                | ✅           | Plan mode documents (via slug extraction)      |
-| Tool results  | `projects/<enc-path>/<session-id>/tool-results/` | ✅           | Large tool outputs                             |
-| Todos         | `todos/<session-id>-agent-<agent-id>.json`       | ✅           | TodoWrite state                                |
-| Session-env   | `session-env/<session-id>/`                      | ✅           | Currently empty; validated and recreated       |
-| Debug logs    | `debug/<session-id>.txt`                         | ❌           | Ephemeral local debugging logs                 |
-| File history  | `file-history/<session-id>/`                     | ❌           | Ephemeral local file version snapshots         |
+| Artifact       | Location                                                     | Transferred | Notes                                          |
+|----------------|--------------------------------------------------------------|-------------|------------------------------------------------|
+| Session JSONL  | `projects/<enc-path>/<session-id>.jsonl`                     | ✅           | Main conversation history                      |
+| Agent JSONL    | `projects/<enc-path>/agent-<agent-id>.jsonl`                 | ✅           | Sidechain conversations (via sessionId search) |
+| Plan files     | `plans/<slug>.md`                                            | ✅           | Plan mode documents (via slug extraction)      |
+| Tool results   | `projects/<enc-path>/<session-id>/tool-results/`             | ✅           | Large tool outputs                             |
+| Todos          | `todos/<session-id>-agent-<agent-id>.json`                   | ✅           | TodoWrite state                                |
+| Session-env    | `session-env/<session-id>/`                                  | ✅           | Currently empty; validated and recreated       |
+| Session memory | `projects/<enc-path>/<session-id>/session-memory/summary.md` | ✅           | Per-session compact memory summaries           |
+| Debug logs     | `debug/<session-id>.txt`                                     | ❌           | Ephemeral local debugging logs                 |
+| File history   | `file-history/<session-id>/`                                 | ❌           | Ephemeral local file version snapshots         |
 
 **Why some artifacts aren't transferred**: Debug logs and file history are intentionally excluded - they're ephemeral local state for debugging and file rollback that aren't really needed for session continuity and can't be meaningfully used on a different machine.
 

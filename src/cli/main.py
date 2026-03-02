@@ -32,6 +32,7 @@ from src.services.delete import SessionDeleteService
 from src.services.discovery import SessionDiscoveryService
 from src.services.info import SessionInfoService
 from src.services.lineage import LineageService
+from src.services.move import SessionMoveService
 from src.services.parser import SessionParserService
 from src.services.restore import SessionRestoreService
 from src.storage.gist import GistStorage
@@ -125,13 +126,13 @@ def archive(
     When run inside Claude Code, session ID is auto-detected if not provided.
     When output is omitted, defaults to uploading to a new GitHub Gist.
 
+    \b
     Examples:
-        claude-session archive                           # auto-detect session, new gist
-        claude-session archive gist://                   # same as above
-        claude-session archive gist://abc123             # auto-detect session, update gist
-        claude-session archive 019c406c                  # specific session, new gist
-        claude-session archive 019c406c gist://          # specific session, new gist
-        claude-session archive 019c406c output.json      # specific session, local file
+        claude-session archive                    # auto-detect, new gist
+        claude-session archive gist://            # same as above
+        claude-session archive gist://abc123      # update existing gist
+        claude-session archive 019c406c           # specific session
+        claude-session archive 019c406c out.json  # local file
     """
     # Disambiguate positional args: if session_id looks like an output target, shift it
     if session_id is not None and output is None and not _is_session_id(session_id):
@@ -460,10 +461,11 @@ def clone(
 
     When run inside Claude Code, session ID is auto-detected if not provided.
 
+    \b
     Examples:
-        claude-session clone                              # clone current session
-        claude-session clone SESSION_ID                   # clone specific session
-        claude-session clone SESSION_ID --launch          # clone and launch immediately
+        claude-session clone                  # clone current session
+        claude-session clone SESSION_ID       # clone specific session
+        claude-session clone SESSION_ID -l    # clone and launch
     """
     detected = auto_detect_session_id()
     if launch and detected is not None:
@@ -692,6 +694,166 @@ async def _delete_async(
         raise typer.Exit(1)
 
 
+@app.command(context_settings={'allow_extra_args': True, 'ignore_unknown_options': True})
+def move(
+    ctx: typer.Context,
+    session_id: str | None = typer.Argument(
+        None, help='Session ID (full or prefix). Auto-detected inside Claude Code.'
+    ),
+    project: Path | None = typer.Option(None, '--project', '-p', help='Target project directory (default: current)'),
+    force: bool = typer.Option(False, '--force', '-f', help='Required to move native (UUIDv4) sessions'),
+    terminate: bool = typer.Option(False, '--terminate', '-t', help='Terminate running Claude process before move'),
+    no_backup: bool = typer.Option(False, '--no-backup', help="Don't keep a backup file for undo"),
+    dry_run: bool = typer.Option(False, '--dry-run', help='Preview what would be moved'),
+    launch: bool = typer.Option(False, '--launch', '-l', help='Launch Claude Code in target project after move'),
+    verbose: bool = typer.Option(False, '--verbose', '-v', help='Verbose output'),
+) -> None:
+    """Move a session from one project to another.
+
+    Relocates project-specific artifacts (JSONL, tool results, session memory)
+    to the target project. Path references are translated. Session ID is preserved.
+
+    By default, only cloned/restored sessions (UUIDv7) can be moved.
+    Native Claude sessions (UUIDv4) require --force.
+
+    If the session is currently running, use --terminate to kill the Claude
+    process before moving.
+
+    \b
+    Extra arguments after -- are passed to claude CLI:
+        claude-session move SESSION_ID --launch -- --chrome
+
+    \b
+    Examples:
+        claude-session move 019b5232               # current project
+        claude-session move 019b5232 -p ~/proj-b   # specific project
+        claude-session move 019b5232 --dry-run     # preview
+        claude-session move 019b5232 --launch      # move and resume
+        claude-session move a1b2c3d4 --force       # native session
+    """
+    detected = auto_detect_session_id()
+    if launch and detected is not None:
+        typer.secho('Error: --launch cannot be used inside Claude Code.', fg=typer.colors.RED, err=True)
+        typer.echo('Use claude --resume <session-id> after moving instead.', err=True)
+        raise typer.Exit(1)
+
+    if session_id is None:
+        session_id = detected
+
+    asyncio.run(
+        _move_async(
+            _resolve_session_id(session_id), project, force, terminate, no_backup, dry_run, launch, verbose, ctx.args
+        )
+    )
+
+
+async def _move_async(
+    session_id: str,
+    project: Path | None,
+    force: bool,
+    terminate: bool,
+    no_backup: bool,
+    dry_run: bool,
+    launch: bool,
+    verbose: bool,
+    extra_args: Sequence[str],
+) -> None:
+    """Async implementation of move command."""
+    logger = CLILogger(verbose=verbose)
+
+    try:
+        # Resolve session ID prefix to full ID
+        info_service = SessionInfoService()
+        session_info = await info_service.resolve_session(session_id)
+        full_session_id = session_info.session_id
+
+        # Check if session is running
+        is_running, running_pid = info_service.is_session_running(full_session_id)
+
+        if is_running:
+            assert running_pid is not None
+            if dry_run:
+                typer.secho(f'Warning: Session is currently running (PID {running_pid})', fg=typer.colors.YELLOW)
+            elif not terminate:
+                typer.secho(
+                    f'Error: Session {full_session_id[:12]}... is currently running (PID {running_pid}).',
+                    fg=typer.colors.RED,
+                    err=True,
+                )
+                typer.echo('Use --terminate to kill the process before moving.', err=True)
+                raise typer.Exit(1)
+            else:
+                await logger.info(f'Session is running (PID {running_pid}), will terminate before move')
+
+        # Determine target project path
+        if project:
+            project_path = project.resolve()
+            if not project_path.exists():
+                typer.secho(f'Error: Project directory does not exist: {project_path}', fg=typer.colors.RED, err=True)
+                raise typer.Exit(1)
+        else:
+            project_path = Path.cwd()
+
+        # Pass PID to terminate if running and --terminate was specified
+        terminate_pid = running_pid if is_running and terminate and not dry_run else None
+
+        # Move the session
+        move_service = SessionMoveService(project_path)
+        result = await move_service.move_session(
+            session_id=full_session_id,
+            force=force,
+            no_backup=no_backup,
+            dry_run=dry_run,
+            terminate_pid=terminate_pid,
+            log=logger,
+        )
+
+        if dry_run:
+            typer.secho('Dry run - would move:', fg=typer.colors.YELLOW)
+            typer.echo(f'  Session ID: {result.session_id}')
+            typer.echo(f'  From: {result.source_project}')
+            typer.echo(f'  To: {result.target_project}')
+            typer.echo(f'  Files: {result.files_moved}')
+            typer.echo(f'  Paths translated: {result.paths_translated}')
+        else:
+            typer.secho('✓ Session moved successfully!', fg=typer.colors.GREEN)
+            typer.echo(f'  Session ID: {result.session_id}')
+            typer.echo(f'  From: {result.source_project}')
+            typer.echo(f'  To: {result.target_project}')
+            typer.echo()
+            typer.echo(f'  Files written: {result.files_moved}')
+            typer.echo(f'  Files deleted: {result.files_deleted}')
+            typer.echo(f'  Paths translated: {result.paths_translated}')
+            typer.echo(f'  Duration: {result.duration_ms:.0f}ms')
+            if result.backup_path:
+                typer.echo(f'  Backup: {result.backup_path}')
+                typer.echo()
+                typer.echo('To undo, run:')
+                typer.secho(f'  claude-session restore --in-place {result.backup_path}', fg=typer.colors.CYAN)
+
+            for warning in result.warnings:
+                typer.secho(f'  Warning: {warning}', fg=typer.colors.YELLOW)
+
+            if launch:
+                typer.echo()
+                typer.echo('Launching Claude Code...')
+                launch_claude_with_session(result.session_id, extra_args=extra_args)
+                # Note: launch_claude_with_session uses execvp, so we never reach here
+            else:
+                typer.echo()
+                typer.echo('To continue this session, run:')
+                typer.secho(f'  claude --resume {result.session_id}', fg=typer.colors.CYAN)
+
+    except (ClaudeSessionError, FileNotFoundError, FileExistsError) as e:
+        typer.secho(f'Error: {e}', fg=typer.colors.RED, err=True)
+        raise typer.Exit(1)
+    except Exception as e:
+        await logger.error(f'Failed to move session: {e}')
+        if verbose:
+            traceback.print_exc()
+        raise typer.Exit(1)
+
+
 def _render_lineage_tree(tree: LineageTree) -> None:
     """Render a LineageTree with proper box-drawing characters."""
 
@@ -731,6 +893,7 @@ def lineage(
 
     When run inside Claude Code without a session ID, auto-detects the current session.
 
+    \b
     Examples:
         claude-session lineage
         claude-session lineage 019b53ff
@@ -801,6 +964,7 @@ def info(
 
     When run inside Claude Code without a session ID, auto-detects the current session.
 
+    \b
     Examples:
         claude-session info
         claude-session info 019b53ff

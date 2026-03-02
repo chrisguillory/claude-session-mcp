@@ -28,13 +28,14 @@ from typing import Any, Literal
 import attrs
 from mcp.server.fastmcp import Context, FastMCP
 
-from src.exceptions import RunningSessionDeletionError
+from src.exceptions import RunningSessionDeletionError, RunningSessionMoveError
 from src.mcp.utils import DualLogger
 from src.schemas.operations.archive import ArchiveMetadata
 from src.schemas.operations.context import SessionContext
 from src.schemas.operations.delete import DeleteResult
 from src.schemas.operations.gist import GistArchiveResult
 from src.schemas.operations.lineage import LineageTree
+from src.schemas.operations.move import MoveResult
 from src.schemas.operations.restore import RestoreResult
 from src.services.archive import SessionArchiveService
 from src.services.claude_process import find_ancestor_claude_pid, resolve_session_id_from_pid
@@ -42,6 +43,7 @@ from src.services.clone import SessionCloneService
 from src.services.delete import SessionDeleteService
 from src.services.info import CurrentSessionContext, SessionInfoService
 from src.services.lineage import LineageService
+from src.services.move import SessionMoveService
 from src.services.parser import SessionParserService
 from src.services.restore import SessionRestoreService
 from src.storage.gist import GistStorage
@@ -445,6 +447,120 @@ def register_tools(state: ServerState) -> None:
                     await logger.info(f'To undo: claude-session restore --in-place {result.backup_path}')
         else:
             await logger.error(f'Delete failed: {result.error_message}')
+
+        return result
+
+    @server.tool()
+    async def move_session(
+        session_id: str,
+        target_project: str | None = None,
+        force: bool = False,
+        terminate_running: bool = False,
+        no_backup: bool = False,
+        dry_run: bool = False,
+        ctx: Context[Any, Any, Any] | None = None,
+    ) -> MoveResult:
+        """
+        Move a session from one project to another.
+
+        Relocates project-specific artifacts (JSONL files, tool results,
+        session memory) to the target project directory. Path references
+        in records are translated. The original session ID is preserved.
+
+        Global artifacts (plans, todos, tasks) stay in place since they
+        are keyed by session ID, not project path.
+
+        By default, only cloned/restored sessions (UUIDv7) can be moved.
+        Native Claude sessions (UUIDv4) require force=True.
+
+        If the session is currently running, set terminate_running=True
+        to kill it before moving. Self-move (moving the current session)
+        auto-terminates.
+
+        Args:
+            session_id: Session ID to move (full UUID or prefix)
+            target_project: Target project directory path. Defaults to
+                          the current project (where this MCP server runs).
+            force: Required to move native (UUIDv4) sessions
+            terminate_running: Terminate running Claude process before move
+            no_backup: Don't keep backup after successful move
+            dry_run: Preview what would happen without making changes
+
+        Returns:
+            MoveResult with move details and resume command
+
+        Examples:
+            # Move a session to current project (default target)
+            result = await move_session('019b5232-1234-7abc-...')
+
+            # Preview what would happen
+            result = await move_session('019b5232-...', dry_run=True)
+
+            # Move to a specific project
+            result = await move_session('019b5232-...', target_project='/path/to/other-project')
+
+            # Move a native session
+            result = await move_session('a1b2c3d4-...', force=True)
+
+            # Move a running session
+            result = await move_session('019b5232-...', terminate_running=True)
+        """
+        if ctx is None:
+            raise RuntimeError('Context is required - must be called via FastMCP')
+        logger = DualLogger(ctx)
+
+        # Default target to current project
+        target_path = Path(target_project) if target_project else state.project_path
+
+        # Resolve prefix to full session ID
+        info_service = SessionInfoService()
+        session_info = await info_service.resolve_session(session_id)
+        full_session_id = session_info.session_id
+
+        # Determine if termination is needed
+        is_self_move = full_session_id == state.session_id
+
+        if is_self_move:
+            terminate_pid = state.claude_pid if not dry_run else None
+        else:
+            is_running, running_pid = info_service.is_session_running(full_session_id)
+            if is_running:
+                if dry_run:
+                    await logger.info(f'Warning: Session is currently running (PID {running_pid})')
+                    terminate_pid = None
+                elif not terminate_running:
+                    assert running_pid is not None
+                    raise RunningSessionMoveError(full_session_id, running_pid)
+                else:
+                    await logger.info(f'Session is running (PID {running_pid}), will terminate before move')
+                    terminate_pid = running_pid
+            else:
+                terminate_pid = None
+
+        # Create move service and execute
+        move_service = SessionMoveService(target_path)
+        result = await move_service.move_session(
+            session_id=full_session_id,
+            force=force,
+            no_backup=no_backup,
+            dry_run=dry_run,
+            terminate_pid=terminate_pid,
+            log=logger,
+        )
+
+        if dry_run:
+            await logger.info(
+                f'Dry run: would move {result.files_moved} files '
+                f'from {result.source_project} to {result.target_project}'
+            )
+        else:
+            await logger.info(f'Moved {result.files_moved} files, deleted {result.files_deleted} from source')
+            if result.backup_path:
+                await logger.info(f'Backup: {result.backup_path}')
+            await logger.info(f'Resume: {result.resume_command}')
+
+        for warning in result.warnings:
+            await logger.error(f'Warning: {warning}')
 
         return result
 
