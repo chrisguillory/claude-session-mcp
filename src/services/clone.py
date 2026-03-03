@@ -18,7 +18,8 @@ from src.paths import encode_path
 from src.protocols import LoggerProtocol
 from src.schemas.operations.discovery import SessionInfo
 from src.schemas.operations.restore import RestoreResult
-from src.schemas.session import CustomTitleRecord, SessionRecord, SessionRecordAdapter
+from src.schemas.session import CustomTitleRecord, SessionRecord
+from src.schemas.session.models import validate_session_record
 from src.services.artifacts import (
     TASKS_DIR,
     TODOS_DIR,
@@ -491,7 +492,7 @@ class SessionCloneService:
                 record_dict = record.model_dump(exclude_unset=True, mode='json')
                 if 'sessionId' in record_dict:
                     record_dict['sessionId'] = new_session_id
-                updated_record = SessionRecordAdapter.validate_python(record_dict)
+                updated_record = validate_session_record(record_dict)
 
             # Translate paths if needed
             if translator:

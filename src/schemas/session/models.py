@@ -39,6 +39,9 @@ CLAUDE CODE VERSION COMPATIBILITY:
 - Schema v0.2.14: Added BridgeStatusSystemRecord for /remote-control feature,
                   TaskGetToolResult, markdown to QuestionOption,
                   pending_mcp_servers to ToolSearchToolResult (2.1.51+)
+- Schema v0.2.15: Added teamName/agentName to all record types, EnterWorktreeToolInput,
+                  TeamCreateToolInput, SendMessageToolInput, Agent tool team_name/name fields,
+                  migrated services from SessionRecordAdapter to validate_session_record (2.1.63+)
 - If validation fails, Claude Code schema may have changed - update models accordingly
 
 NEW FIELDS IN CLAUDE CODE 2.0.51+ (Schema v0.1.3):
@@ -108,11 +111,11 @@ from src.schemas.types import BaseStrictModel, EmptyDict, EmptySequence, ModelId
 # Schema Version
 # ==============================================================================
 
-SCHEMA_VERSION = '0.2.14'
+SCHEMA_VERSION = '0.2.15'
 CLAUDE_CODE_MIN_VERSION = '2.0.35'
-CLAUDE_CODE_MAX_VERSION = '2.1.51'
-LAST_VALIDATED = '2026-02-25'
-VALIDATION_RECORD_COUNT = 697_917
+CLAUDE_CODE_MAX_VERSION = '2.1.63'
+LAST_VALIDATED = '2026-03-03'
+VALIDATION_RECORD_COUNT = 950_237
 
 
 # ==============================================================================
@@ -271,6 +274,12 @@ class SkillToolInput(StrictModel):
     args: str | None = None
 
 
+class EnterWorktreeToolInput(StrictModel):
+    """Input for EnterWorktree tool - creates an isolated git worktree."""
+
+    name: str | None = None  # Optional worktree name
+
+
 class EnterPlanModeToolInput(StrictModel):
     """Input for EnterPlanMode tool (no parameters)."""
 
@@ -411,6 +420,34 @@ class TaskToolInput(StrictModel):
     resume: str | None = None
     mode: Literal['default', 'bypassPermissions'] | None = None  # Permission mode (2.1.19+)
     max_turns: int | None = None  # Maximum agentic turns before stopping (2.1.25+)
+    name: str | None = None  # Agent name within team (team mode only)
+    team_name: str | None = None  # Team name (team mode only)
+
+
+# ==============================================================================
+# TeamCreate Tool Input (Claude Code 2.1.63+)
+# ==============================================================================
+
+
+class TeamCreateToolInput(StrictModel):
+    """Input for TeamCreate tool - creates a multi-agent team."""
+
+    team_name: str
+    description: str
+
+
+# ==============================================================================
+# SendMessage Tool Input (Claude Code 2.1.63+)
+# ==============================================================================
+
+
+class SendMessageToolInput(StrictModel):
+    """Input for SendMessage tool - sends a message to a teammate."""
+
+    type: Literal['message']
+    recipient: str
+    content: str
+    summary: str
 
 
 # ==============================================================================
@@ -745,8 +782,10 @@ ToolInput = Annotated[
     | NotebookEditToolInput  # notebook_path, new_source required
     | ReadToolInput  # file_path required
     # Multi-field tools
+    | SendMessageToolInput  # type, recipient, content, summary required (2.1.63+)
     | TaskToolInput  # prompt, description, subagent_type required
     | TaskCreateToolInput  # subject, description required (2.1.17+)
+    | TeamCreateToolInput  # team_name, description required (2.1.63+)
     | BashToolInput  # command required (description optional since some old records lack it)
     | GrepToolInput  # pattern required, has custom model_config
     | GlobToolInput  # pattern required
@@ -767,6 +806,7 @@ ToolInput = Annotated[
     # Optional-only fields (must be near end)
     | ExitPlanModeToolInput  # plan optional, launchSwarm optional
     | ListMcpResourcesToolInput  # server optional
+    | EnterWorktreeToolInput  # name optional (2.1.63+)
     | TaskListToolInput  # No fields (2.1.17+)
     | EnterPlanModeToolInput  # No fields - must be last before fallback!
     | MCPToolInput,  # Fallback for MCP tools (PermissiveModel for observability)
@@ -1885,6 +1925,8 @@ class UserRecord(BaseRecord):
     mcpMeta: McpMeta | None = pydantic.Field(
         None, description='MCP tool structured content metadata (Claude Code 2.1.19+)'
     )
+    teamName: str | None = pydantic.Field(None, description='Team name when running in multi-agent team mode')
+    agentName: str | None = pydantic.Field(None, description='Agent name within team (may be absent for lead agent)')
 
 
 # ==============================================================================
@@ -1928,6 +1970,8 @@ class AssistantRecord(BaseRecord):
         None, description='Error type for API error messages'
     )
     slug: str | None = pydantic.Field(None, description='Human-readable session slug (Claude Code 2.0.51+)')
+    teamName: str | None = pydantic.Field(None, description='Team name when running in multi-agent team mode')
+    agentName: str | None = pydantic.Field(None, description='Agent name within team')
 
 
 # ==============================================================================
@@ -1983,6 +2027,8 @@ class LocalCommandSystemRecord(BaseRecord):
     version: str
     gitBranch: str
     slug: str | None = pydantic.Field(None, description='Human-readable session slug (Claude Code 2.0.51+)')
+    teamName: str | None = None
+    agentName: str | None = None
 
 
 class CompactBoundarySystemRecord(BaseRecord):
@@ -2000,6 +2046,8 @@ class CompactBoundarySystemRecord(BaseRecord):
     version: str
     gitBranch: str
     slug: str | None = pydantic.Field(None, description='Human-readable session slug (Claude Code 2.0.51+)')
+    teamName: str | None = None
+    agentName: str | None = None
     logicalParentUuid: str | None = None
     compactMetadata: CompactMetadata | None = None
 
@@ -2019,6 +2067,8 @@ class MicrocompactBoundarySystemRecord(BaseRecord):
     version: str
     gitBranch: str
     slug: str | None = None
+    teamName: str | None = None
+    agentName: str | None = None
     microcompactMetadata: MicrocompactMetadata
 
 
@@ -2035,6 +2085,8 @@ class ApiErrorSystemRecord(BaseRecord):
     version: str | None = None  # Optional for api_error
     gitBranch: str | None = None  # Optional for api_error
     slug: str | None = pydantic.Field(None, description='Human-readable session slug (Claude Code 2.0.51+)')
+    teamName: str | None = None
+    agentName: str | None = None
     cause: ConnectionError | None = None  # Connection error details (for network failures)
     error: (
         ApiError | NetworkError | EmptyError
@@ -2058,6 +2110,8 @@ class InformationalSystemRecord(BaseRecord):
     userType: str | None = None
     version: str | None = None
     gitBranch: str | None = None
+    teamName: str | None = None
+    agentName: str | None = None
 
 
 class TurnDurationSystemRecord(BaseRecord):
@@ -2074,6 +2128,8 @@ class TurnDurationSystemRecord(BaseRecord):
     version: str
     gitBranch: str
     slug: str | None = None
+    teamName: str | None = None
+    agentName: str | None = None
 
 
 class HookInfo(StrictModel):
@@ -2102,6 +2158,8 @@ class StopHookSummarySystemRecord(BaseRecord):
     gitBranch: str | None = None
     toolUseID: str | None = None  # Tool use ID if triggered by tool
     slug: str | None = None  # Human-readable session slug
+    teamName: str | None = None
+    agentName: str | None = None
 
 
 class BridgeStatusSystemRecord(BaseRecord):
@@ -2119,6 +2177,8 @@ class BridgeStatusSystemRecord(BaseRecord):
     version: str
     gitBranch: str
     slug: str | None = None
+    teamName: str | None = None
+    agentName: str | None = None
 
 
 # Union of system subtype records
@@ -2322,6 +2382,8 @@ class ProgressRecord(StrictModel):
     toolUseID: str
     slug: str | None = None  # Missing on first record before slug assigned
     agentId: str | None = None  # Present in agent subfiles (references agent-{agentId}.jsonl)
+    teamName: str | None = pydantic.Field(None, description='Team name when running in multi-agent team mode')
+    agentName: str | None = pydantic.Field(None, description='Agent name within team')
 
 
 # ==============================================================================

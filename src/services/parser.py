@@ -11,7 +11,8 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from src.protocols import LoggerProtocol, NullLogger
-from src.schemas.session import SessionRecord, SessionRecordAdapter
+from src.schemas.session import SessionRecord
+from src.schemas.session.models import validate_session_record
 
 # ==============================================================================
 # Session Parser Service
@@ -73,8 +74,8 @@ class SessionParserService:
                 # Parse JSON (fail fast on error)
                 raw_data = json.loads(line)
 
-                # Validate with Pydantic (fail fast on error)
-                record = SessionRecordAdapter.validate_python(raw_data)
+                # Validate with type-dispatch (fast path, better error messages)
+                record = validate_session_record(raw_data)
                 records.append(record)
 
         return records

@@ -28,7 +28,8 @@ from src.schemas.operations.archive import (
     migrate_v1_to_v2,
 )
 from src.schemas.operations.restore import RestoreResult
-from src.schemas.session import CustomTitleRecord, SessionRecord, SessionRecordAdapter
+from src.schemas.session import CustomTitleRecord, SessionRecord
+from src.schemas.session.models import validate_session_record
 from src.services.artifacts import (
     TASKS_DIR,
     TODOS_DIR,
@@ -545,7 +546,7 @@ class SessionRestoreService:
         else:
             # V1: Convert records then migrate
             for filename, records in data['files'].items():
-                data['files'][filename] = [SessionRecordAdapter.validate_python(r) for r in records]
+                data['files'][filename] = [validate_session_record(r) for r in records]
             v1 = SessionArchiveV1.model_validate(data)
             return migrate_v1_to_v2(v1)
 
@@ -574,7 +575,7 @@ class SessionRestoreService:
                 # Update session ID if present
                 if 'sessionId' in record_dict:
                     record_dict['sessionId'] = new_session_id
-                updated_record = SessionRecordAdapter.validate_python(record_dict)
+                updated_record = validate_session_record(record_dict)
 
             # Translate paths if needed
             if translator:

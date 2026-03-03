@@ -46,7 +46,7 @@ from src.schemas.operations.archive import (
     migrate_v1_to_v2,
 )
 from src.schemas.operations.delete import ArtifactFile, DeleteManifest, DeleteResult
-from src.schemas.session import SessionRecordAdapter
+from src.schemas.session.models import validate_session_record
 from src.services.archive import SessionArchiveService
 from src.services.artifacts import (
     SESSION_ENV_DIR,
@@ -752,7 +752,7 @@ class SessionDeleteService:
         else:
             # V1 backup (legacy) - convert records then migrate
             for filename, records in data['files'].items():
-                data['files'][filename] = [SessionRecordAdapter.validate_python(r) for r in records]
+                data['files'][filename] = [validate_session_record(r) for r in records]
             v1 = SessionArchiveV1.model_validate(data)
             return migrate_v1_to_v2(v1)
 
