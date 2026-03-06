@@ -661,44 +661,32 @@ def validate_session_file(session_file: Path, *, fast: bool = False) -> FileVali
                 if fast:
                     results['errors'].append(f'Line {line_num} ({record_type}): {len(e.errors())} validation errors')
                 else:
-                    # Check if this is a validator error about unmodeled tools
-                    is_validator_error = False
-                    for error in e.errors():
-                        error_msg_str = str(error.get('ctx', {}).get('error', ''))
-                        if 'fell through to MCPToolInput' in error_msg_str:
-                            is_validator_error = True
-                            error_msg = f'Line {line_num} ({record_type}): ⚠️  VALIDATOR ERROR: {error_msg_str}'
-                            results['errors'].append(error_msg)
-                            break
+                    error_msg = f'Line {line_num} ({record_type}): {len(e.errors())} validation errors'
+                    results['errors'].append(error_msg)
 
-                    if not is_validator_error:
-                        # Regular validation error - extract enriched info
-                        error_msg = f'Line {line_num} ({record_type}): {len(e.errors())} validation errors'
-                        results['errors'].append(error_msg)
+                    for err in e.errors():
+                        loc = err['loc']
+                        value = extract_value_at_path(record_data, loc)
 
-                        for err in e.errors():
-                            loc = err['loc']
-                            value = extract_value_at_path(record_data, loc)
-
-                            results['enriched_errors'].append(
-                                {
-                                    'file': session_filename,
-                                    'file_path': session_file,
-                                    'line': line_num,
-                                    'record_type': record_type,
-                                    'loc': loc,
-                                    'loc_str': '.'.join(str(x) for x in loc),
-                                    'normalized_loc': normalize_path(loc),
-                                    'generalized_loc': generalize_path(loc),
-                                    'msg': err['msg'],
-                                    'error_type': err['type'],
-                                    'value': value,
-                                    'value_keys': list(value.keys())
-                                    if isinstance(value, dict) and '__missing__' not in value
-                                    else None,
-                                    'value_type': type(value).__name__ if value is not None else 'null',
-                                }
-                            )
+                        results['enriched_errors'].append(
+                            {
+                                'file': session_filename,
+                                'file_path': session_file,
+                                'line': line_num,
+                                'record_type': record_type,
+                                'loc': loc,
+                                'loc_str': '.'.join(str(x) for x in loc),
+                                'normalized_loc': normalize_path(loc),
+                                'generalized_loc': generalize_path(loc),
+                                'msg': err['msg'],
+                                'error_type': err['type'],
+                                'value': value,
+                                'value_keys': list(value.keys())
+                                if isinstance(value, dict) and '__missing__' not in value
+                                else None,
+                                'value_type': type(value).__name__ if value is not None else 'null',
+                            }
+                        )
 
             except Exception as e:
                 results['invalid_records'] += 1

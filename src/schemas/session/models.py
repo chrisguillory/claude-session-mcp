@@ -193,7 +193,7 @@ class ReadToolInput(StrictModel):
     """
 
     file_path: PathField
-    limit: int | None = None  # Max lines to read
+    limit: int | str | None = None  # Max lines to read
     offset: int | str | None = None  # Start line (1-indexed), can be malformed string like "\\248"
     pages: str | None = None  # Page range for PDF files (e.g. '1-10') (Claude Code 2.1.41+)
 
@@ -260,7 +260,7 @@ class EditToolInput(StrictModel):
     file_path: PathField
     old_string: str
     new_string: str
-    replace_all: bool | None = None
+    replace_all: bool | Literal['false'] | None = None
 
 
 class SkillToolInput(StrictModel):
@@ -321,7 +321,7 @@ class BashToolInput(StrictModel):
 
     command: str
     description: str | None = None  # Usually present (1078/1080) but some old records lack it
-    timeout: int | None = None
+    timeout: int | str | None = None
     run_in_background: bool | None = None
     dangerouslyDisableSandbox: bool | None = None
 
@@ -358,14 +358,14 @@ class GrepToolInput(StrictModel):
 
     pattern: str
     path: PathField | None = None
-    output_mode: Literal['content', 'files_with_matches', 'count'] | None = None
+    output_mode: Literal['content', 'files_with_matches', 'count', 'context'] | None = None
     glob: str | None = None
     type: str | None = None  # noqa: A003 - matches ripgrep's --type flag
     multiline: bool | None = None
     head_limit: int | None = None
     offset: int | None = None
     context: int | str | None = None  # Context lines - can be int or flag reference string like "-A"
-    context_lines: int | None = None  # Explicit context lines count (alternative to -C)
+    context_lines: int | str | None = None  # Explicit context lines count (alternative to -C)
     flags: str | None = None  # String-format flags (e.g., "-i")
     grep: str | None = None  # Alternative flag format (e.g., "-n") - legacy/variant usage
     # Hyphenated ripgrep flags (use Field alias for JSON compatibility)
