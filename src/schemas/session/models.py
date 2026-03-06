@@ -42,6 +42,7 @@ CLAUDE CODE VERSION COMPATIBILITY:
 - Schema v0.2.15: Added teamName/agentName to all record types, EnterWorktreeToolInput,
                   TeamCreateToolInput, SendMessageToolInput, Agent tool team_name/name fields,
                   migrated services from SessionRecordAdapter to validate_session_record (2.1.63+)
+- Schema v0.2.16: Added LastPromptRecord, made AgentProgressData.normalizedMessages optional (2.1.69+)
 - If validation fails, Claude Code schema may have changed - update models accordingly
 
 NEW FIELDS IN CLAUDE CODE 2.0.51+ (Schema v0.1.3):
@@ -111,11 +112,11 @@ from src.schemas.types import BaseStrictModel, EmptyDict, EmptySequence, ModelId
 # Schema Version
 # ==============================================================================
 
-SCHEMA_VERSION = '0.2.15'
+SCHEMA_VERSION = '0.2.16'
 CLAUDE_CODE_MIN_VERSION = '2.0.35'
-CLAUDE_CODE_MAX_VERSION = '2.1.63'
-LAST_VALIDATED = '2026-03-03'
-VALIDATION_RECORD_COUNT = 950_237
+CLAUDE_CODE_MAX_VERSION = '2.1.69'
+LAST_VALIDATED = '2026-03-06'
+VALIDATION_RECORD_COUNT = 966_684
 
 
 # ==============================================================================
@@ -2344,7 +2345,8 @@ class AgentProgressData(StrictModel):
     # TODO: Remove "loose" typing below
     message: Mapping[str, Any]  # check_schema_typing.py: loose-typing
     # TODO: Remove "loose" typing below
-    normalizedMessages: Sequence[Mapping[str, Any]]  # check_schema_typing.py: loose-typing
+    # TODO: Remove "loose" typing below
+    normalizedMessages: Sequence[Mapping[str, Any]] | None = None  # check_schema_typing.py: loose-typing
     resume: str | None = None  # Agent resume ID (Claude Code 2.1.15+)
 
 
@@ -2427,6 +2429,19 @@ class SavedHookContextRecord(StrictModel):
 
 
 # ==============================================================================
+# Last Prompt Record (Claude Code 2.1.69+)
+# ==============================================================================
+
+
+class LastPromptRecord(StrictModel):
+    """Records the user's last prompt text, always the final record in a session file."""
+
+    type: Literal['last-prompt']
+    lastPrompt: str
+    sessionId: str
+
+
+# ==============================================================================
 # Session Record (Discriminated Union)
 # ==============================================================================
 
@@ -2451,7 +2466,8 @@ SessionRecord = Annotated[
     | CustomTitleRecord
     | ProgressRecord
     | PrLinkRecord
-    | SavedHookContextRecord,
+    | SavedHookContextRecord
+    | LastPromptRecord,
     pydantic.Field(union_mode='left_to_right'),
 ]
 
@@ -2477,6 +2493,7 @@ _custom_title_adapter = pydantic.TypeAdapter(CustomTitleRecord)
 _progress_adapter = pydantic.TypeAdapter(ProgressRecord)
 _pr_link_adapter = pydantic.TypeAdapter(PrLinkRecord)
 _saved_hook_context_adapter = pydantic.TypeAdapter(SavedHookContextRecord)
+_last_prompt_adapter = pydantic.TypeAdapter(LastPromptRecord)
 
 
 def validate_session_record(data: dict[str, Any]) -> SessionRecord:
@@ -2522,6 +2539,8 @@ def validate_session_record(data: dict[str, Any]) -> SessionRecord:
         return _pr_link_adapter.validate_python(data)
     elif record_type == 'saved_hook_context':
         return _saved_hook_context_adapter.validate_python(data)
+    elif record_type == 'last-prompt':
+        return _last_prompt_adapter.validate_python(data)
     else:
         return SessionRecordAdapter.validate_python(data)
 
