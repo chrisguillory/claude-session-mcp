@@ -17,7 +17,7 @@ import pydantic
 
 from src.schemas.base import StrictModel
 from src.schemas.session.models import SessionRecord, Task
-from src.schemas.types import JsonDatetime, ToolResultExtension
+from src.schemas.types import Base64JsonBytes, JsonDatetime, ToolResultExtension
 
 # ==============================================================================
 # Archive Format Version
@@ -182,7 +182,7 @@ class ToolResultEntry(StrictModel):
     """
 
     tool_use_id: str
-    content: str
+    content: Base64JsonBytes
     extension: ToolResultExtension
 
 
@@ -296,7 +296,8 @@ def migrate_v1_to_v2(v1: SessionArchiveV1) -> SessionArchiveV2:
 
     # Convert tool_results (v1 only had .txt files)
     tool_result_entries = [
-        ToolResultEntry(tool_use_id=tid, content=content, extension='.txt') for tid, content in v1.tool_results.items()
+        ToolResultEntry(tool_use_id=tid, content=content.encode('utf-8'), extension='.txt')
+        for tid, content in v1.tool_results.items()
     ]
 
     # Convert todos - parse agent_id from filename

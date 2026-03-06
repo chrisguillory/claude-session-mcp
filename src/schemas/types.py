@@ -11,6 +11,7 @@ Layering:
 
 from __future__ import annotations
 
+import base64
 from collections.abc import Sequence
 from datetime import datetime
 from typing import Annotated, Any, Literal
@@ -139,6 +140,32 @@ type JsonDatetime = Annotated[datetime, pydantic.Field(strict=False)]
 
 type PathStr = str
 """A filesystem path (file or directory) as a string."""
+
+
+def _decode_base64_bytes(v: bytes | str) -> bytes:
+    """Accept raw bytes (from disk) or base64 strings (from JSON)."""
+    if isinstance(v, bytes):
+        return v
+    if isinstance(v, str):
+        return base64.urlsafe_b64decode(v)
+    raise TypeError(f'Expected bytes or str, got {type(v)}')
+
+
+def _encode_base64_bytes(v: bytes) -> str:
+    """Encode bytes to URL-safe base64 for JSON serialization."""
+    return base64.urlsafe_b64encode(v).decode('ascii')
+
+
+Base64JsonBytes = Annotated[
+    bytes,
+    pydantic.BeforeValidator(_decode_base64_bytes),
+    pydantic.PlainSerializer(_encode_base64_bytes, return_type=str, when_used='json'),
+]
+"""Bytes that base64-encode for JSON and decode on load.
+
+Compatible with strict=True and the json.loads() -> model_validate() pattern.
+Python-mode model_dump() returns raw bytes; JSON-mode returns base64 string.
+"""
 
 ToolResultExtension = Literal['.txt', '.json']
 """Known file extensions for tool result files in Claude Code sessions.

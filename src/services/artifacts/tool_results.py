@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import get_args
 
 from src.schemas.base import StrictModel
-from src.schemas.types import ToolResultExtension
+from src.schemas.types import Base64JsonBytes, ToolResultExtension
 
 TOOL_RESULT_EXTENSIONS: Set[str] = set(get_args(ToolResultExtension))
 
@@ -31,7 +31,7 @@ class ToolResultFile(StrictModel):
     """
 
     tool_use_id: str
-    content: str
+    content: Base64JsonBytes
     extension: ToolResultExtension
 
     @property
@@ -99,7 +99,7 @@ def collect_tool_results(
                 ToolResultFile.model_validate(
                     {
                         'tool_use_id': path.stem,
-                        'content': path.read_text(encoding='utf-8'),
+                        'content': path.read_bytes(),
                         'extension': path.suffix,
                     }
                 )
@@ -159,6 +159,6 @@ def write_tool_results(
             raise FileExistsError(
                 f'Tool result file already exists: {file_path}\nThis indicates cloning into an existing session.'
             )
-        file_path.write_text(tr.content, encoding='utf-8')
+        file_path.write_bytes(tr.content)
 
     return len(tool_results)
