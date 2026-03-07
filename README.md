@@ -587,12 +587,35 @@ Set in `~/.claude/settings.json` (takes precedence over inline env vars):
 
 **Compaction/Context:**
 
-| Variable                          | Effect                                                                             | Default |
-|-----------------------------------|------------------------------------------------------------------------------------|---------|
-| `DISABLE_AUTO_COMPACT`            | Disable auto compaction (gains ~22.5% context, but sessions end abruptly at limit) | off     |
-| `DISABLE_COMPACT`                 | Disable all compaction                                                             | off     |
-| `DISABLE_MICROCOMPACT`            | Disable microcompact compression                                                   | off     |
-| `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE` | Override auto-compact threshold percentage                                         | ~75%    |
+| Variable                          | Effect                                                                             | Default | Notes |
+|-----------------------------------|------------------------------------------------------------------------------------|---------|-------|
+| `DISABLE_AUTO_COMPACT`            | Disable auto compaction                                                            | off     | **Also disables session memory extraction** (blocks hook registration) |
+| `DISABLE_COMPACT`                 | Disable all compaction (auto + manual `/compact`)                                  | off     | |
+| `DISABLE_MICROCOMPACT`            | Disable microcompact compression                                                   | off     | |
+| `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE` | Override auto-compact trigger threshold                                            | ~92%    | Clamped to (0, 100]; at 100% = ~167K tokens (effectiveWindow - 13K buffer) |
+| `ENABLE_CLAUDE_CODE_SM_COMPACT`   | Use session memory summary for instant compaction                                  | off     | Consumer only; requires session memory extraction active (see `docs/session-memory.md`) |
+
+**Auto-compact threshold detail**: The Statsig config `tengu_auto_compact_config` defaults to
+`{"tokenThreshold": 0.92}` (92% of effective window, not 75%). The `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE` env var overrides
+this percentage but is clamped via `Math.min(Math.floor(effectiveWindow * pct/100), effectiveWindow - 13000)`. At 100%,
+the threshold equals the default buffer limit (~167K for 200K context). You cannot set above 100% to prevent
+auto-compact — use `CLAUDE_CODE_BLOCKING_LIMIT_OVERRIDE` instead to push the hard blocking limit beyond 200K.
+
+**Session memory interaction**: `DISABLE_AUTO_COMPACT=true` prevents the session memory extraction hook (`FY7()`) from
+registering at startup. If you want session memory but minimal auto-compact interference, remove `DISABLE_AUTO_COMPACT`
+and configure:
+
+```json
+{
+  "env": {
+    "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "100",
+    "CLAUDE_CODE_BLOCKING_LIMIT_OVERRIDE": "503000",
+    "ENABLE_CLAUDE_CODE_SM_COMPACT": "true"
+  }
+}
+```
+
+See `docs/session-memory.md` for complete analysis including the tweakcc binary patching method.
 
 **Caching:**
 
