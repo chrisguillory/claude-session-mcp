@@ -25,7 +25,9 @@ class SessionDiscoveryService:
         """Initialize discovery service."""
         self.claude_sessions_dir = Path.home() / '.claude' / 'projects'
 
-    async def find_session_by_id(self, session_id_or_prefix: str) -> SessionInfo | None:
+    async def find_session_by_id(
+        self, session_id_or_prefix: str, *, project_filter: Path | None = None
+    ) -> SessionInfo | None:
         """
         Find a session by ID or prefix across all projects using rg.
 
@@ -33,6 +35,8 @@ class SessionDiscoveryService:
 
         Args:
             session_id_or_prefix: Full session ID or unique prefix
+            project_filter: If set, restrict search to this project folder
+                (encoded path under ~/.claude/projects/)
 
         Returns:
             SessionInfo with session_id and session_folder, None if not found
@@ -40,13 +44,14 @@ class SessionDiscoveryService:
         Raises:
             AmbiguousSessionError: If prefix matches multiple sessions
         """
-        if not self.claude_sessions_dir.exists():
+        search_dir = project_filter or self.claude_sessions_dir
+        if not search_dir.exists():
             return None
 
         # Use rg to find session files matching the ID/prefix
         # Use wildcard pattern to support prefix matching
         result = subprocess.run(
-            ['rg', '--files', '--glob', f'{session_id_or_prefix}*.jsonl', str(self.claude_sessions_dir)],
+            ['rg', '--files', '--glob', f'{session_id_or_prefix}*.jsonl', str(search_dir)],
             capture_output=True,
             text=True,
         )

@@ -375,7 +375,7 @@ class SessionInfoService:
         except psutil.NoSuchProcess:
             return False, None  # Process is gone
 
-    async def resolve_session(self, session_id_or_prefix: str) -> SessionInfo:
+    async def resolve_session(self, session_id_or_prefix: str, *, project_filter: Path | None = None) -> SessionInfo:
         """
         Resolve a session ID or prefix to a full session.
 
@@ -384,6 +384,7 @@ class SessionInfoService:
 
         Args:
             session_id_or_prefix: Full session ID or prefix
+            project_filter: If set, restrict search to this project folder
 
         Returns:
             SessionInfo for the matched session
@@ -392,7 +393,7 @@ class SessionInfoService:
             FileNotFoundError: If no sessions match
             AmbiguousSessionError: If multiple sessions match (from discovery service)
         """
-        match = await self.discovery.find_session_by_id(session_id_or_prefix)
+        match = await self.discovery.find_session_by_id(session_id_or_prefix, project_filter=project_filter)
         if not match:
             raise FileNotFoundError(f'No session found matching: {session_id_or_prefix}')
         return match

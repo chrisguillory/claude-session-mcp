@@ -43,6 +43,7 @@ select = [
     "F",    # pyflakes
     "FLY",  # flynt (f-string conversion)
     "I",    # isort
+    "PLC0415",  # pylint: import-outside-top-level
     "PERF", # perflint (performance)
     "SIM",  # flake8-simplify
     "UP",   # pyupgrade

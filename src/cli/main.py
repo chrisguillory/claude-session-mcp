@@ -24,6 +24,7 @@ import typer
 from src.cli.logger import CLILogger
 from src.exceptions import ClaudeSessionError
 from src.launcher import launch_claude_with_session
+from src.paths import encode_path
 from src.schemas.operations.lineage import LineageTree
 from src.services.archive import SessionArchiveService
 from src.services.claude_process import auto_detect_session_id
@@ -592,8 +593,12 @@ async def _delete_async(
 
     try:
         # Resolve session ID prefix to full ID
+        # When --project is provided, use it to disambiguate discovery
         info_service = SessionInfoService()
-        session_info = await info_service.resolve_session(session_id)
+        project_filter: Path | None = None
+        if project:
+            project_filter = Path.home() / '.claude' / 'projects' / encode_path(project.resolve())
+        session_info = await info_service.resolve_session(session_id, project_filter=project_filter)
         full_session_id = session_info.session_id
 
         # Check if session is running

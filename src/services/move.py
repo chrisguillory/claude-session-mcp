@@ -6,8 +6,8 @@ Path translation is applied to update cwd and tool path references.
 
 Safety features:
 - Native sessions (UUIDv4) require force flag
-- Backup always created before source deletion (rollback capability)
 - Two-phase approach: write to target first, then delete source
+- Source files serve as implicit backup until deletion succeeds
 - Fail-fast pre-check prevents partial writes
 - Running sessions require explicit terminate flag
 
@@ -277,10 +277,8 @@ class SessionMoveService:
         # Phase 4: Terminate & Delete Source
         # =====================================================================
 
-        # Create backup before deleting source
-        backup_path = await self._create_backup(session_info, files_data, agent_infos, log)
-
-        # Terminate running process if needed
+        # Terminate running process FIRST (before backup, so process doesn't
+        # write new records while backup is being created)
         was_terminated = False
         if terminate_pid is not None:
             if log:
@@ -288,6 +286,11 @@ class SessionMoveService:
             os.kill(terminate_pid, signal.SIGKILL)
             time.sleep(0.2)
             was_terminated = True
+
+        # Create backup before deleting source (skip if --no-backup)
+        backup_path: Path | None = None
+        if not no_backup:
+            backup_path = await self._create_backup(session_info, files_data, agent_infos, log)
 
         # Delete source files
         files_deleted = 0
@@ -338,21 +341,14 @@ class SessionMoveService:
                     dir_path.rmdir()
 
         except Exception as e:
-            msg = f'Source deletion partially failed: {e}. Session exists in both projects. Backup at: {backup_path}'
+            backup_note = f' Backup at: {backup_path}' if backup_path else ''
+            msg = f'Source deletion partially failed: {e}. Session may exist in both projects.{backup_note}'
             warnings.append(msg)
             if log:
                 await log.error(msg)
 
         if log:
             await log.info(f'Phase 4 complete: {files_deleted} source files deleted')
-
-        # Clean up backup if requested
-        final_backup_path: str | None = str(backup_path)
-        if no_backup and not warnings:
-            backup_path.unlink(missing_ok=True)
-            final_backup_path = None
-            if log:
-                await log.info('Backup removed (--no-backup)')
 
         # =====================================================================
         # Phase 5: Result
@@ -368,7 +364,7 @@ class SessionMoveService:
             paths_translated=translator.needs_translation,
             was_running=terminate_pid is not None,
             was_terminated=was_terminated,
-            backup_path=final_backup_path,
+            backup_path=str(backup_path) if backup_path else None,
             custom_title=custom_title,
             resume_command=f'cd {self.target_project_path} && claude --resume {sid}',
             was_dry_run=False,
