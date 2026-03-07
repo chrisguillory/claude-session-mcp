@@ -38,7 +38,7 @@ class AmbiguousSessionError(SessionResolutionError):
             matches_str += f'\n  ... and {len(matches) - 10} more'
         super().__init__(
             f"Session ID prefix '{prefix}' is ambiguous. Matches {len(matches)} sessions:\n  {matches_str}\n\n"
-            f'Please provide a more specific session ID prefix.'
+            f'Provide a more specific session ID prefix, or use --project to target a specific project.'
         )
 
 

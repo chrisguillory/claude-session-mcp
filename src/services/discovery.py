@@ -6,7 +6,9 @@ Provides utilities to discover sessions by ID and list all available sessions.
 
 from __future__ import annotations
 
+import json
 import subprocess
+from datetime import UTC, datetime
 from pathlib import Path
 
 from src.exceptions import AmbiguousSessionError
@@ -70,8 +72,17 @@ class SessionDiscoveryService:
 
         if len(session_files) > 1:
             # Ambiguous prefix - multiple sessions match
-            matching_ids = [f.stem for f in session_files]
-            raise AmbiguousSessionError(session_id_or_prefix, matching_ids)
+            match_details = []
+            for f in session_files:
+                stat = f.stat()
+                size_mb = stat.st_size / (1024 * 1024)
+                mtime = datetime.fromtimestamp(stat.st_mtime, tz=UTC).strftime('%Y-%m-%d %H:%M')
+                line_count = sum(1 for _ in f.open())
+                project_path = _extract_project_path(f)
+                match_details.append(
+                    f'{f.stem}  ({size_mb:.1f} MB, {line_count} lines, modified {mtime})  project: {project_path}'
+                )
+            raise AmbiguousSessionError(session_id_or_prefix, match_details)
 
         # Single match - extract full session ID from filename
         session_file = session_files[0]
@@ -82,3 +93,13 @@ class SessionDiscoveryService:
             session_id=full_session_id,
             session_folder=session_folder,
         )
+
+
+def _extract_project_path(session_file: Path) -> str:
+    """Extract project path from first record's cwd field, falling back to encoded folder name."""
+    with session_file.open() as fh:
+        for line in fh:
+            record = json.loads(line)
+            if cwd := record.get('cwd'):
+                return str(cwd)
+    return session_file.parent.name
