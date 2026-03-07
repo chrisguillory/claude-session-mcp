@@ -1,0 +1,61 @@
+b87ecc16-f413-4e49-a02c-2dd19bc804cf | Title: Test Infrastructure
+019b1917-3277-79ee-9382-b2a1290b3e9b | Title: Crash Tests
+f06ab609-fc1a-42da-a250-1fa4b7ab200e | Title: GHA Deploy Cache
+019b27f8-a724-7adb-9a17-990f3815f9a5 | Title: Cache Diagnosing
+019b287f-0df0-76cc-a844-33ce1065efa9 | Title: Don't Retry
+3e3142ce-69ae-48ba-bbd9-40962863756b | Title: Tax
+019b2e98-9a26-76cf-b097-b2aa5a578b96 | Title: Local (2)
+019b342b-804b-7329-a32d-6612bd8acf13 | Title: Local
+b3e2484d-4820-478b-b154-3b81d4697359 | Title: Master
+019b46e3-6bee-7f31-a3cf-4f4abed8ab32 | Title: Capture request/responses
+019b4764-dfba-7139-b97b-34f1d7c7bc0a | Title: Haiku new topic
+019b476a-1ebb-709a-96b7-ade8e051dd28 | Title: Tool Search Tool
+019b482d-72e3-7378-ade9-795a9864b958 | Title: ThinkingMetadata Handoff (close?)
+019b5382-40d1-7320-b589-db511c57bcba | Title: Tool Search Tool (force compacted)
+019b6d20-1e57-7621-949c-bf9059fef426 | Title: JavaScript + Featureset (selenium)
+019b7025-85a5-7114-b091-a67f08470f52 | Title: Mainstay Bot Slack Permissions
+019b76ff-ba39-71cf-8fb8-856f46caaceb | Title: Context Editing?
+019b8016-4478-7c3b-b70a-b5f555061904 | Title: Mypy
+019b81de-a4dd-7b79-a108-9f67418e39e5 | Title: Capture request/responses
+019b81f4-928a-735f-8c71-bfc80f3af83b | Title: navigate_with_profile_state
+019b860d-4dd9-7e05-be7e-f0df6a9e02f6 | Title: Prototype
+019b8b3f-f2c7-7886-aaf9-ba4e483fee70 | Title: Mypy
+019b908c-43e1-7b86-aff5-01206648bf12 | Title: Local
+019b966a-6202-7e03-ab2b-823e5e498b2a | Title: Bifurcation
+4e37ea23-7679-4020-ac32-b64d918a69f7 | Title: mcp-py-client
+019b9797-34e7-71d3-b2f9-29af6c5fddc4 | Title: Tool Search Tool
+019b9e61-6573-7ba5-a491-88bff7f7244f | Title: Capture request/responses
+0dcffe15-bedc-479e-bbfa-036788c05afa | Title: Prompts
+3f1d3895-59ba-43b4-aabe-909eff56a3ed | Title: Local
+ebdfd196-e9ce-4acd-bfc4-94f0fcfae7ac | Title: Master
+dce7d03f-f2ba-4db1-a5ba-cdf0e8dcd484 | Title: Master
+f071c1bb-fc0d-4f9c-9166-a73c6478bf56 | Title: Local
+50805196-cc40-4d23-8b2d-4aab924bf492 | Title: "Google Sheets Research"
+019bc1ea-a99e-7441-b444-a0635574233b | Title: Slide1
+019bc22f-3f87-773c-b55f-6465cc7a0fda | Title: Master
+019bc244-de38-7295-85f8-f36d8304805a | Title: Slide3
+de9650f0-bb27-40eb-b4cd-12b42397241d | Title: 1045 Brookhaven Ln
+db64514a-17a3-4848-b2fb-fe7d9e6240fd | Title: Diagram
+076cdbe7-02b4-40dd-bef1-a0d5f44a7e46 | Title: Give chris@mainstay.io access
+e4f60551-9335-41f8-90c9-a664777cc528 | Title: Rushi Pair
+a27db4cb-4829-4cf1-90fc-d9335c8fe1b8 | Title: Snowflake
+019beb8d-0990-7842-8bc6-c1555eed5a41 | Title: Snowflake (clone-019beb8d)
+019bebc2-8c4a-7159-ab3a-e05dde61131c | Title: Snowflake (clone-019bebc2)
+1bbee7a6-2224-4e44-8b08-3726f028b84f | Title: Move Master
+2caa5a6a-da7b-49af-a512-ad06eb501460 | Title: MCP Testing
+019c0121-5e36-767b-825a-f664d49b0420 | Title: Move Implementer
+019c01f0-b4bf-7065-b4c8-fc7f6d7af66b | Title: Move Master (clone-019c01f0)
+d4face0b-eb23-4429-ba97-cb225b4f7c81 | Title: Drain Queue
+019c0b6c-5179-7f24-ab84-41ced2fd10bd | Title: Synology (clone-019c0b6c)
+019c1eb2-5308-7b5a-8f78-d86262cedbd3 | Title: Employee Review
+019c1ed4-e63c-7724-8a53-93cff6cc93a1 | Title: Employee Review (clone-019c1ed4)
+8dd32fe7-87a1-47e4-8a4a-488f118a8d74 | Title: 8dd32fe7-87a1-47e4-8a4a-488f118a8d74
+31769dde-081e-4300-8d21-246174256733 | Title: Slack
+019c25b3-d631-7dd3-aebe-6533f31cec37 | Title: Slack (clone-019c25b3)
+019c263c-99e4-7f08-9971-c1da0a943219 | Title: Slack (clone-019c263c)
+1c9d8929-29ae-4ca5-8a7d-681b8eebe4a1 | Title: Mainstay Holiday Calendar
+
+
+/Users/chris/Library/Application Support/JetBrains/PyCharm2025.2/workspace/359n8FNDeCE9FN1vvr359AbjYGY.xml
+1436:      <TerminalTabState tabName="FDJKLKSJFS" userDefinedTabTitle="true" />
+1443:      <TerminalSessionPersistedTab name="FDJKLKSJFS" isUserDefinedName="true" workingDireczsh: killed     rg -uuu FDJKLKSJFS ~

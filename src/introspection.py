@@ -7,7 +7,7 @@ and schema evolution tracking.
 
 from __future__ import annotations
 
-from typing import Any, Union
+from typing import Any, Union, get_args, get_origin
 
 from pydantic import BaseModel
 from pydantic.fields import FieldInfo
@@ -32,7 +32,6 @@ def get_path_fields(model: type[BaseModel]) -> list[str]:
         >>> get_path_fields(UserRecord)
         ['cwd', 'projectPaths']
     """
-    from typing import get_args, get_origin
 
     def check_for_path_marker(annotation: Any) -> bool:
         """Check if annotation contains PathMarker, handling type aliases and unions."""

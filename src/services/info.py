@@ -25,6 +25,7 @@ from src.services.artifacts import extract_custom_title_from_file
 from src.services.delete import is_native_session
 from src.services.discovery import SessionDiscoveryService
 from src.services.lineage import LineageService, get_machine_id
+from src.services.version import get_version_from_process
 
 # Claude workspace sessions.json location
 CLAUDE_WORKSPACE_SESSIONS = Path.home() / '.claude-workspace' / 'sessions.json'
@@ -229,8 +230,6 @@ class SessionInfoService:
         """
         # Try process-based first (most accurate for current operations)
         if claude_pid is not None:
-            from src.services.version import get_version_from_process
-
             version = get_version_from_process(claude_pid)
             if version:
                 return version

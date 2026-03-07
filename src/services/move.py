@@ -53,6 +53,7 @@ from src.services.delete import is_native_session
 from src.services.discovery import SessionDiscoveryService
 from src.services.parser import SessionParserService
 from src.services.restore import PathTranslator
+from src.storage.local import LocalFileSystemStorage
 
 logger = logging.getLogger(__name__)
 
@@ -467,8 +468,6 @@ class SessionMoveService:
                 parser_service=self.parser_service,
                 session_folder=session_info.session_folder,
             )
-
-            from src.storage.local import LocalFileSystemStorage
 
             storage = LocalFileSystemStorage(DELETED_SESSIONS_DIR)
             metadata = await archive_service.create_archive(

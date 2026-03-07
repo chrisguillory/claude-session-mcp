@@ -91,6 +91,7 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qs
 
 import psutil
 from expiringdict import ExpiringDict
@@ -649,8 +650,6 @@ def _parse_body(content: bytes | None, content_type: str) -> dict[str, Any]:
 
     # Form data
     if 'application/x-www-form-urlencoded' in ct:
-        from urllib.parse import parse_qs
-
         return {
             'type': 'form',
             'data': parse_qs(_safe_decode(content)),

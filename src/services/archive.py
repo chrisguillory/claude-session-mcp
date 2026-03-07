@@ -13,6 +13,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
 
+import zstandard as zstd
+
 from src.config.mcp import settings
 from src.paths import encode_path
 from src.protocols import LoggerProtocol, NullLogger
@@ -551,11 +553,6 @@ class SessionArchiveService:
     async def _serialize_zst(self, archive: SessionArchiveV2, logger: LoggerProtocol) -> bytes:
         """Serialize archive to zstd-compressed JSON."""
         await logger.info('Serializing to zstd-compressed JSON')
-
-        try:
-            import zstandard as zstd
-        except ImportError:
-            raise RuntimeError('zstandard library not available. Install with: uv add zstandard')
 
         # Serialize to JSON
         json_str = archive.model_dump_json(indent=2, exclude_unset=True)

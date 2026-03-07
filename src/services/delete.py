@@ -29,6 +29,7 @@ import json
 import logging
 import os
 import signal
+import subprocess
 import time
 import uuid
 from collections.abc import AsyncGenerator
@@ -264,8 +265,6 @@ class SessionDeleteService:
         )
 
         # 2. Find agent files
-        import subprocess
-
         result = subprocess.run(
             [
                 'rg',

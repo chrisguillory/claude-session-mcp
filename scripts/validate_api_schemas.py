@@ -26,8 +26,27 @@ from typing import Any
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from pydantic import ValidationError
+from pydantic import TypeAdapter, ValidationError
 
+from src.schemas.cc_internal_api import (
+    AccountSettingsResponse,
+    ClientDataResponse,
+    CountTokensRequest,
+    CountTokensResponse,
+    EvalRequest,
+    EvalResponse,
+    GroveResponse,
+    HelloResponse,
+    MessagesRequest,
+    MetricsEnabledResponse,
+    ModelAccessResponse,
+    ReferralEligibilityResponse,
+    SSEEvent,
+    StatsigInitializeRequest,
+    StatsigRegisterRequest,
+    StatsigRegisterResponse,
+    TelemetryBatchRequest,
+)
 from src.schemas.cc_internal_api.base import StrictModel
 
 
@@ -99,26 +118,6 @@ def load_capture_body(filepath: Path, is_request: bool) -> dict[str, Any] | None
 
 def get_schema_for_endpoint(pattern: str, is_request: bool) -> tuple[str | None, type[StrictModel] | None]:
     """Get the appropriate schema class for an endpoint pattern."""
-    # Import schemas lazily to avoid import errors if schemas have issues
-    from src.schemas.cc_internal_api import (
-        AccountSettingsResponse,
-        ClientDataResponse,
-        CountTokensRequest,
-        CountTokensResponse,
-        EvalRequest,
-        EvalResponse,
-        GroveResponse,
-        HelloResponse,
-        MessagesRequest,
-        MetricsEnabledResponse,
-        ModelAccessResponse,
-        ReferralEligibilityResponse,
-        StatsigInitializeRequest,
-        StatsigRegisterRequest,
-        StatsigRegisterResponse,
-        TelemetryBatchRequest,
-    )
-
     pattern_lower = pattern.lower()
 
     # Messages API
@@ -211,10 +210,6 @@ def get_schema_for_endpoint(pattern: str, is_request: bool) -> tuple[str | None,
 
 def validate_sse_events(body: dict[str, Any]) -> tuple[int, int, list[str]]:
     """Validate SSE events in a streaming response."""
-    from pydantic import TypeAdapter
-
-    from src.schemas.cc_internal_api import SSEEvent
-
     adapter: TypeAdapter[SSEEvent] = TypeAdapter(SSEEvent)
     events = body.get('events', [])
 

@@ -1,0 +1,1742 @@
+<project version="4">
+  <component name="BookmarksManager">
+    <option name="groups">
+      <GroupState>
+        <option name="name" value="claude-session-mcp" />
+      </GroupState>
+    </option>
+  </component>
+  <component name="FileEditorManager">
+    <leaf ideFingerprint="39n7442kwczlq" SIDE_TABS_SIZE_LIMIT_KEY="-1">
+      <file>
+        <entry file="file://$PROJECT_DIR$/README.md" file-id="133225" managing-fs="1769710897736">
+          <provider editor-type-id="split-provider[text-editor;markdown-preview-editor]" selected="true">
+            <state split_layout="SHOW_EDITOR" is_vertical_split="false">
+              <first_editor relative-caret-position="11305">
+                <caret line="595" column="27" selection-start-line="595" selection-start-column="21" selection-end-line="595" selection-end-column="27" />
+              </first_editor>
+              <second_editor />
+            </state>
+          </provider>
+        </entry>
+        <tab>{&quot;tabTitle&quot;:&quot;README.md&quot;,&quot;foregroundColor&quot;:-16777216,&quot;textAttributes&quot;:{&quot;name&quot;:&quot;a&quot;},&quot;icon&quot;:[10,57,99,111,109,46,105,110,116,101,108,108,105,106,46,117,105,46,105,99,111,110,115,46,82,97,115,116,101,114,105,122,101,100,73,109,97,103,101,68,97,116,97,76,111,97,100,101,114,68,101,115,99,114,105,112,116,111,114,18,96,10,24,105,99,111,110,115,47,77,97,114,107,100,111,119,110,80,108,117,103,105,110,46,115,118,103,18,24,105,99,111,110,115,47,101,120,112,117,105,47,109,97,114,107,100,111,119,110,46,115,118,103,26,29,111,114,103,46,105,110,116,101,108,108,105,106,46,112,108,117,103,105,110,115,46,109,97,114,107,100,111,119,110,40,-33,-55,-17,-63,-7,-1,-1,-1,-1,1,48,0]}</tab>
+      </file>
+      <file>
+        <entry file="file://$PROJECT_DIR$/docs/intercepting-claude-api.md" file-id="133233" managing-fs="1769710897736">
+          <provider editor-type-id="split-provider[text-editor;markdown-preview-editor]" selected="true">
+            <state split_layout="SHOW_EDITOR" is_vertical_split="false">
+              <first_editor />
+              <second_editor />
+            </state>
+          </provider>
+        </entry>
+        <tab>{&quot;tabTitle&quot;:&quot;intercepting-claude-api.md&quot;,&quot;foregroundColor&quot;:-16777216,&quot;textAttributes&quot;:{&quot;name&quot;:&quot;a&quot;},&quot;icon&quot;:[10,57,99,111,109,46,105,110,116,101,108,108,105,106,46,117,105,46,105,99,111,110,115,46,82,97,115,116,101,114,105,122,101,100,73,109,97,103,101,68,97,116,97,76,111,97,100,101,114,68,101,115,99,114,105,112,116,111,114,18,96,10,24,105,99,111,110,115,47,77,97,114,107,100,111,119,110,80,108,117,103,105,110,46,115,118,103,18,24,105,99,111,110,115,47,101,120,112,117,105,47,109,97,114,107,100,111,119,110,46,115,118,103,26,29,111,114,103,46,105,110,116,101,108,108,105,106,46,112,108,117,103,105,110,115,46,109,97,114,107,100,111,119,110,40,-33,-55,-17,-63,-7,-1,-1,-1,-1,1,48,0]}</tab>
+      </file>
+      <file>
+        <entry file="file://$PROJECT_DIR$/docs/handoff-api-schema-capture.md" file-id="133230" managing-fs="1769710897736">
+          <provider editor-type-id="split-provider[text-editor;markdown-preview-editor]" selected="true">
+            <state split_layout="SHOW_EDITOR" is_vertical_split="false">
+              <first_editor relative-caret-position="361">
+                <caret line="19" column="68" selection-start-line="19" selection-start-column="68" selection-end-line="19" selection-end-column="68" />
+              </first_editor>
+              <second_editor />
+            </state>
+          </provider>
+        </entry>
+        <tab>{&quot;tabTitle&quot;:&quot;handoff-api-schema-capture.md&quot;,&quot;foregroundColor&quot;:-16777216,&quot;textAttributes&quot;:{&quot;name&quot;:&quot;a&quot;},&quot;icon&quot;:[10,57,99,111,109,46,105,110,116,101,108,108,105,106,46,117,105,46,105,99,111,110,115,46,82,97,115,116,101,114,105,122,101,100,73,109,97,103,101,68,97,116,97,76,111,97,100,101,114,68,101,115,99,114,105,112,116,111,114,18,96,10,24,105,99,111,110,115,47,77,97,114,107,100,111,119,110,80,108,117,103,105,110,46,115,118,103,18,24,105,99,111,110,115,47,101,120,112,117,105,47,109,97,114,107,100,111,119,110,46,115,118,103,26,29,111,114,103,46,105,110,116,101,108,108,105,106,46,112,108,117,103,105,110,115,46,109,97,114,107,100,111,119,110,40,-33,-55,-17,-63,-7,-1,-1,-1,-1,1,48,0]}</tab>
+      </file>
+      <file>
+        <entry file="file://$PROJECT_DIR$/.claude/settings.local.json" file-id="133229" managing-fs="1769710897736">
+          <provider editor-type-id="text-editor" selected="true">
+            <state relative-caret-position="969">
+              <caret line="51" column="36" selection-start-line="51" selection-start-column="36" selection-end-line="51" selection-end-column="36" />
+            </state>
+          </provider>
+        </entry>
+        <tab>{&quot;tabTitle&quot;:&quot;settings.local.json&quot;,&quot;foregroundColor&quot;:-7581952,&quot;textAttributes&quot;:{&quot;name&quot;:&quot;a&quot;,&quot;children&quot;:[{&quot;name&quot;:&quot;option&quot;,&quot;attributes&quot;:{&quot;name&quot;:&quot;FOREGROUND&quot;,&quot;value&quot;:&quot;8c4f00&quot;}}]},&quot;icon&quot;:[10,57,99,111,109,46,105,110,116,101,108,108,105,106,46,117,105,46,105,99,111,110,115,46,82,97,115,116,101,114,105,122,101,100,73,109,97,103,101,68,97,116,97,76,111,97,100,101,114,68,101,115,99,114,105,112,116,111,114,18,73,10,18,102,105,108,101,84,121,112,101,115,47,106,115,111,110,46,115,118,103,18,24,101,120,112,117,105,47,102,105,108,101,84,121,112,101,115,47,106,115,111,110,46,115,118,103,26,12,99,111,109,46,105,110,116,101,108,108,105,106,40,-55,-15,-115,-58,-6,-1,-1,-1,-1,1,48,2]}</tab>
+      </file>
+      <file current-in-tab="true">
+        <entry file="file://$PROJECT_DIR$/src/schemas/session/models.py" file-id="133249" managing-fs="1769710897736">
+          <provider editor-type-id="text-editor" selected="true">
+            <state relative-caret-position="590">
+              <caret line="1816" column="6" selection-start-line="1816" selection-start-column="6" selection-end-line="1816" selection-end-column="6" />
+            </state>
+          </provider>
+        </entry>
+        <tab>{&quot;tabTitle&quot;:&quot;models.py&quot;,&quot;foregroundColor&quot;:-16777216,&quot;textAttributes&quot;:{&quot;name&quot;:&quot;a&quot;},&quot;icon&quot;:[10,57,99,111,109,46,105,110,116,101,108,108,105,106,46,117,105,46,105,99,111,110,115,46,82,97,115,116,101,114,105,122,101,100,73,109,97,103,101,68,97,116,97,76,111,97,100,101,114,68,101,115,99,114,105,112,116,111,114,18,127,10,48,105,99,111,110,115,47,99,111,109,47,106,101,116,98,114,97,105,110,115,47,112,121,116,104,111,110,47,112,97,114,115,101,114,47,112,121,116,104,111,110,70,105,108,101,46,115,118,103,18,50,105,99,111,110,115,47,99,111,109,47,106,101,116,98,114,97,105,110,115,47,112,121,116,104,111,110,47,112,97,114,115,101,114,47,101,120,112,117,105,47,112,121,116,104,111,110,46,115,118,103,26,10,80,121,116,104,111,110,67,111,114,101,40,-53,-109,-42,-7,-8,-1,-1,-1,-1,1,48,0]}</tab>
+      </file>
+      <file>
+        <entry file="file://$PROJECT_DIR$/../.claude/debug/ad062295-bce8-48ce-8336-cab689ab8ee1.txt" file-id="167741" managing-fs="1769710897736">
+          <provider editor-type-id="text-editor" selected="true">
+            <state relative-caret-position="7904">
+              <caret line="416" selection-start-line="416" selection-end-line="416" />
+            </state>
+          </provider>
+        </entry>
+        <tab>{&quot;tabTitle&quot;:&quot;ad062295-bce8-48ce-8336-cab689ab8ee1.txt&quot;,&quot;foregroundColor&quot;:-16777216,&quot;textAttributes&quot;:{&quot;name&quot;:&quot;a&quot;},&quot;icon&quot;:[10,57,99,111,109,46,105,110,116,101,108,108,105,106,46,117,105,46,105,99,111,110,115,46,82,97,115,116,101,114,105,122,101,100,73,109,97,103,101,68,97,116,97,76,111,97,100,101,114,68,101,115,99,114,105,112,116,111,114,18,73,10,18,102,105,108,101,84,121,112,101,115,47,116,101,120,116,46,115,118,103,18,24,101,120,112,117,105,47,102,105,108,101,84,121,112,101,115,47,116,101,120,116,46,115,118,103,26,12,99,111,109,46,105,110,116,101,108,108,105,106,40,-122,-48,-19,-85,-2,-1,-1,-1,-1,1,48,0]}</tab>
+      </file>
+      <file>
+        <entry file="file://$PROJECT_DIR$/scratch/claude-code-internals.md" file-id="133237" managing-fs="1769710897736">
+          <provider editor-type-id="split-provider[text-editor;markdown-preview-editor]" selected="true">
+            <state split_layout="SHOW_EDITOR" is_vertical_split="false">
+              <first_editor relative-caret-position="8569">
+                <caret line="451" column="72" selection-start-line="451" selection-start-column="72" selection-end-line="451" selection-end-column="72" />
+              </first_editor>
+              <second_editor />
+            </state>
+          </provider>
+        </entry>
+        <tab>{&quot;tabTitle&quot;:&quot;claude-code-internals.md&quot;,&quot;foregroundColor&quot;:-16777216,&quot;textAttributes&quot;:{&quot;name&quot;:&quot;a&quot;},&quot;icon&quot;:[10,57,99,111,109,46,105,110,116,101,108,108,105,106,46,117,105,46,105,99,111,110,115,46,82,97,115,116,101,114,105,122,101,100,73,109,97,103,101,68,97,116,97,76,111,97,100,101,114,68,101,115,99,114,105,112,116,111,114,18,96,10,24,105,99,111,110,115,47,77,97,114,107,100,111,119,110,80,108,117,103,105,110,46,115,118,103,18,24,105,99,111,110,115,47,101,120,112,117,105,47,109,97,114,107,100,111,119,110,46,115,118,103,26,29,111,114,103,46,105,110,116,101,108,108,105,106,46,112,108,117,103,105,110,115,46,109,97,114,107,100,111,119,110,40,-33,-55,-17,-63,-7,-1,-1,-1,-1,1,48,0]}</tab>
+      </file>
+      <file>
+        <entry file="file://$PROJECT_DIR$/scripts/intercept_traffic.py" file-id="133235" managing-fs="1769710897736">
+          <provider editor-type-id="text-editor" selected="true">
+            <state relative-caret-position="7068">
+              <caret line="388" column="55" selection-start-line="388" selection-start-column="55" selection-end-line="388" selection-end-column="55" />
+            </state>
+          </provider>
+        </entry>
+        <tab>{&quot;tabTitle&quot;:&quot;intercept_traffic.py&quot;,&quot;foregroundColor&quot;:-16777216,&quot;textAttributes&quot;:{&quot;name&quot;:&quot;a&quot;},&quot;icon&quot;:[10,57,99,111,109,46,105,110,116,101,108,108,105,106,46,117,105,46,105,99,111,110,115,46,82,97,115,116,101,114,105,122,101,100,73,109,97,103,101,68,97,116,97,76,111,97,100,101,114,68,101,115,99,114,105,112,116,111,114,18,127,10,48,105,99,111,110,115,47,99,111,109,47,106,101,116,98,114,97,105,110,115,47,112,121,116,104,111,110,47,112,97,114,115,101,114,47,112,121,116,104,111,110,70,105,108,101,46,115,118,103,18,50,105,99,111,110,115,47,99,111,109,47,106,101,116,98,114,97,105,110,115,47,112,121,116,104,111,110,47,112,97,114,115,101,114,47,101,120,112,117,105,47,112,121,116,104,111,110,46,115,118,103,26,10,80,121,116,104,111,110,67,111,114,101,40,-53,-109,-42,-7,-8,-1,-1,-1,-1,1,48,0]}</tab>
+      </file>
+      <file>
+        <entry file="file://$PROJECT_DIR$/src/schemas/cc_internal_api/README.md" file-id="133232" managing-fs="1769710897736">
+          <provider editor-type-id="split-provider[text-editor;markdown-preview-editor]" selected="true">
+            <state split_layout="SHOW_EDITOR" is_vertical_split="false">
+              <first_editor relative-caret-position="627">
+                <caret line="33" column="79" selection-start-line="33" selection-start-column="79" selection-end-line="33" selection-end-column="79" />
+              </first_editor>
+              <second_editor />
+            </state>
+          </provider>
+        </entry>
+        <tab>{&quot;tabTitle&quot;:&quot;src/…/README.md&quot;,&quot;foregroundColor&quot;:-16777216,&quot;textAttributes&quot;:{&quot;name&quot;:&quot;a&quot;},&quot;icon&quot;:[10,57,99,111,109,46,105,110,116,101,108,108,105,106,46,117,105,46,105,99,111,110,115,46,82,97,115,116,101,114,105,122,101,100,73,109,97,103,101,68,97,116,97,76,111,97,100,101,114,68,101,115,99,114,105,112,116,111,114,18,96,10,24,105,99,111,110,115,47,77,97,114,107,100,111,119,110,80,108,117,103,105,110,46,115,118,103,18,24,105,99,111,110,115,47,101,120,112,117,105,47,109,97,114,107,100,111,119,110,46,115,118,103,26,29,111,114,103,46,105,110,116,101,108,108,105,106,46,112,108,117,103,105,110,115,46,109,97,114,107,100,111,119,110,40,-33,-55,-17,-63,-7,-1,-1,-1,-1,1,48,0]}</tab>
+      </file>
+    </leaf>
+  </component>
+  <component name="FileTypeUsageLocalSummary"><![CDATA[{
+  "data": {
+    "JSON": {
+      "usageCount": 99,
+      "lastUsed": 1770303014127
+    },
+    "Python": {
+      "usageCount": 144,
+      "lastUsed": 1770303014296
+    },
+    "Terminal Session": {
+      "usageCount": 12,
+      "lastUsed": 1766420756016
+    },
+    "DIFF": {
+      "usageCount": 1273,
+      "lastUsed": 1769485558255
+    },
+    "GitIgnore file": {
+      "usageCount": 5,
+      "lastUsed": 1767644515456
+    },
+    "JSON-lines": {
+      "usageCount": 2,
+      "lastUsed": 1767227391610
+    },
+    "Markdown": {
+      "usageCount": 82,
+      "lastUsed": 1770303014770
+    },
+    "TOML": {
+      "usageCount": 2,
+      "lastUsed": 1767230711088
+    },
+    "textmate": {
+      "usageCount": 3,
+      "lastUsed": 1767799227062
+    },
+    "YAML": {
+      "usageCount": 1,
+      "lastUsed": 1767712870725
+    },
+    "PLAIN_TEXT": {
+      "usageCount": 13,
+      "lastUsed": 1770303014423
+    },
+    "SVG": {
+      "usageCount": 1,
+      "lastUsed": 1769128233754
+    }
+  }
+}]]></component>
+  <component name="FindInProjectRecents">
+    <findStrings>
+      <find>71960ee0</find>
+      <find>Calculate 789 * 456 and return the result.</find>
+      <find>Here's the breakdown:</find>
+      <find>OAuthFlowState</find>
+      <find># PATH TO TRANSLATE</find>
+      <find>verion</find>
+      <find>branch</find>
+      <find>uuid7</find>
+      <find>version</find>
+      <find>list_all_sessions</find>
+      <find>&lt;&lt;&lt;</find>
+      <find>python</find>
+      <find>clone\.py              \# NEW\: SessionCloneService for direct cloning</find>
+      <find>claude\-ai</find>
+      <find>fork</find>
+      <find>ephemeral</find>
+      <find>\&quot;\/Users\/chris\/claude\-session\-mcp\&quot;</find>
+      <find>b3e2484d-4820-478b-b154-3b81d4697359</find>
+      <find>public</find>
+      <find>The Research Arc: How We Got Here</find>
+      <find>Test Hello3 (cache compariso</find>
+      <find>mypy</find>
+      <find>src</find>
+      <find>detect_record_version</find>
+      <find>LocalFile</find>
+      <find>marker</find>
+      <find>Master</find>
+      <find>from src.mode</find>
+      <find>RestoreResult</find>
+      <find>RichSessionInfo</find>
+      <find>batch</find>
+      <find>sdk</find>
+      <find>anth</find>
+      <find>claude_code_sonnet_1m_access</find>
+      <find>- Different log format showing more detailed metadata
+  - Capture process started mid-sequence at request #23
+
+  I'll definitely recommend re-capturing with the new script. The improvements ensure a clean, consistent capture process with better reliability and logging. Starting from request #1 will provide a more comprehensive and structured dataset, 
+  addressing potential inconsistencies in the previous capture method.
+
+  The key motivations are comprehensive logging, thread safety, and a</find>
+      <find>AccountSettingsResponse</find>
+      <find>path</find>
+      <find>jsondate</find>
+      <find>plan</find>
+      <find>AccessDenied</find>
+      <find>\n\⏺ This research confirms several key points and provides a clear path forward\. Let me synthesize the findings\:\n\n  Key Research Findings\n\n  \| Approach                          \| Viability \| Notes                                                 \|\n  \|\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\|\-\-\-\-\-\-\-\-\-\-\-\|\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\|\n  \| Connection\-based \(client_conn\.id\) \| \❌        \| Node\.js doesn\'t use persistent connections by default \|\n  \| Environment variable to mitmproxy \| \✅        \| Addons can read env vars at load time                 \|\n  \| flow\.metadata for tagging         \| \✅        \| Persists to exports\, doesn\'t modify HTTP request      \|\n  \| Proxy headers \(Proxy\-\*\)           \| \❌        \| Would need to be stripped\, not reliable               \|\n  \| Node\.js env var \→ headers         \| \❌        \| No standard mechanism without modifying Claude Code   \|\n  \| Temporal heuristics               \| \⚠\️        \| Fallback option\, not primary                          \|\n  \| W3C Trace Context                 \| \❌        \| Requires application instrumentation                  \|\n\n  The Recommended Architecture\n\n  Layer 1\: Capture Session Tagging \(Always Works\)\n  \# Generate capture session ID\, pass to both mitmproxy AND as env var\n  CAPTURE_SESSION_ID\=\$\(uuidgen\)\n  mitmdump \-p 8080 \-s scripts\/intercept_traffic\.py \&amp;\n  CAPTURE_SESSION_ID\=\$CAPTURE_SESSION_ID HTTPS_PROXY\=http\:\/\/localhost\:8080 claude\n\n  mitmproxy addon\:\n  \- Reads CAPTURE_SESSION_ID from environment at startup\n  \- Adds flow\.metadata\[\'capture_session_id\'\] to EVERY flow\n  \- Creates session directory\: captures\/session_\&lt;id\&gt;\/\n\n  Layer 2\: Claude Session Discovery \(When Available\)\n  \- Hook into request processing\n  \- When we see telemetry\/Statsig with sessionId\, record it\n  \- Store mapping in manifest\: capture_session_id \→ claude_session_id\n\n  Layer 3\: Manifest File\n  \{\n    \&quot;capture_session_id\&quot;\: \&quot;a1b2c3d4\-\.\.\.\&quot;\,\n    \&quot;capture_version\&quot;\: 2\,\n    \&quot;started_at\&quot;\: \&quot;2026\-01\-03T15\:45\:23Z\&quot;\,\n    \&quot;ended_at\&quot;\: \&quot;2026\-01\-03T16\:02\:45Z\&quot;\,\n    \&quot;claude_sessions\&quot;\: \{\n      \&quot;019b46e3\-\.\.\.\&quot;\: \{\n        \&quot;first_seen_at\&quot;\: \&quot;2026\-01\-03T15\:45\:30Z\&quot;\,\n        \&quot;first_seen_in\&quot;\: \&quot;req_005_api_anthropic_com_api_event_logging_batch\.json\&quot;\n      \}\n    \}\,\n    \&quot;counts\&quot;\: \{\.\.\.\}\n  \}\n\n  What This Achieves\n\n  1\. Every capture has explicit capture_session_id \- No filename extraction needed\n  2\. Correlation to Claude sessions \- When telemetry appears\, mapping is recorded\n  3\. Clean directory structure \- Each capture session isolated\n  4\. Cross\-reference possible \- captures\/session_X\/manifest\.json \→ Claude session file\n\n  Questions for You\n\n  1\. Does this architecture make sense\?\n  2\. Should I implement this multi\-layered approach now\?\n  3\. Do you want a wrapper script that handles generating the CAPTURE_SESSION_ID and launching both mitmproxy and Claude\?\n</find>
+      <find>CAPTURE_REGISTRY</find>
+      <find>Excellent analysis from the agent. Here's the summary:
+
+  Actionable Items (CAN BE TYPED - 3)
+
+  | Location                  | Current                  | Recommendation                                                   |
+  |---------------------------|--------------------------|------------------------------------------------------------------|
+  | response.py:94            | Mapping[str, Any]        | Reuse ToolInput union from session models - already typed there! |
+  | internal_endpoints.py:114 | Mapping[str, Any] | None | Create MetricsAttributes with Field(alias='user.id') etc.        |
+  | statsig.py:107            | Mapping[str, Any]        | Create DerivedFields model                                       |
+
+  Always Empty (3) - Document or type as empty
+
+  | Location                  | Field            | Always |
+  |---------------------------|------------------|--------|
+  | internal_endpoints.py:243 | forcedVariations | {}     |
+  | internal_endpoints.py:299 | client_data      | {}     |
+  | statsig.py:193            | layer_configs    | {}     |
+
+  Genuinely Polymorphic (3) - Keep as-is
+
+  - request.py:52 - JSON Schema properties (recursive spec)
+  - internal_endpoints.py:207 - FeatureValue.value (different flags = different shapes)
+  - statsig.py:133 - StatsigBaseDynamicConfig.value (47+ unique configs)
+
+  Intentional (4) - Keep as-is
+
+  - Unknown*Capture fallbacks
+  - streaming.py:127 - Always {} at block start (filled via deltas)
+  - session/models.py:116 - Generic function parameter
+
+  Defaults Verdict
+
+  All 100% necessary - represent true API optionality, version compatibility, or reserved fields.
+
+  ---
+  Should I proceed with typing the 3 actionable items?
+
+  Todos
+  ☐ Type ALL Mapping[str, Any] - comprehensive strict typing
+  ☒ Validate against captures after typing
+  ☒ Add validate_captures.py script
+  ☐ Continue typing remaining Mapping[str,Any] (10 remain)
+  ☐ Recapture traffic with new naming format
+  ☐ Phase 7: Perplexity architecture review
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+&gt; `` 
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  mitmdump -p 8080 -s scripts/intercept_t… (running)</find>
+      <find>PermissiveModel</find>
+      <find>StrictModel</find>
+      <find>nosuch</find>
+      <find>verbose</find>
+      <find>pre-co</find>
+      <find>_coerce_to_tuple</find>
+      <find>IPv6Address</find>
+      <find>NetworkAddress</find>
+      <find>_preprocess_capture</find>
+      <find>mutable-type</find>
+      <find>Any</find>
+      <find>FeaturesDict</find>
+      <find>tengu-off-switch</find>
+      <find>OffSwitchConfig</find>
+      <find>uv run python3</find>
+      <find>Hello! How can I help you today?</find>
+      <find>Kw4wOg_ZYQ</find>
+      <find>stickers</find>
+      <find>please</find>
+      <find>model</find>
+      <find>Ideating</find>
+      <find>find</find>
+      <find>sonnet_1m_access</find>
+      <find>TopOfFeedTipFeatureValue</find>
+      <find>ultra//c</find>
+      <find>session</find>
+      <find>T = TypeVar('T', bound=BaseModel)</find>
+      <find>if TY</find>
+      <find>pathlib</find>
+      <find>ult</find>
+      <find>ultrathink</find>
+      <find>from py</find>
+      <find>noqa:</find>
+      <find># noqa: loose-typing - genuinely polymorphic</find>
+      <find>CapturedTraffic</find>
+      <find>field</find>
+      <find>loose-typing</find>
+      <find>_CAPTURE_ADAPTER</find>
+      <find>Discriminator</find>
+      <find>stone</find>
+      <find>api.anthropic.com/v1</find>
+      <find>api.anthropic.com/v1/messages?be</find>
+      <find>Discover yourself the formula for 10! And prove it.</find>
+      <find>iden</find>
+      <find>ALLOWED_CLAUDE_TOOL_NAMES</find>
+      <find>toolinput</find>
+      <find>MODELED_CLAUDE_TOOLS</find>
+      <find>HandoffCommandResult</find>
+      <find>ToolUseResultUnion</find>
+      <find>agentout</find>
+      <find>NetworkError</find>
+      <find>/v1/messages</find>
+      <find>fd0fe7fa-5c9d-40a0-a1d2-9a5cf307ebbb</find>
+      <find>ps</find>
+      <find>download</find>
+      <find>47506b20-db02-4042-aa47-34174416ae8d</find>
+      <find>token</find>
+      <find>limit</find>
+      <find>Hello World Order!</find>
+      <find>crush</find>
+      <find>eng-ai-tips</find>
+      <find>status</find>
+      <find>mcp add</find>
+      <find>39000</find>
+      <find>CLAUDE_CODE_PLAN_V2_AGENT_COUNT,</find>
+      <find>Package docstring: &quot;Claude Session MCP - Archive and manage Claude Code sessions.&quot;</find>
+      <find>Package docstring:</find>
+      <find>Package docstring</find>
+      <find>Now I have a comprehensive view of all</find>
+      <find>Now I have a comprehensive view of all archive-related files. Here is my report:</find>
+      <find>Now I have a comprehensive view</find>
+      <find>subagent</find>
+      <find>env</find>
+      <find>CLAUDE_CODE_BLOCKING_LIMIT_OVERRIDE</find>
+      <find>permissionMode</find>
+      <find>prompt</find>
+      <find>TaskSingleToolResult</find>
+      <find>run</find>
+      <find>docsea</find>
+      <find>ConnectTimeout</find>
+      <find>index_directory</find>
+      <find>&quot;document-search&quot;</find>
+      <find>first_message_at</find>
+      <find>CLAUDE_CODE_FILE_READ_MAX_OUTPUT_TOKENS</find>
+      <find />
+      <find>uv run</find>
+    </findStrings>
+    <replaceStrings>
+      <replace />
+    </replaceStrings>
+    <dirStrings>
+      <dir>$PROJECT_DIR$/../Downloads</dir>
+      <dir>$PROJECT_DIR$/.claude</dir>
+      <dir>$PROJECT_DIR$/scripts</dir>
+      <dir>$PROJECT_DIR$/src/services</dir>
+      <dir>$PROJECT_DIR$/captures/019b978a-462d-777f-8d3b-cd06995efec6</dir>
+      <dir>$PROJECT_DIR$/captures/36d516c6-3eb1-4ec1-b592-eadfaf0d2a75</dir>
+      <dir>$PROJECT_DIR$/captures/019b9797-34e7-71d3-b2f9-29af6c5fddc4</dir>
+      <dir>$PROJECT_DIR$/src/schemas/cc</dir>
+      <dir>$PROJECT_DIR$/src/schemas/operations</dir>
+      <dir>$PROJECT_DIR$/src/schemas/captures</dir>
+      <dir>$PROJECT_DIR$/src/schemas</dir>
+      <dir>$PROJECT_DIR$/src</dir>
+      <dir>$PROJECT_DIR$/captures/e2925935-35b4-4f97-bd30-85218a68c8f2</dir>
+      <dir>$PROJECT_DIR$/src/schemas/session</dir>
+      <dir>$PROJECT_DIR$/captures/fd0fe7fa-5c9d-40a0-a1d2-9a5cf307ebbb</dir>
+      <dir>$PROJECT_DIR$/captures</dir>
+      <dir>$PROJECT_DIR$/captures/afb40981-be81-400e-9394-1835ea8335d8</dir>
+      <dir>$PROJECT_DIR$/../.claude/debug</dir>
+      <dir>$PROJECT_DIR$/src/schemas/cc_internal_api</dir>
+      <dir>$PROJECT_DIR$</dir>
+    </dirStrings>
+  </component>
+  <component name="FindInProjectScope">
+    <option name="isProjectScope" value="true" />
+  </component>
+  <component name="GitSEFilterConfiguration">{}</component>
+  <component name="IdeDocumentHistory">{
+  &quot;changedPaths&quot;: [
+    &quot;/private/var/folders/n3/m2nywn4d3rz0hntq64ytrpnm0000gn/T/claude-session-k58qq7la/session-b173ace2-20251111_100859.json&quot;,
+    &quot;/private/var/folders/n3/m2nywn4d3rz0hntq64ytrpnm0000gn/T/claude-session-k58qq7la/session-b173ace2-20251111_101825.json&quot;,
+    &quot;/Users/chris/Library/Application Support/JetBrains/PyCharm2025.2/scratches/scratch_91.json&quot;,
+    &quot;/Users/chris/monorepo/data-apps/underwriting-api/tests/integration/workflows/test_tape_to_elasticsearch.py&quot;,
+    &quot;/Users/chris/claude-session-mcp/handoff-b3e2484d.md&quot;,
+    &quot;/Users/chris/claude-session-mcp/.gitignore&quot;,
+    &quot;/Users/chris/Library/Application Support/JetBrains/PyCharm2025.2/scratches/scratch_100.md&quot;,
+    &quot;/Users/chris/claude-session-mcp/src/schemas/cc_internal_api/internal_endpoints.py&quot;,
+    &quot;/Users/chris/claude-session-mcp/captures/req_108_statsig_anthropic_com_v1_rgstr_k_client-RRNS7R65EAtReO5XA4xDC3eU6ZdJQi6lLEP6b5j3.json&quot;,
+    &quot;/Users/chris/claude-session-mcp/src/schemas/cc_internal_api/base.py&quot;,
+    &quot;/Users/chris/claude-session-mcp/CLAUDE.md&quot;,
+    &quot;/Users/chris/claude-session-mcp/src/migrations.py&quot;,
+    &quot;/Users/chris/claude-session-mcp/src/schemas/session/models2.py&quot;,
+    &quot;/Users/chris/claude-session-mcp/src/schemas/session/models3.py&quot;,
+    &quot;/Users/chris/claude-session-mcp/src/schemas/session/models6.py&quot;,
+    &quot;/Users/chris/claude-session-mcp/captures/unknown/error_003_a81f5e8a.json&quot;,
+    &quot;/Users/chris/claude-session-mcp/src/schemas/cc_internal_api/streaming.py&quot;,
+    &quot;/Users/chris/claude-session-mcp/src/schemas/types.py&quot;,
+    &quot;/Users/chris/claude-session-mcp/src/schemas/captures/loader.py&quot;,
+    &quot;/Users/chris/claude-session-mcp/src/schemas/captures/anthropic.py&quot;,
+    &quot;/Users/chris/claude-session-mcp/src/schemas/operations/lineage.py&quot;,
+    &quot;/Users/chris/claude-session-mcp/src/schemas/captures/base.py&quot;,
+    &quot;/Users/chris/claude-session-mcp/src/schemas/claude_workspace.py&quot;,
+    &quot;/Users/chris/claude-session-mcp/src/schemas/captures/gcs.py&quot;,
+    &quot;/Users/chris/claude-session-mcp/src/schemas/captures/README.md&quot;,
+    &quot;/Users/chris/.claude/projects/-Users-chris-claude-session-mcp/7644394b-6452-4f3d-82f7-90f56d523e58/tool-results/mcp-selenium-browser-automation-get_aria_snapshot-1767843815099.txt&quot;,
+    &quot;/Users/chris/claude-session-mcp/src/schemas/session/models.py&quot;,
+    &quot;/Users/chris/claude-session-mcp/src/services/version.py&quot;,
+    &quot;/Users/chris/claude-session-mcp/src/schemas/cc_internal_api/statsig.py&quot;,
+    &quot;/Users/chris/Library/Application Support/JetBrains/PyCharm2025.2/scratches/scratch_102.md&quot;,
+    &quot;/Users/chris/claude-session-mcp/captures/fd0fe7fa-5c9d-40a0-a1d2-9a5cf307ebbb/179_resp_api_anthropic_com_v1_messages_beta_true.json&quot;,
+    &quot;/Users/chris/claude-session-mcp/README.md&quot;,
+    &quot;/Users/chris/claude-session-mcp/docs/handoff-api-schema-capture.md&quot;,
+    &quot;/Users/chris/.claude.json&quot;,
+    &quot;/Users/chris/.claude/debug/e4f60551-9335-41f8-90c9-a664777cc528.txt&quot;,
+    &quot;/Users/chris/.claude/settings.json&quot;,
+    &quot;/Users/chris/claude-session-mcp/.claude/settings.local.json&quot;
+  ]
+}</component>
+  <component name="IgnoredFileRootStore">
+    <option name="generatedRoots">
+      <set>
+        <option value="$PROJECT_DIR$/.idea" />
+      </set>
+    </option>
+  </component>
+  <component name="LanguageUsageStatistics">
+    <language id="GitIgnore">
+      <summary usageCount="5" lastUsage="1767644515456" />
+    </language>
+    <language id="JSON">
+      <summary usageCount="99" lastUsage="1770303014128" />
+    </language>
+    <language id="JSON Lines">
+      <summary usageCount="2" lastUsage="1767227391610" />
+    </language>
+    <language id="Markdown">
+      <summary usageCount="82" lastUsage="1770303014770" />
+    </language>
+    <language id="Python">
+      <summary usageCount="144" lastUsage="1770303014296" />
+    </language>
+    <language id="SVG">
+      <summary usageCount="1" lastUsage="1769128233754" />
+    </language>
+    <language id="TEXT">
+      <summary usageCount="13" lastUsage="1770303014423" />
+    </language>
+    <language id="TOML">
+      <summary usageCount="2" lastUsage="1767230711088" />
+    </language>
+    <language id="textmate">
+      <summary usageCount="3" lastUsage="1767799227062" />
+    </language>
+    <language id="yaml">
+      <summary usageCount="1" lastUsage="1767712870725" />
+    </language>
+  </component>
+  <component name="ProjectView">
+    <navigator currentView="ProjectPane" proportions="" version="1" />
+    <panes>
+      <pane id="ProjectPane">
+        <subPane>
+          <expand>
+            <path>
+              <item name="claude-session-mcp" type="b2602c69:ProjectViewProjectNode" />
+              <item name="dir{file:///Users/chris/claude-session-mcp}" type="462c0819:PsiDirectoryNode" />
+            </path>
+            <path>
+              <item name="claude-session-mcp" type="b2602c69:ProjectViewProjectNode" />
+              <item name="dir{file:///Users/chris/claude-session-mcp}" type="462c0819:PsiDirectoryNode" />
+              <item name="dir{file:///Users/chris/claude-session-mcp/.claude}" type="462c0819:PsiDirectoryNode" />
+            </path>
+            <path>
+              <item name="claude-session-mcp" type="b2602c69:ProjectViewProjectNode" />
+              <item name="dir{file:///Users/chris/claude-session-mcp}" type="462c0819:PsiDirectoryNode" />
+              <item name="dir{file:///Users/chris/claude-session-mcp/analysis}" type="462c0819:PsiDirectoryNode" />
+            </path>
+            <path>
+              <item name="claude-session-mcp" type="b2602c69:ProjectViewProjectNode" />
+              <item name="dir{file:///Users/chris/claude-session-mcp}" type="462c0819:PsiDirectoryNode" />
+              <item name="dir{file:///Users/chris/claude-session-mcp/analysis}" type="462c0819:PsiDirectoryNode" />
+              <item name="dir{file:///Users/chris/claude-session-mcp/analysis/rushi-session}" type="462c0819:PsiDirectoryNode" />
+            </path>
+          </expand>
+          <select />
+          <presentation>
+            <attributes />
+            <data iconPath="expui/toolwindows/project.svg" iconPlugin="com.intellij" isLeaf="false" text="claude-session-mcp" />
+            <item name="claude-session-mcp" type="b2602c69:ProjectViewProjectNode" />
+            <presentation>
+              <attributes>
+                <map>
+                  <entry key="filePath" value="$PROJECT_DIR$" />
+                </map>
+              </attributes>
+              <data iconPath="expui/nodes/folder.svg" iconPlugin="com.intellij" isLeaf="false" text="claude-session-mcp" />
+              <item name="dir{file:///Users/chris/claude-session-mcp}" type="462c0819:PsiDirectoryNode" />
+              <presentation>
+                <attributes>
+                  <map>
+                    <entry key="filePath" value="$PROJECT_DIR$/.claude" />
+                  </map>
+                </attributes>
+                <data iconPath="expui/nodes/folder.svg" iconPlugin="com.intellij" isLeaf="false" text=".claude" />
+                <item name="dir{file:///Users/chris/claude-session-mcp/.claude}" type="462c0819:PsiDirectoryNode" />
+                <presentation>
+                  <attributes>
+                    <map>
+                      <entry key="filePath" value="$PROJECT_DIR$/.claude/skills" />
+                    </map>
+                  </attributes>
+                  <data iconPath="expui/nodes/folder.svg" iconPlugin="com.intellij" isLeaf="false" text="skills" />
+                  <item name="dir{file:///Users/chris/claude-session-mcp/.claude/skills}" type="462c0819:PsiDirectoryNode" />
+                </presentation>
+                <presentation>
+                  <attributes>
+                    <map>
+                      <entry key="filePath" value="$PROJECT_DIR$/.claude/settings.local.json" />
+                    </map>
+                  </attributes>
+                  <data iconPath="expui/fileTypes/json.svg" iconPlugin="com.intellij" isLeaf="true" text="settings.local.json" />
+                  <item name="settings.local.json" type="ab9368bb:PsiFileNode" />
+                </presentation>
+              </presentation>
+              <presentation>
+                <attributes>
+                  <map>
+                    <entry key="filePath" value="$PROJECT_DIR$/.specstory" />
+                  </map>
+                </attributes>
+                <data iconPath="expui/nodes/folder.svg" iconPlugin="com.intellij" isLeaf="false" text=".specstory" />
+                <item name="dir{file:///Users/chris/claude-session-mcp/.specstory}" type="462c0819:PsiDirectoryNode" />
+              </presentation>
+              <presentation>
+                <attributes>
+                  <map>
+                    <entry key="filePath" value="$PROJECT_DIR$/.venv" />
+                  </map>
+                </attributes>
+                <data iconPath="expui/nodes/excludeRoot.svg" iconPlugin="com.intellij" isLeaf="false" text=".venv" />
+                <item name="dir{file:///Users/chris/claude-session-mcp/.venv}" type="462c0819:PsiDirectoryNode" />
+              </presentation>
+              <presentation>
+                <attributes>
+                  <map>
+                    <entry key="filePath" value="$PROJECT_DIR$/analysis" />
+                  </map>
+                </attributes>
+                <data iconPath="expui/nodes/folder.svg" iconPlugin="com.intellij" isLeaf="false" text="analysis" />
+                <item name="dir{file:///Users/chris/claude-session-mcp/analysis}" type="462c0819:PsiDirectoryNode" />
+                <presentation>
+                  <attributes>
+                    <map>
+                      <entry key="filePath" value="$PROJECT_DIR$/analysis/rushi-session" />
+                    </map>
+                  </attributes>
+                  <data iconPath="expui/nodes/folder.svg" iconPlugin="com.intellij" isLeaf="false" text="rushi-session" />
+                  <item name="dir{file:///Users/chris/claude-session-mcp/analysis/rushi-session}" type="462c0819:PsiDirectoryNode" />
+                  <presentation>
+                    <attributes>
+                      <map>
+                        <entry key="filePath" value="$PROJECT_DIR$/analysis/rushi-session/session-archive.json" />
+                      </map>
+                    </attributes>
+                    <data iconPath="expui/fileTypes/json.svg" iconPlugin="com.intellij" isLeaf="true" text="session-archive.json" />
+                    <item name="session-archive.json" type="ab9368bb:PsiFileNode" />
+                  </presentation>
+                  <presentation>
+                    <attributes>
+                      <map>
+                        <entry key="filePath" value="$PROJECT_DIR$/analysis/rushi-session/session-archive.json.zst" />
+                      </map>
+                    </attributes>
+                    <data isLeaf="true" text="session-archive.json.zst" />
+                    <item name="session-archive.json.zst" type="ab9368bb:PsiFileNode" />
+                  </presentation>
+                  <presentation>
+                    <attributes>
+                      <map>
+                        <entry key="filePath" value="$PROJECT_DIR$/analysis/rushi-session/session-archive.json.zst.b64" />
+                      </map>
+                    </attributes>
+                    <data iconPath="expui/fileTypes/text.svg" iconPlugin="com.intellij" isLeaf="true" text="session-archive.json.zst.b64" />
+                    <item name="session-archive.json.zst.b64" type="ab9368bb:PsiFileNode" />
+                  </presentation>
+                  <presentation>
+                    <attributes>
+                      <map>
+                        <entry key="filePath" value="$PROJECT_DIR$/analysis/rushi-session/session-archive.zip" />
+                      </map>
+                    </attributes>
+                    <data iconPath="expui/fileTypes/archive.svg" iconPlugin="com.intellij" isLeaf="true" text="session-archive.zip" />
+                    <item name="session-archive.zip" type="ab9368bb:PsiFileNode" />
+                  </presentation>
+                  <presentation>
+                    <attributes>
+                      <map>
+                        <entry key="filePath" value="$PROJECT_DIR$/analysis/rushi-session/session-archive.zip.b64" />
+                      </map>
+                    </attributes>
+                    <data iconPath="expui/fileTypes/text.svg" iconPlugin="com.intellij" isLeaf="true" text="session-archive.zip.b64" />
+                    <item name="session-archive.zip.b64" type="ab9368bb:PsiFileNode" />
+                  </presentation>
+                </presentation>
+              </presentation>
+              <presentation>
+                <attributes>
+                  <map>
+                    <entry key="filePath" value="$PROJECT_DIR$/captures" />
+                  </map>
+                </attributes>
+                <data iconPath="expui/nodes/folder.svg" iconPlugin="com.intellij" isLeaf="false" text="captures" />
+                <item name="dir{file:///Users/chris/claude-session-mcp/captures}" type="462c0819:PsiDirectoryNode" />
+              </presentation>
+              <presentation>
+                <attributes>
+                  <map>
+                    <entry key="filePath" value="$PROJECT_DIR$/docs" />
+                  </map>
+                </attributes>
+                <data iconPath="expui/nodes/folder.svg" iconPlugin="com.intellij" isLeaf="false" text="docs" />
+                <item name="dir{file:///Users/chris/claude-session-mcp/docs}" type="462c0819:PsiDirectoryNode" />
+              </presentation>
+              <presentation>
+                <attributes>
+                  <map>
+                    <entry key="filePath" value="$PROJECT_DIR$/fixtures" />
+                  </map>
+                </attributes>
+                <data iconPath="expui/nodes/folder.svg" iconPlugin="com.intellij" isLeaf="false" text="fixtures" />
+                <item name="dir{file:///Users/chris/claude-session-mcp/fixtures}" type="462c0819:PsiDirectoryNode" />
+              </presentation>
+              <presentation>
+                <attributes>
+                  <map>
+                    <entry key="filePath" value="$PROJECT_DIR$/scratch" />
+                  </map>
+                </attributes>
+                <data iconPath="expui/nodes/folder.svg" iconPlugin="com.intellij" isLeaf="false" text="scratch" />
+                <item name="dir{file:///Users/chris/claude-session-mcp/scratch}" type="462c0819:PsiDirectoryNode" />
+              </presentation>
+              <presentation>
+                <attributes>
+                  <map>
+                    <entry key="filePath" value="$PROJECT_DIR$/scripts" />
+                  </map>
+                </attributes>
+                <data iconPath="expui/nodes/folder.svg" iconPlugin="com.intellij" isLeaf="false" text="scripts" />
+                <item name="dir{file:///Users/chris/claude-session-mcp/scripts}" type="462c0819:PsiDirectoryNode" />
+              </presentation>
+              <presentation>
+                <attributes>
+                  <map>
+                    <entry key="filePath" value="$PROJECT_DIR$/src" />
+                  </map>
+                </attributes>
+                <data iconPath="expui/nodes/package.svg" iconPlugin="com.intellij" isLeaf="false" text="src" />
+                <item name="dir{file:///Users/chris/claude-session-mcp/src}" type="462c0819:PsiDirectoryNode" />
+              </presentation>
+              <presentation>
+                <attributes>
+                  <map>
+                    <entry key="filePath" value="$PROJECT_DIR$/stubs" />
+                  </map>
+                </attributes>
+                <data iconPath="expui/nodes/folder.svg" iconPlugin="com.intellij" isLeaf="false" text="stubs" />
+                <item name="dir{file:///Users/chris/claude-session-mcp/stubs}" type="462c0819:PsiDirectoryNode" />
+              </presentation>
+              <presentation>
+                <attributes>
+                  <map>
+                    <entry key="filePath" value="$PROJECT_DIR$/tests" />
+                  </map>
+                </attributes>
+                <data iconPath="expui/nodes/package.svg" iconPlugin="com.intellij" isLeaf="false" text="tests" />
+                <item name="dir{file:///Users/chris/claude-session-mcp/tests}" type="462c0819:PsiDirectoryNode" />
+              </presentation>
+              <presentation>
+                <attributes>
+                  <map>
+                    <entry key="filePath" value="$PROJECT_DIR$/.cursorindexingignore" />
+                  </map>
+                </attributes>
+                <data iconPath="expui/fileTypes/text.svg" iconPlugin="com.intellij" isLeaf="true" text=".cursorindexingignore" />
+                <item name=".cursorindexingignore" type="ab9368bb:PsiFileNode" />
+              </presentation>
+              <presentation>
+                <attributes>
+                  <map>
+                    <entry key="filePath" value="$PROJECT_DIR$/.gitignore" />
+                  </map>
+                </attributes>
+                <data iconPath="expui/fileTypes/ignored.svg" iconPlugin="com.intellij" isLeaf="true" text=".gitignore" />
+                <item name=".gitignore" type="ab9368bb:PsiFileNode" />
+              </presentation>
+              <presentation>
+                <attributes>
+                  <map>
+                    <entry key="filePath" value="$PROJECT_DIR$/.pre-commit-config.yaml" />
+                  </map>
+                </attributes>
+                <data iconPath="expui/fileTypes/yaml.svg" iconPlugin="com.intellij" isLeaf="true" text=".pre-commit-config.yaml" />
+                <item name=".pre-commit-config.yaml" type="ab9368bb:PsiFileNode" />
+              </presentation>
+              <presentation>
+                <attributes>
+                  <map>
+                    <entry key="filePath" value="$PROJECT_DIR$/CLAUDE.md" />
+                  </map>
+                </attributes>
+                <data iconPath="icons/expui/markdown.svg" iconPlugin="org.intellij.plugins.markdown" isLeaf="true" text="CLAUDE.md" />
+                <item name="CLAUDE.md" type="ab9368bb:PsiFileNode" />
+              </presentation>
+              <presentation>
+                <attributes>
+                  <map>
+                    <entry key="filePath" value="$PROJECT_DIR$/pyproject.toml" />
+                  </map>
+                </attributes>
+                <data iconPath="icons/newui/toml.svg" iconPlugin="org.toml.lang" isLeaf="true" text="pyproject.toml" />
+                <item name="pyproject.toml" type="ab9368bb:PsiFileNode" />
+              </presentation>
+              <presentation>
+                <attributes>
+                  <map>
+                    <entry key="filePath" value="$PROJECT_DIR$/README.md" />
+                  </map>
+                </attributes>
+                <data iconPath="icons/expui/markdown.svg" iconPlugin="org.intellij.plugins.markdown" isLeaf="true" text="README.md" />
+                <item name="README.md" type="ab9368bb:PsiFileNode" />
+              </presentation>
+              <presentation>
+                <attributes>
+                  <map>
+                    <entry key="filePath" value="$PROJECT_DIR$/session-schema.json" />
+                  </map>
+                </attributes>
+                <data iconPath="expui/fileTypes/jsonSchema.svg" iconPlugin="com.intellij" isLeaf="true" text="session-schema.json" />
+                <item name="session-schema.json" type="ab9368bb:PsiFileNode" />
+              </presentation>
+              <presentation>
+                <attributes>
+                  <map>
+                    <entry key="filePath" value="$PROJECT_DIR$/uv.lock" />
+                  </map>
+                </attributes>
+                <data iconPath="icons/newui/toml.svg" iconPlugin="org.toml.lang" isLeaf="true" text="uv.lock" />
+                <item name="uv.lock" type="ab9368bb:PsiFileNode" />
+              </presentation>
+            </presentation>
+            <presentation>
+              <attributes />
+              <data iconPath="expui/nodes/library.svg" iconPlugin="com.intellij" isLeaf="false" text="External Libraries" />
+              <item name="External Libraries" type="cb654da1:ExternalLibrariesNode" />
+            </presentation>
+            <presentation>
+              <attributes />
+              <data iconPath="expui/fileTypes/scratches.svg" iconPlugin="com.intellij" isLeaf="false" text="Scratches and Consoles" />
+              <item name="Scratches and Consoles" type="b85a3e1f:ScratchTreeStructureProvider$MyProjectNode" />
+            </presentation>
+          </presentation>
+        </subPane>
+      </pane>
+      <pane id="Scope">
+        <subPane subId="Scope 'Project Files'; set:Project Files; class com.intellij.psi.search.scope.ProjectFilesScope">
+          <expand>
+            <path>
+              <item name="claude-session-mcp" type="3d21c010:ScopeViewTreeModel$ProjectNode" />
+              <item name="~/claude-session-mcp" type="442cc68d:ScopeViewTreeModel$RootNode" />
+            </path>
+            <path>
+              <item name="claude-session-mcp" type="3d21c010:ScopeViewTreeModel$ProjectNode" />
+              <item name="~/claude-session-mcp" type="442cc68d:ScopeViewTreeModel$RootNode" />
+              <item name=".claude" type="9f88c78c:ScopeViewTreeModel$FileNode" />
+            </path>
+            <path>
+              <item name="claude-session-mcp" type="3d21c010:ScopeViewTreeModel$ProjectNode" />
+              <item name="~/claude-session-mcp" type="442cc68d:ScopeViewTreeModel$RootNode" />
+              <item name="src" type="9f88c78c:ScopeViewTreeModel$FileNode" />
+            </path>
+            <path>
+              <item name="claude-session-mcp" type="3d21c010:ScopeViewTreeModel$ProjectNode" />
+              <item name="~/claude-session-mcp" type="442cc68d:ScopeViewTreeModel$RootNode" />
+              <item name="src" type="9f88c78c:ScopeViewTreeModel$FileNode" />
+              <item name="schemas" type="9f88c78c:ScopeViewTreeModel$FileNode" />
+            </path>
+            <path>
+              <item name="claude-session-mcp" type="3d21c010:ScopeViewTreeModel$ProjectNode" />
+              <item name="~/claude-session-mcp" type="442cc68d:ScopeViewTreeModel$RootNode" />
+              <item name="src" type="9f88c78c:ScopeViewTreeModel$FileNode" />
+              <item name="schemas" type="9f88c78c:ScopeViewTreeModel$FileNode" />
+              <item name="cc_internal_api" type="9f88c78c:ScopeViewTreeModel$FileNode" />
+            </path>
+          </expand>
+          <select />
+          <presentation>
+            <attributes />
+            <data iconPath="expui/runConfigurations/application.svg" iconPlugin="com.intellij" isLeaf="false" text="claude-session-mcp" />
+            <item name="claude-session-mcp" type="3d21c010:ScopeViewTreeModel$ProjectNode" />
+            <presentation>
+              <attributes>
+                <map>
+                  <entry key="filePath" value="$PROJECT_DIR$" />
+                </map>
+              </attributes>
+              <data iconPath="expui/nodes/folder.svg" iconPlugin="com.intellij" isLeaf="false" text="~/claude-session-mcp" />
+              <item name="~/claude-session-mcp" type="442cc68d:ScopeViewTreeModel$RootNode" />
+              <presentation>
+                <attributes>
+                  <map>
+                    <entry key="filePath" value="$PROJECT_DIR$/.claude" />
+                  </map>
+                </attributes>
+                <data iconPath="expui/nodes/folder.svg" iconPlugin="com.intellij" isLeaf="false" text=".claude" />
+                <item name=".claude" type="9f88c78c:ScopeViewTreeModel$FileNode" />
+                <presentation>
+                  <attributes>
+                    <map>
+                      <entry key="filePath" value="$PROJECT_DIR$/.claude/settings.local.json" />
+                    </map>
+                  </attributes>
+                  <data iconPath="expui/fileTypes/json.svg" iconPlugin="com.intellij" isLeaf="true" text="settings.local.json" />
+                  <item name="settings.local.json" type="ab9368bb:PsiFileNode" />
+                </presentation>
+              </presentation>
+              <presentation>
+                <attributes>
+                  <map>
+                    <entry key="filePath" value="$PROJECT_DIR$/.idea" />
+                  </map>
+                </attributes>
+                <data iconPath="expui/nodes/folder.svg" iconPlugin="com.intellij" isLeaf="false" text=".idea" />
+                <item name=".idea" type="9f88c78c:ScopeViewTreeModel$FileNode" />
+              </presentation>
+              <presentation>
+                <attributes>
+                  <map>
+                    <entry key="filePath" value="$PROJECT_DIR$/.specstory" />
+                  </map>
+                </attributes>
+                <data iconPath="expui/nodes/folder.svg" iconPlugin="com.intellij" isLeaf="false" text=".specstory" />
+                <item name=".specstory" type="9f88c78c:ScopeViewTreeModel$FileNode" />
+              </presentation>
+              <presentation>
+                <attributes>
+                  <map>
+                    <entry key="filePath" value="$PROJECT_DIR$/.venv" />
+                  </map>
+                </attributes>
+                <data iconPath="expui/nodes/excludeRoot.svg" iconPlugin="com.intellij" isLeaf="false" text=".venv" />
+                <item name=".venv" type="9f88c78c:ScopeViewTreeModel$FileNode" />
+              </presentation>
+              <presentation>
+                <attributes>
+                  <map>
+                    <entry key="filePath" value="$PROJECT_DIR$/analysis" />
+                  </map>
+                </attributes>
+                <data iconPath="expui/nodes/folder.svg" iconPlugin="com.intellij" isLeaf="false" text="analysis" />
+                <item name="analysis" type="9f88c78c:ScopeViewTreeModel$FileNode" />
+              </presentation>
+              <presentation>
+                <attributes>
+                  <map>
+                    <entry key="filePath" value="$PROJECT_DIR$/captures" />
+                  </map>
+                </attributes>
+                <data iconPath="expui/nodes/folder.svg" iconPlugin="com.intellij" isLeaf="false" text="captures" />
+                <item name="captures" type="9f88c78c:ScopeViewTreeModel$FileNode" />
+              </presentation>
+              <presentation>
+                <attributes>
+                  <map>
+                    <entry key="filePath" value="$PROJECT_DIR$/docs" />
+                  </map>
+                </attributes>
+                <data iconPath="expui/nodes/folder.svg" iconPlugin="com.intellij" isLeaf="false" text="docs" />
+                <item name="docs" type="9f88c78c:ScopeViewTreeModel$FileNode" />
+              </presentation>
+              <presentation>
+                <attributes>
+                  <map>
+                    <entry key="filePath" value="$PROJECT_DIR$/fixtures" />
+                  </map>
+                </attributes>
+                <data iconPath="expui/nodes/folder.svg" iconPlugin="com.intellij" isLeaf="false" text="fixtures" />
+                <item name="fixtures" type="9f88c78c:ScopeViewTreeModel$FileNode" />
+              </presentation>
+              <presentation>
+                <attributes>
+                  <map>
+                    <entry key="filePath" value="$PROJECT_DIR$/scratch" />
+                  </map>
+                </attributes>
+                <data iconPath="expui/nodes/folder.svg" iconPlugin="com.intellij" isLeaf="false" text="scratch" />
+                <item name="scratch" type="9f88c78c:ScopeViewTreeModel$FileNode" />
+              </presentation>
+              <presentation>
+                <attributes>
+                  <map>
+                    <entry key="filePath" value="$PROJECT_DIR$/scripts" />
+                  </map>
+                </attributes>
+                <data iconPath="expui/nodes/folder.svg" iconPlugin="com.intellij" isLeaf="false" text="scripts" />
+                <item name="scripts" type="9f88c78c:ScopeViewTreeModel$FileNode" />
+              </presentation>
+              <presentation>
+                <attributes>
+                  <map>
+                    <entry key="filePath" value="$PROJECT_DIR$/src" />
+                  </map>
+                </attributes>
+                <data iconPath="expui/nodes/package.svg" iconPlugin="com.intellij" isLeaf="false" text="src" />
+                <item name="src" type="9f88c78c:ScopeViewTreeModel$FileNode" />
+                <presentation>
+                  <attributes>
+                    <map>
+                      <entry key="filePath" value="$PROJECT_DIR$/src/cli" />
+                    </map>
+                  </attributes>
+                  <data iconPath="expui/nodes/package.svg" iconPlugin="com.intellij" isLeaf="false" text="cli" />
+                  <item name="cli" type="9f88c78c:ScopeViewTreeModel$FileNode" />
+                </presentation>
+                <presentation>
+                  <attributes>
+                    <map>
+                      <entry key="filePath" value="$PROJECT_DIR$/src/config" />
+                    </map>
+                  </attributes>
+                  <data iconPath="expui/nodes/package.svg" iconPlugin="com.intellij" isLeaf="false" text="config" />
+                  <item name="config" type="9f88c78c:ScopeViewTreeModel$FileNode" />
+                </presentation>
+                <presentation>
+                  <attributes>
+                    <map>
+                      <entry key="filePath" value="$PROJECT_DIR$/src/domain" />
+                    </map>
+                  </attributes>
+                  <data iconPath="expui/nodes/package.svg" iconPlugin="com.intellij" isLeaf="false" text="domain" />
+                  <item name="domain" type="9f88c78c:ScopeViewTreeModel$FileNode" />
+                </presentation>
+                <presentation>
+                  <attributes>
+                    <map>
+                      <entry key="filePath" value="$PROJECT_DIR$/src/mcp" />
+                    </map>
+                  </attributes>
+                  <data iconPath="expui/nodes/package.svg" iconPlugin="com.intellij" isLeaf="false" text="mcp" />
+                  <item name="mcp" type="9f88c78c:ScopeViewTreeModel$FileNode" />
+                </presentation>
+                <presentation>
+                  <attributes>
+                    <map>
+                      <entry key="filePath" value="$PROJECT_DIR$/src/schemas" />
+                    </map>
+                  </attributes>
+                  <data iconPath="expui/nodes/package.svg" iconPlugin="com.intellij" isLeaf="false" text="schemas" />
+                  <item name="schemas" type="9f88c78c:ScopeViewTreeModel$FileNode" />
+                  <presentation>
+                    <attributes>
+                      <map>
+                        <entry key="filePath" value="$PROJECT_DIR$/src/schemas/captures" />
+                      </map>
+                    </attributes>
+                    <data iconPath="expui/nodes/package.svg" iconPlugin="com.intellij" isLeaf="false" text="captures" />
+                    <item name="captures" type="9f88c78c:ScopeViewTreeModel$FileNode" />
+                  </presentation>
+                  <presentation>
+                    <attributes>
+                      <map>
+                        <entry key="filePath" value="$PROJECT_DIR$/src/schemas/cc_internal_api" />
+                      </map>
+                    </attributes>
+                    <data iconPath="expui/nodes/package.svg" iconPlugin="com.intellij" isLeaf="false" text="cc_internal_api" />
+                    <item name="cc_internal_api" type="9f88c78c:ScopeViewTreeModel$FileNode" />
+                    <presentation>
+                      <attributes>
+                        <map>
+                          <entry key="filePath" value="$PROJECT_DIR$/src/schemas/cc_internal_api/__init__.py" />
+                        </map>
+                      </attributes>
+                      <data iconPath="icons/com/jetbrains/python/parser/expui/python.svg" iconPlugin="PythonCore" isLeaf="true" text="__init__.py" />
+                      <item name="__init__.py" type="ab9368bb:PsiFileNode" />
+                    </presentation>
+                    <presentation>
+                      <attributes>
+                        <map>
+                          <entry key="filePath" value="$PROJECT_DIR$/src/schemas/cc_internal_api/base.py" />
+                        </map>
+                      </attributes>
+                      <data iconPath="icons/com/jetbrains/python/parser/expui/python.svg" iconPlugin="PythonCore" isLeaf="true" text="base.py" />
+                      <item name="base.py" type="ab9368bb:PsiFileNode" />
+                    </presentation>
+                    <presentation>
+                      <attributes>
+                        <map>
+                          <entry key="filePath" value="$PROJECT_DIR$/src/schemas/cc_internal_api/common.py" />
+                        </map>
+                      </attributes>
+                      <data iconPath="icons/com/jetbrains/python/parser/expui/python.svg" iconPlugin="PythonCore" isLeaf="true" text="common.py" />
+                      <item name="common.py" type="ab9368bb:PsiFileNode" />
+                    </presentation>
+                    <presentation>
+                      <attributes>
+                        <map>
+                          <entry key="filePath" value="$PROJECT_DIR$/src/schemas/cc_internal_api/feature_flags.py" />
+                        </map>
+                      </attributes>
+                      <data iconPath="icons/com/jetbrains/python/parser/expui/python.svg" iconPlugin="PythonCore" isLeaf="true" text="feature_flags.py" />
+                      <item name="feature_flags.py" type="ab9368bb:PsiFileNode" />
+                    </presentation>
+                    <presentation>
+                      <attributes>
+                        <map>
+                          <entry key="filePath" value="$PROJECT_DIR$/src/schemas/cc_internal_api/internal_endpoints.py" />
+                        </map>
+                      </attributes>
+                      <data iconPath="icons/com/jetbrains/python/parser/expui/python.svg" iconPlugin="PythonCore" isLeaf="true" text="internal_endpoints.py" />
+                      <item name="internal_endpoints.py" type="ab9368bb:PsiFileNode" />
+                    </presentation>
+                    <presentation>
+                      <attributes>
+                        <map>
+                          <entry key="filePath" value="$PROJECT_DIR$/src/schemas/cc_internal_api/rate_limits.py" />
+                        </map>
+                      </attributes>
+                      <data iconPath="icons/com/jetbrains/python/parser/expui/python.svg" iconPlugin="PythonCore" isLeaf="true" text="rate_limits.py" />
+                      <item name="rate_limits.py" type="ab9368bb:PsiFileNode" />
+                    </presentation>
+                    <presentation>
+                      <attributes>
+                        <map>
+                          <entry key="filePath" value="$PROJECT_DIR$/src/schemas/cc_internal_api/README.md" />
+                        </map>
+                      </attributes>
+                      <data iconPath="icons/expui/markdown.svg" iconPlugin="org.intellij.plugins.markdown" isLeaf="true" text="README.md" />
+                      <item name="README.md" type="ab9368bb:PsiFileNode" />
+                    </presentation>
+                    <presentation>
+                      <attributes>
+                        <map>
+                          <entry key="filePath" value="$PROJECT_DIR$/src/schemas/cc_internal_api/request.py" />
+                        </map>
+                      </attributes>
+                      <data iconPath="icons/com/jetbrains/python/parser/expui/python.svg" iconPlugin="PythonCore" isLeaf="true" text="request.py" />
+                      <item name="request.py" type="ab9368bb:PsiFileNode" />
+                    </presentation>
+                    <presentation>
+                      <attributes>
+                        <map>
+                          <entry key="filePath" value="$PROJECT_DIR$/src/schemas/cc_internal_api/response.py" />
+                        </map>
+                      </attributes>
+                      <data iconPath="icons/com/jetbrains/python/parser/expui/python.svg" iconPlugin="PythonCore" isLeaf="true" text="response.py" />
+                      <item name="response.py" type="ab9368bb:PsiFileNode" />
+                    </presentation>
+                    <presentation>
+                      <attributes>
+                        <map>
+                          <entry key="filePath" value="$PROJECT_DIR$/src/schemas/cc_internal_api/statsig.py" />
+                        </map>
+                      </attributes>
+                      <data iconPath="icons/com/jetbrains/python/parser/expui/python.svg" iconPlugin="PythonCore" isLeaf="true" text="statsig.py" />
+                      <item name="statsig.py" type="ab9368bb:PsiFileNode" />
+                    </presentation>
+                    <presentation>
+                      <attributes>
+                        <map>
+                          <entry key="filePath" value="$PROJECT_DIR$/src/schemas/cc_internal_api/streaming.py" />
+                        </map>
+                      </attributes>
+                      <data iconPath="icons/com/jetbrains/python/parser/expui/python.svg" iconPlugin="PythonCore" isLeaf="true" text="streaming.py" />
+                      <item name="streaming.py" type="ab9368bb:PsiFileNode" />
+                    </presentation>
+                    <presentation>
+                      <attributes>
+                        <map>
+                          <entry key="filePath" value="$PROJECT_DIR$/src/schemas/cc_internal_api/STRICT_TYPING.md" />
+                        </map>
+                      </attributes>
+                      <data iconPath="icons/expui/markdown.svg" iconPlugin="org.intellij.plugins.markdown" isLeaf="true" text="STRICT_TYPING.md" />
+                      <item name="STRICT_TYPING.md" type="ab9368bb:PsiFileNode" />
+                    </presentation>
+                    <presentation>
+                      <attributes>
+                        <map>
+                          <entry key="filePath" value="$PROJECT_DIR$/src/schemas/cc_internal_api/telemetry.py" />
+                        </map>
+                      </attributes>
+                      <data iconPath="icons/com/jetbrains/python/parser/expui/python.svg" iconPlugin="PythonCore" isLeaf="true" text="telemetry.py" />
+                      <item name="telemetry.py" type="ab9368bb:PsiFileNode" />
+                    </presentation>
+                    <presentation>
+                      <attributes>
+                        <map>
+                          <entry key="filePath" value="$PROJECT_DIR$/src/schemas/cc_internal_api/tool_input_schema.py" />
+                        </map>
+                      </attributes>
+                      <data iconPath="icons/com/jetbrains/python/parser/expui/python.svg" iconPlugin="PythonCore" isLeaf="true" text="tool_input_schema.py" />
+                      <item name="tool_input_schema.py" type="ab9368bb:PsiFileNode" />
+                    </presentation>
+                  </presentation>
+                  <presentation>
+                    <attributes>
+                      <map>
+                        <entry key="filePath" value="$PROJECT_DIR$/src/schemas/operations" />
+                      </map>
+                    </attributes>
+                    <data iconPath="expui/nodes/package.svg" iconPlugin="com.intellij" isLeaf="false" text="operations" />
+                    <item name="operations" type="9f88c78c:ScopeViewTreeModel$FileNode" />
+                  </presentation>
+                  <presentation>
+                    <attributes>
+                      <map>
+                        <entry key="filePath" value="$PROJECT_DIR$/src/schemas/session" />
+                      </map>
+                    </attributes>
+                    <data iconPath="expui/nodes/package.svg" iconPlugin="com.intellij" isLeaf="false" text="session" />
+                    <item name="session" type="9f88c78c:ScopeViewTreeModel$FileNode" />
+                  </presentation>
+                  <presentation>
+                    <attributes>
+                      <map>
+                        <entry key="filePath" value="$PROJECT_DIR$/src/schemas/__init__.py" />
+                      </map>
+                    </attributes>
+                    <data iconPath="icons/com/jetbrains/python/parser/expui/python.svg" iconPlugin="PythonCore" isLeaf="true" text="__init__.py" />
+                    <item name="__init__.py" type="ab9368bb:PsiFileNode" />
+                  </presentation>
+                  <presentation>
+                    <attributes>
+                      <map>
+                        <entry key="filePath" value="$PROJECT_DIR$/src/schemas/base.py" />
+                      </map>
+                    </attributes>
+                    <data iconPath="icons/com/jetbrains/python/parser/expui/python.svg" iconPlugin="PythonCore" isLeaf="true" text="base.py" />
+                    <item name="base.py" type="ab9368bb:PsiFileNode" />
+                  </presentation>
+                  <presentation>
+                    <attributes>
+                      <map>
+                        <entry key="filePath" value="$PROJECT_DIR$/src/schemas/claude_workspace.py" />
+                      </map>
+                    </attributes>
+                    <data iconPath="icons/com/jetbrains/python/parser/expui/python.svg" iconPlugin="PythonCore" isLeaf="true" text="claude_workspace.py" />
+                    <item name="claude_workspace.py" type="ab9368bb:PsiFileNode" />
+                  </presentation>
+                  <presentation>
+                    <attributes>
+                      <map>
+                        <entry key="filePath" value="$PROJECT_DIR$/src/schemas/types.py" />
+                      </map>
+                    </attributes>
+                    <data iconPath="icons/com/jetbrains/python/parser/expui/python.svg" iconPlugin="PythonCore" isLeaf="true" text="types.py" />
+                    <item name="types.py" type="ab9368bb:PsiFileNode" />
+                  </presentation>
+                </presentation>
+                <presentation>
+                  <attributes>
+                    <map>
+                      <entry key="filePath" value="$PROJECT_DIR$/src/services" />
+                    </map>
+                  </attributes>
+                  <data iconPath="expui/nodes/package.svg" iconPlugin="com.intellij" isLeaf="false" text="services" />
+                  <item name="services" type="9f88c78c:ScopeViewTreeModel$FileNode" />
+                </presentation>
+                <presentation>
+                  <attributes>
+                    <map>
+                      <entry key="filePath" value="$PROJECT_DIR$/src/storage" />
+                    </map>
+                  </attributes>
+                  <data iconPath="expui/nodes/package.svg" iconPlugin="com.intellij" isLeaf="false" text="storage" />
+                  <item name="storage" type="9f88c78c:ScopeViewTreeModel$FileNode" />
+                </presentation>
+                <presentation>
+                  <attributes>
+                    <map>
+                      <entry key="filePath" value="$PROJECT_DIR$/src/__init__.py" />
+                    </map>
+                  </attributes>
+                  <data iconPath="icons/com/jetbrains/python/parser/expui/python.svg" iconPlugin="PythonCore" isLeaf="true" text="__init__.py" />
+                  <item name="__init__.py" type="ab9368bb:PsiFileNode" />
+                </presentation>
+                <presentation>
+                  <attributes>
+                    <map>
+                      <entry key="filePath" value="$PROJECT_DIR$/src/exceptions.py" />
+                    </map>
+                  </attributes>
+                  <data iconPath="icons/com/jetbrains/python/parser/expui/python.svg" iconPlugin="PythonCore" isLeaf="true" text="exceptions.py" />
+                  <item name="exceptions.py" type="ab9368bb:PsiFileNode" />
+                </presentation>
+                <presentation>
+                  <attributes>
+                    <map>
+                      <entry key="filePath" value="$PROJECT_DIR$/src/introspection.py" />
+                    </map>
+                  </attributes>
+                  <data iconPath="icons/com/jetbrains/python/parser/expui/python.svg" iconPlugin="PythonCore" isLeaf="true" text="introspection.py" />
+                  <item name="introspection.py" type="ab9368bb:PsiFileNode" />
+                </presentation>
+                <presentation>
+                  <attributes>
+                    <map>
+                      <entry key="filePath" value="$PROJECT_DIR$/src/launcher.py" />
+                    </map>
+                  </attributes>
+                  <data iconPath="icons/com/jetbrains/python/parser/expui/python.svg" iconPlugin="PythonCore" isLeaf="true" text="launcher.py" />
+                  <item name="launcher.py" type="ab9368bb:PsiFileNode" />
+                </presentation>
+                <presentation>
+                  <attributes>
+                    <map>
+                      <entry key="filePath" value="$PROJECT_DIR$/src/migrations.py" />
+                    </map>
+                  </attributes>
+                  <data iconPath="icons/com/jetbrains/python/parser/expui/python.svg" iconPlugin="PythonCore" isLeaf="true" text="migrations.py" />
+                  <item name="migrations.py" type="ab9368bb:PsiFileNode" />
+                </presentation>
+                <presentation>
+                  <attributes>
+                    <map>
+                      <entry key="filePath" value="$PROJECT_DIR$/src/notepad.md" />
+                    </map>
+                  </attributes>
+                  <data iconPath="icons/expui/markdown.svg" iconPlugin="org.intellij.plugins.markdown" isLeaf="true" text="notepad.md" />
+                  <item name="notepad.md" type="ab9368bb:PsiFileNode" />
+                </presentation>
+                <presentation>
+                  <attributes>
+                    <map>
+                      <entry key="filePath" value="$PROJECT_DIR$/src/paths.py" />
+                    </map>
+                  </attributes>
+                  <data iconPath="icons/com/jetbrains/python/parser/expui/python.svg" iconPlugin="PythonCore" isLeaf="true" text="paths.py" />
+                  <item name="paths.py" type="ab9368bb:PsiFileNode" />
+                </presentation>
+                <presentation>
+                  <attributes>
+                    <map>
+                      <entry key="filePath" value="$PROJECT_DIR$/src/protocols.py" />
+                    </map>
+                  </attributes>
+                  <data iconPath="icons/com/jetbrains/python/parser/expui/python.svg" iconPlugin="PythonCore" isLeaf="true" text="protocols.py" />
+                  <item name="protocols.py" type="ab9368bb:PsiFileNode" />
+                </presentation>
+              </presentation>
+              <presentation>
+                <attributes>
+                  <map>
+                    <entry key="filePath" value="$PROJECT_DIR$/stubs" />
+                  </map>
+                </attributes>
+                <data iconPath="expui/nodes/folder.svg" iconPlugin="com.intellij" isLeaf="false" text="stubs" />
+                <item name="stubs" type="9f88c78c:ScopeViewTreeModel$FileNode" />
+              </presentation>
+              <presentation>
+                <attributes>
+                  <map>
+                    <entry key="filePath" value="$PROJECT_DIR$/tests" />
+                  </map>
+                </attributes>
+                <data iconPath="expui/nodes/package.svg" iconPlugin="com.intellij" isLeaf="false" text="tests" />
+                <item name="tests" type="9f88c78c:ScopeViewTreeModel$FileNode" />
+              </presentation>
+              <presentation>
+                <attributes>
+                  <map>
+                    <entry key="filePath" value="$PROJECT_DIR$/.cursorindexingignore" />
+                  </map>
+                </attributes>
+                <data iconPath="expui/fileTypes/text.svg" iconPlugin="com.intellij" isLeaf="true" text=".cursorindexingignore" />
+                <item name=".cursorindexingignore" type="ab9368bb:PsiFileNode" />
+              </presentation>
+              <presentation>
+                <attributes>
+                  <map>
+                    <entry key="filePath" value="$PROJECT_DIR$/.gitignore" />
+                  </map>
+                </attributes>
+                <data iconPath="expui/fileTypes/ignored.svg" iconPlugin="com.intellij" isLeaf="true" text=".gitignore" />
+                <item name=".gitignore" type="ab9368bb:PsiFileNode" />
+              </presentation>
+              <presentation>
+                <attributes>
+                  <map>
+                    <entry key="filePath" value="$PROJECT_DIR$/.pre-commit-config.yaml" />
+                  </map>
+                </attributes>
+                <data iconPath="expui/fileTypes/yaml.svg" iconPlugin="com.intellij" isLeaf="true" text=".pre-commit-config.yaml" />
+                <item name=".pre-commit-config.yaml" type="ab9368bb:PsiFileNode" />
+              </presentation>
+              <presentation>
+                <attributes>
+                  <map>
+                    <entry key="filePath" value="$PROJECT_DIR$/CLAUDE.md" />
+                  </map>
+                </attributes>
+                <data iconPath="icons/expui/markdown.svg" iconPlugin="org.intellij.plugins.markdown" isLeaf="true" text="CLAUDE.md" />
+                <item name="CLAUDE.md" type="ab9368bb:PsiFileNode" />
+              </presentation>
+              <presentation>
+                <attributes>
+                  <map>
+                    <entry key="filePath" value="$PROJECT_DIR$/pyproject.toml" />
+                  </map>
+                </attributes>
+                <data iconPath="icons/newui/toml.svg" iconPlugin="org.toml.lang" isLeaf="true" text="pyproject.toml" />
+                <item name="pyproject.toml" type="ab9368bb:PsiFileNode" />
+              </presentation>
+              <presentation>
+                <attributes>
+                  <map>
+                    <entry key="filePath" value="$PROJECT_DIR$/README.md" />
+                  </map>
+                </attributes>
+                <data iconPath="icons/expui/markdown.svg" iconPlugin="org.intellij.plugins.markdown" isLeaf="true" text="README.md" />
+                <item name="README.md" type="ab9368bb:PsiFileNode" />
+              </presentation>
+              <presentation>
+                <attributes>
+                  <map>
+                    <entry key="filePath" value="$PROJECT_DIR$/session-schema.json" />
+                  </map>
+                </attributes>
+                <data iconPath="expui/fileTypes/jsonSchema.svg" iconPlugin="com.intellij" isLeaf="true" text="session-schema.json" />
+                <item name="session-schema.json" type="ab9368bb:PsiFileNode" />
+              </presentation>
+              <presentation>
+                <attributes>
+                  <map>
+                    <entry key="filePath" value="$PROJECT_DIR$/uv.lock" />
+                  </map>
+                </attributes>
+                <data iconPath="icons/newui/toml.svg" iconPlugin="org.toml.lang" isLeaf="true" text="uv.lock" />
+                <item name="uv.lock" type="ab9368bb:PsiFileNode" />
+              </presentation>
+            </presentation>
+            <presentation>
+              <attributes>
+                <map>
+                  <entry key="filePath" value="$APPLICATION_CONFIG_DIR$/consoles/db" />
+                </map>
+              </attributes>
+              <data iconPath="expui/nodes/folder.svg" iconPlugin="com.intellij" isLeaf="false" text="Database Consoles" />
+              <item name="Database Consoles" type="442cc68d:ScopeViewTreeModel$RootNode" />
+            </presentation>
+            <presentation>
+              <attributes>
+                <map>
+                  <entry key="filePath" value="$APPLICATION_CONFIG_DIR$/extensions" />
+                </map>
+              </attributes>
+              <data iconPath="expui/nodes/folder.svg" iconPlugin="com.intellij" isLeaf="false" text="Extensions" />
+              <item name="Extensions" type="442cc68d:ScopeViewTreeModel$RootNode" />
+            </presentation>
+            <presentation>
+              <attributes>
+                <map>
+                  <entry key="filePath" value="$APPLICATION_CONFIG_DIR$/scratches" />
+                </map>
+              </attributes>
+              <data iconPath="expui/nodes/folder.svg" iconPlugin="com.intellij" isLeaf="false" text="Scratches" />
+              <item name="Scratches" type="442cc68d:ScopeViewTreeModel$RootNode" />
+            </presentation>
+          </presentation>
+        </subPane>
+      </pane>
+    </panes>
+  </component>
+  <component name="TerminalArrangementManager">
+    <option name="myTabStates">
+      <TerminalTabState tabName="Haiku new topic" userDefinedTabTitle="true" currentWorkingDirectory="$PROJECT_DIR$" />
+      <TerminalTabState tabName="Tool Search Tool" userDefinedTabTitle="true" currentWorkingDirectory="$PROJECT_DIR$" />
+      <TerminalTabState tabName="ThinkingMetadata Handoff (close?)" userDefinedTabTitle="true" currentWorkingDirectory="$PROJECT_DIR$" />
+      <TerminalTabState tabName="Tool Search Tool (force compacted)" userDefinedTabTitle="true" currentWorkingDirectory="$PROJECT_DIR$" />
+      <TerminalTabState tabName="Master" userDefinedTabTitle="true" currentWorkingDirectory="$PROJECT_DIR$" />
+      <TerminalTabState tabName="Context Editing?" userDefinedTabTitle="true" currentWorkingDirectory="$PROJECT_DIR$" />
+      <TerminalTabState tabName="Tasks / TODOs" userDefinedTabTitle="true" currentWorkingDirectory="$PROJECT_DIR$" />
+      <TerminalTabState tabName="Rushi Pair" userDefinedTabTitle="true" currentWorkingDirectory="$PROJECT_DIR$" />
+      <TerminalTabState tabName="Editable Install" userDefinedTabTitle="true" currentWorkingDirectory="$PROJECT_DIR$" />
+      <TerminalTabState tabName="Local" currentWorkingDirectory="$PROJECT_DIR$" />
+      <TerminalTabState tabName="Local (2)" currentWorkingDirectory="$PROJECT_DIR$" />
+    </option>
+  </component>
+  <component name="TerminalTabsStorage">
+    <option name="tabs">
+      <TerminalSessionPersistedTab name="Haiku new topic" isUserDefinedName="true" workingDirectory="$PROJECT_DIR$" />
+      <TerminalSessionPersistedTab name="Tool Search Tool" isUserDefinedName="true" workingDirectory="$PROJECT_DIR$" />
+      <TerminalSessionPersistedTab name="ThinkingMetadata Handoff (close?)" isUserDefinedName="true" workingDirectory="$PROJECT_DIR$" />
+      <TerminalSessionPersistedTab name="Tool Search Tool (force compacted)" isUserDefinedName="true" workingDirectory="$PROJECT_DIR$" />
+      <TerminalSessionPersistedTab name="Master" isUserDefinedName="true" workingDirectory="$PROJECT_DIR$" />
+      <TerminalSessionPersistedTab name="Context Editing?" isUserDefinedName="true" workingDirectory="$PROJECT_DIR$" />
+      <TerminalSessionPersistedTab name="Tasks / TODOs" isUserDefinedName="true" workingDirectory="$PROJECT_DIR$" />
+      <TerminalSessionPersistedTab name="Rushi Pair" isUserDefinedName="true" workingDirectory="$PROJECT_DIR$" />
+      <TerminalSessionPersistedTab name="Editable Install" isUserDefinedName="true" workingDirectory="$PROJECT_DIR$" />
+      <TerminalSessionPersistedTab name="Local" workingDirectory="$PROJECT_DIR$" />
+      <TerminalSessionPersistedTab name="Local (2)" workingDirectory="$PROJECT_DIR$" />
+    </option>
+  </component>
+  <component name="TimeTrackingManager">
+    <option name="totallyTimeSpent" value="627689000" />
+  </component>
+  <component name="ToolWindowManager">
+    <layoutV2>
+      <window_info active="true" content_ui="combo" id="Project" order="0" sideWeight="0.50136864" visible="true" weight="0.204" />
+      <window_info id="Commit" order="1" weight="0.20396563" />
+      <window_info id="Structure" order="2" sideWeight="0.4986314" side_tool="true" weight="0.1683655" />
+      <window_info anchor="bottom" id="HfCacheToolWindow" />
+      <window_info anchor="bottom" id="Version Control" order="0" />
+      <window_info anchor="bottom" id="Problems" order="1" />
+      <window_info anchor="bottom" id="Problems View" order="2" />
+      <window_info anchor="bottom" id="Services" order="3" weight="0.48546073" />
+      <window_info anchor="bottom" id="Python Packages" order="4" weight="0.1" />
+      <window_info anchor="bottom" id="Python Console" order="5" weight="0.1" />
+      <window_info anchor="bottom" id="GitHub Copilot MCP Log" order="6" />
+      <window_info anchor="bottom" id="Ruff Logging" order="7" side_tool="true" />
+      <window_info anchor="bottom" id="Debug" order="8" />
+      <window_info anchor="bottom" id="Find" order="9" weight="0.33938915" />
+      <window_info anchor="right" content_ui="combo" id="Notifications" order="0" weight="0.25" />
+      <window_info anchor="right" id="AIAssistant" order="1" weight="0.25" />
+      <window_info anchor="right" id="Database" order="2" weight="0.25" />
+      <window_info anchor="right" id="Gradle" order="3" weight="0.25" />
+      <window_info anchor="right" id="Maven" order="4" weight="0.25" />
+      <window_info anchor="right" id="Plots" order="5" weight="0.1" />
+      <window_info anchor="right" id="make" order="6" side_tool="true" />
+      <window_info anchor="right" id="Jupyter Variables" order="7" side_tool="true" />
+      <window_info anchor="right" id="Endpoints" order="8" />
+      <window_info anchor="right" id="github.copilotToolWindow" order="9" />
+      <window_info anchor="right" id="GitHub Copilot Chat" order="10" />
+      <window_info anchor="right" id="GitHub Coding Agent Jobs" order="11" />
+      <window_info active="true" anchor="right" id="Terminal" order="12" visible="true" weight="0.40782607" />
+      <unified_weights bottom="0.33938915" left="0.204" right="0.40782607" />
+    </layoutV2>
+    <recentWindows>
+      <value>Terminal</value>
+      <value>Project</value>
+      <value>Commit</value>
+      <value>Find</value>
+      <value>Services</value>
+      <value>Structure</value>
+    </recentWindows>
+  </component>
+  <component name="WindowStateProjectService">
+    <state x="868" y="314" width="3115" height="2161" key="DiffContextDialog" timestamp="1769485744120">
+      <screen x="0" y="30" width="6144" height="3426" />
+    </state>
+    <state x="543" y="114" width="2399" height="1700" key="DiffContextDialog/0.30.3840.2130@0.30.3840.2130" timestamp="1768588232751" />
+    <state x="543" y="114" width="2399" height="1700" key="DiffContextDialog/0.30.5120.2130@0.30.5120.2130" timestamp="1768935389894" />
+    <state x="850" y="163" width="2835" height="2298" key="DiffContextDialog/0.30.6016.3354@0.30.6016.3354" timestamp="1768248910719" />
+    <state x="1498" y="319" width="2399" height="1700" key="DiffContextDialog/0.30.6144.3426/6144.30.6144.3426@0.30.6144.3426" timestamp="1768977320797" />
+    <state x="868" y="314" width="3115" height="2161" key="DiffContextDialog/0.30.6144.3426@0.30.6144.3426" timestamp="1769485744120" />
+    <state x="299" y="124" width="1529" height="1512" key="DiffContextDialog/0.31.3072.1697@0.31.3072.1697" timestamp="1765941193210" />
+    <state x="1922" y="114" width="2547" height="1896" key="DiffContextDialog/0.31.5120.2129/5120.-832.2160.3809/-2160.-861.2160.3809@0.31.5120.2129" timestamp="1763413756352" />
+    <state x="1077" y="202" width="3057" height="3051" key="DiffContextDialog/0.31.6144.3425@0.31.6144.3425" timestamp="1766158619045" />
+    <state x="189" y="65" width="2835" height="1899" key="DiffContextDialog/0.65.3024.1899@0.65.3024.1899" timestamp="1767889653456" />
+    <state x="294" y="170" width="2084" height="1691" key="DiffContextDialog/0.66.3024.1898@0.66.3024.1898" timestamp="1763699224545" />
+    <state x="2677" y="1157" key="PythonInterpreterConfigurable.size" timestamp="1763888957559">
+      <screen x="0" y="31" width="6144" height="3425" />
+    </state>
+    <state x="2677" y="1157" key="PythonInterpreterConfigurable.size/0.31.6144.3425@0.31.6144.3425" timestamp="1763888957559" />
+    <state x="2586" y="1135" width="1515" height="1477" key="SettingsEditor" timestamp="1770060038183">
+      <screen x="0" y="30" width="6144" height="3426" />
+    </state>
+    <state x="2586" y="1135" width="1515" height="1477" key="SettingsEditor/0.30.6144.3426@0.30.6144.3426" timestamp="1770060038183" />
+    <state x="2155" y="718" key="SettingsEditor/0.31.5120.2129/5120.-832.2160.3809/-2160.-861.2160.3809@0.31.5120.2129" timestamp="1763352459019" />
+    <state x="2586" y="1136" key="SettingsEditor/0.31.6144.3425@0.31.6144.3425" timestamp="1763888964892" />
+    <state x="2851" y="1315" width="1122" height="868" key="StructurePopup" timestamp="1768939513950">
+      <screen x="0" y="30" width="6144" height="3426" />
+    </state>
+    <state x="2851" y="1315" width="1122" height="868" key="StructurePopup/0.30.6144.3426@0.30.6144.3426" timestamp="1768939513950" />
+    <state x="2376" y="829" width="552" height="539" key="StructurePopup/0.31.5120.2129/5120.-832.2160.3809/-2160.-861.2160.3809@0.31.5120.2129" timestamp="1763362001808" />
+    <state x="1403" y="777" width="552" height="481" key="StructurePopup/0.65.3024.1899@0.65.3024.1899" timestamp="1767889749476" />
+    <state width="500" height="679" key="SwitcherDM" timestamp="1770059253180">
+      <screen x="0" y="30" width="6144" height="3426" />
+    </state>
+    <state width="500" height="679" key="SwitcherDM/0.30.6144.3426@0.30.6144.3426" timestamp="1770059253180" />
+    <state width="500" height="377" key="SwitcherDM/0.65.3024.1899@0.65.3024.1899" timestamp="1767712865172" />
+    <state x="1319" y="1233" key="Vcs.Push.Dialog.v2" timestamp="1766191369590">
+      <screen x="0" y="30" width="6144" height="3426" />
+    </state>
+    <state x="1319" y="1233" key="Vcs.Push.Dialog.v2/0.30.6144.3426@0.30.6144.3426" timestamp="1766191369590" />
+    <state x="1834" y="566" width="1474" height="1552" key="find.popup" timestamp="1769753161724">
+      <screen x="0" y="30" width="6144" height="3426" />
+    </state>
+    <state x="924" y="303" width="1700" height="966" key="find.popup/0.30.5120.2130@0.30.5120.2130" timestamp="1768929509032" />
+    <state x="1086" y="459" width="1444" height="1520" key="find.popup/0.30.6016.3354@0.30.6016.3354" timestamp="1767824845026" />
+    <state x="1834" y="566" width="1474" height="1552" key="find.popup/0.30.6144.3426@0.30.6144.3426" timestamp="1769753161724" />
+    <state x="924" y="303" width="1228" height="964" key="find.popup/0.31.5120.2129/5120.-832.2160.3809/-2160.-861.2160.3809@0.31.5120.2129" timestamp="1763352989847" />
+    <state x="1213" y="395" width="647" height="556" key="find.popup/0.31.6720.2849@0.31.6720.2849" timestamp="1763160758787" />
+    <state x="546" y="308" width="1004" height="861" key="find.popup/0.65.3024.1899@0.65.3024.1899" timestamp="1767887819536" />
+    <state x="1585" y="527" key="run.anything.popup" timestamp="1768584480947">
+      <screen x="0" y="30" width="3840" height="2130" />
+    </state>
+    <state x="1585" y="527" key="run.anything.popup/0.30.3840.2130@0.30.3840.2130" timestamp="1768584480947" />
+    <state x="2233" y="878" width="876" height="1145" key="search.everywhere.popup" timestamp="1770178476691">
+      <screen x="0" y="30" width="6144" height="3426" />
+    </state>
+    <state x="1395" y="557" width="702" height="712" key="search.everywhere.popup/0.30.3840.2130@0.30.3840.2130" timestamp="1768586754474" />
+    <state x="1860" y="557" width="936" height="712" key="search.everywhere.popup/0.30.5120.2130@0.30.5120.2130" timestamp="1768930754323" />
+    <state x="2186" y="860" width="858" height="1121" key="search.everywhere.popup/0.30.6016.3354@0.30.6016.3354" timestamp="1768439625592" />
+    <state x="2233" y="878" width="876" height="1145" key="search.everywhere.popup/0.30.6144.3426/6144.30.6144.3426@0.30.6144.3426" timestamp="1768973337326" />
+    <state x="2233" y="878" width="876" height="1145" key="search.everywhere.popup/0.30.6144.3426@0.30.6144.3426" timestamp="1770178476691" />
+    <state x="1861" y="558" width="730" height="711" key="search.everywhere.popup/0.31.5120.2129/5120.-832.2160.3809/-2160.-861.2160.3809@0.31.5120.2129" timestamp="1763401716130" />
+    <state x="2233" y="879" width="876" height="1144" key="search.everywhere.popup/0.31.6144.3425@0.31.6144.3425" timestamp="1766110512202" />
+    <state x="2443" y="736" width="959" height="952" key="search.everywhere.popup/0.31.6720.2849@0.31.6720.2849" timestamp="1765815487344" />
+    <state x="1099" y="535" width="793" height="181" key="search.everywhere.popup/0.65.3024.1899@0.65.3024.1899" timestamp="1767889735551" />
+  </component>
+  <component name="editorHistoryManager">
+    <entry file="file://$PROJECT_DIR$/src/schemas/cc_internal_api/common.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="190">
+          <caret line="15" selection-start-line="15" selection-end-line="15" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/captures/e2925935-35b4-4f97-bd30-85218a68c8f2/185_resp_statsig_anthropic_com_v1_rgstr_k_client-RRNS7R65EAtReO5XA4xDC3eU6ZdJQi6lLEP6b5j3.json" />
+    <entry file="file://$PROJECT_DIR$/src/schemas/session/__init__.py">
+      <provider selected="true" editor-type-id="text-editor" />
+    </entry>
+    <entry file="file://$PROJECT_DIR$/captures/e2925935-35b4-4f97-bd30-85218a68c8f2/015_req_api_anthropic_com_v1_messages_beta_true.json" />
+    <entry file="file://$PROJECT_DIR$/src/schemas/cc_internal_api/base.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="304">
+          <caret line="16" selection-start-line="16" selection-end-line="16" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/src/schemas/claude_workspace.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="703">
+          <caret line="37" column="11" selection-start-line="37" selection-start-column="11" selection-end-line="37" selection-end-column="11" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/src/schemas/captures/__init__.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="2451">
+          <caret line="237" column="5" selection-start-line="237" selection-start-column="5" selection-end-line="237" selection-end-column="5" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/.venv/lib/python3.13/site-packages/pydantic/main.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="1349">
+          <caret line="117" column="6" selection-start-line="117" selection-start-column="6" selection-end-line="117" selection-end-column="6" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/captures/e2925935-35b4-4f97-bd30-85218a68c8f2/015_resp_api_anthropic_com_v1_messages_beta_true.json" />
+    <entry file="file://$PROJECT_DIR$/../.claude/projects/-Users-chris-claude-session-mcp/7644394b-6452-4f3d-82f7-90f56d523e58/tool-results/mcp-selenium-browser-automation-get_aria_snapshot-1767843815099.txt">
+      <provider selected="true" editor-type-id="text-editor">
+        <state>
+          <caret column="44" selection-start-column="44" selection-end-column="44" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/src/schemas/captures/base.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="475">
+          <caret line="25" column="7" selection-start-line="25" selection-start-column="7" selection-end-line="25" selection-end-column="7" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/src/schemas/captures/README.md" />
+    <entry file="file://$PROJECT_DIR$/scratch/analyze_messages_flow.py" />
+    <entry file="file://$PROJECT_DIR$/docs/mcpsearch-guide.md" />
+    <entry file="file://$PROJECT_DIR$/src/schemas/types.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="617">
+          <caret line="118" selection-start-line="118" selection-end-line="118" />
+          <folding>
+            <element signature="e#399#435#0" expanded="true" />
+          </folding>
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/src/services/version.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="964">
+          <caret line="69" column="19" lean-forward="true" selection-start-line="69" selection-start-column="19" selection-end-line="69" selection-end-column="19" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/src/schemas/cc_internal_api/statsig.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="1330">
+          <caret line="1009" column="48" lean-forward="true" selection-start-line="1009" selection-start-column="48" selection-end-line="1009" selection-end-column="48" />
+          <folding>
+            <element signature="e#760#805#0" expanded="true" />
+          </folding>
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/src/storage/gist.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="-977">
+          <caret line="1" column="27" selection-start-line="1" selection-start-column="27" selection-end-line="1" selection-end-column="27" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file:///tmp/gist_content.json" />
+    <entry file="file://$PROJECT_DIR$/src/schemas/operations/gist.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="209">
+          <caret line="11" column="6" selection-start-line="11" selection-start-column="6" selection-end-line="11" selection-end-column="6" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/scripts/inject_synthetic_records.py" />
+    <entry file="file://$PROJECT_DIR$/src/domain/models.py">
+      <provider selected="true" editor-type-id="text-editor" />
+    </entry>
+    <entry file="file://$APPLICATION_CONFIG_DIR$/scratches/scratch_102.md" />
+    <entry file="file://$PROJECT_DIR$/captures/fd0fe7fa-5c9d-40a0-a1d2-9a5cf307ebbb/133_req_api_anthropic_com_v1_messages_beta_true.json" />
+    <entry file="file://$PROJECT_DIR$/captures/fd0fe7fa-5c9d-40a0-a1d2-9a5cf307ebbb/133_resp_api_anthropic_com_v1_messages_beta_true.json" />
+    <entry file="file://$PROJECT_DIR$/captures/fd0fe7fa-5c9d-40a0-a1d2-9a5cf307ebbb/150_req_api_anthropic_com_v1_messages_beta_true.json" />
+    <entry file="file://$PROJECT_DIR$/captures/fd0fe7fa-5c9d-40a0-a1d2-9a5cf307ebbb/012_req_api_anthropic_com_v1_messages_beta_true.json" />
+    <entry file="file://$PROJECT_DIR$/captures/fd0fe7fa-5c9d-40a0-a1d2-9a5cf307ebbb/150_resp_api_anthropic_com_v1_messages_beta_true.json" />
+    <entry file="file://$PROJECT_DIR$/captures/fd0fe7fa-5c9d-40a0-a1d2-9a5cf307ebbb/040_req_api_anthropic_com_v1_messages_count_tokens_beta_true.json" />
+    <entry file="file://$PROJECT_DIR$/captures/fd0fe7fa-5c9d-40a0-a1d2-9a5cf307ebbb/169_resp_api_anthropic_com_v1_messages_beta_true.json" />
+    <entry file="file://$PROJECT_DIR$/captures/fd0fe7fa-5c9d-40a0-a1d2-9a5cf307ebbb/169_req_api_anthropic_com_v1_messages_beta_true.json" />
+    <entry file="file://$PROJECT_DIR$/captures/fd0fe7fa-5c9d-40a0-a1d2-9a5cf307ebbb/179_req_api_anthropic_com_v1_messages_beta_true.json" />
+    <entry file="file://$PROJECT_DIR$/captures/fd0fe7fa-5c9d-40a0-a1d2-9a5cf307ebbb/179_resp_api_anthropic_com_v1_messages_beta_true.json" />
+    <entry file="file://$PROJECT_DIR$/docs/handoff-context-limit-investigation.md" />
+    <entry file="file://$PROJECT_DIR$/captures/afb40981-be81-400e-9394-1835ea8335d8/068_resp_api_anthropic_com_v1_messages_beta_true.json" />
+    <entry file="file://$PROJECT_DIR$/captures/fbe33153-1114-4daf-ad4b-63c61f322150/514_req_api_anthropic_com_v1_messages_beta_true.json" />
+    <entry file="file://$PROJECT_DIR$/captures/fbe33153-1114-4daf-ad4b-63c61f322150/517_req_api_anthropic_com_v1_messages_beta_true.json" />
+    <entry file="file://$PROJECT_DIR$/captures/4b360110-a720-46d7-bed5-6ebe528e1594/077_req_http-intake_logs_us5_datadoghq_com_api_v2_logs.json">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="1531">
+          <caret line="125" column="28" lean-forward="true" selection-start-line="125" selection-start-column="28" selection-end-line="125" selection-end-column="28" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/task-dag.svg" />
+    <entry file="file://$PROJECT_DIR$/../.claude/settings.json">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="912">
+          <caret line="48" lean-forward="true" selection-start-line="48" selection-end-line="48" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/../.claude.json">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="133">
+          <caret line="1150" column="1" selection-start-line="1150" selection-start-column="1" selection-end-line="1150" selection-end-column="1" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/../.claude/debug/e4f60551-9335-41f8-90c9-a664777cc528.txt">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="1644">
+          <caret line="82798" lean-forward="true" selection-start-line="82798" selection-end-line="82798" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/.claude/settings.local.json">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="969">
+          <caret line="51" column="36" selection-start-line="51" selection-start-column="36" selection-end-line="51" selection-end-column="36" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/src/schemas/session/models.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="590">
+          <caret line="1816" column="6" selection-start-line="1816" selection-start-column="6" selection-end-line="1816" selection-end-column="6" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/scripts/intercept_traffic.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="7068">
+          <caret line="388" column="55" selection-start-line="388" selection-start-column="55" selection-end-line="388" selection-end-column="55" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/../.claude/debug/ad062295-bce8-48ce-8336-cab689ab8ee1.txt">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="7904">
+          <caret line="416" selection-start-line="416" selection-end-line="416" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/docs/intercepting-claude-api.md">
+      <provider selected="true" editor-type-id="split-provider[text-editor;markdown-preview-editor]">
+        <state split_layout="SHOW_EDITOR" is_vertical_split="false">
+          <first_editor />
+          <second_editor />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/docs/handoff-api-schema-capture.md">
+      <provider selected="true" editor-type-id="split-provider[text-editor;markdown-preview-editor]">
+        <state split_layout="SHOW_EDITOR" is_vertical_split="false">
+          <first_editor relative-caret-position="361">
+            <caret line="19" column="68" selection-start-line="19" selection-start-column="68" selection-end-line="19" selection-end-column="68" />
+          </first_editor>
+          <second_editor />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/scratch/claude-code-internals.md">
+      <provider selected="true" editor-type-id="split-provider[text-editor;markdown-preview-editor]">
+        <state split_layout="SHOW_EDITOR" is_vertical_split="false">
+          <first_editor relative-caret-position="8569">
+            <caret line="451" column="72" selection-start-line="451" selection-start-column="72" selection-end-line="451" selection-end-column="72" />
+          </first_editor>
+          <second_editor />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/README.md">
+      <provider selected="true" editor-type-id="split-provider[text-editor;markdown-preview-editor]">
+        <state split_layout="SHOW_EDITOR" is_vertical_split="false">
+          <first_editor relative-caret-position="11305">
+            <caret line="595" column="27" selection-start-line="595" selection-start-column="21" selection-end-line="595" selection-end-column="27" />
+          </first_editor>
+          <second_editor />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/src/schemas/cc_internal_api/README.md">
+      <provider selected="true" editor-type-id="split-provider[text-editor;markdown-preview-editor]">
+        <state split_layout="SHOW_EDITOR" is_vertical_split="false">
+          <first_editor relative-caret-position="627">
+            <caret line="33" column="79" selection-start-line="33" selection-start-column="79" selection-end-line="33" selection-end-column="79" />
+          </first_editor>
+          <second_editor />
+        </state>
+      </provider>
+    </entry>
+  </component>
+</project>
