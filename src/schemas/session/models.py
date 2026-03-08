@@ -1660,7 +1660,7 @@ class TaskOutputPollingResult(StrictModel):
     """Result from TaskOutput tool - polling background task state."""
 
     retrieval_status: Literal['not_ready', 'success', 'timeout']
-    task: BackgroundTask
+    task: BackgroundTask | None  # null when retrieval_status='timeout'
 
 
 # ==============================================================================
@@ -1765,6 +1765,80 @@ class SkillToolResult(StrictModel):
 
 
 # ==============================================================================
+# EnterWorktree Tool Result (Claude Code 2.1.63+)
+# ==============================================================================
+
+
+class EnterWorktreeToolResult(StrictModel):
+    """Result from EnterWorktree tool - confirms worktree creation."""
+
+    worktreePath: str  # Absolute path to the created worktree
+    worktreeBranch: str  # Git branch name for the worktree
+    message: str  # Confirmation message
+
+
+# ==============================================================================
+# TeamCreate Tool Result (Claude Code 2.1.63+)
+# ==============================================================================
+
+
+class TeamCreateToolResult(StrictModel):
+    """Result from TeamCreate tool - confirms team creation."""
+
+    team_name: str  # Name of the created team
+    team_file_path: str  # Path to team config file
+    lead_agent_id: str  # ID of the team lead agent
+
+
+# ==============================================================================
+# Agent Teammate Spawned Result (Claude Code 2.1.63+)
+# ==============================================================================
+
+
+class AgentTeammateSpawnedResult(StrictModel):
+    """Result from Agent tool when spawning a teammate in team mode."""
+
+    status: Literal['teammate_spawned']
+    prompt: str  # Instructions sent to the spawned teammate
+    teammate_id: str  # ID of the spawned teammate
+    agent_id: str  # Agent ID (same as teammate_id for team agents)
+    agent_type: str  # e.g., 'general-purpose'
+    model: str  # Model used by the spawned agent
+    name: str  # Human-readable name of the teammate
+    color: str  # Terminal color for the teammate
+    tmux_session_name: str  # tmux session hosting the agent
+    tmux_window_name: str  # tmux window hosting the agent
+    tmux_pane_id: str  # tmux pane ID for the agent
+    team_name: str  # Team the agent belongs to
+    is_splitpane: bool  # Whether the agent runs in a split pane
+    plan_mode_required: bool  # Whether plan mode is required for this agent
+
+
+# ==============================================================================
+# SendMessage Tool Result (Claude Code 2.1.63+)
+# ==============================================================================
+
+
+class SendMessageRouting(StrictModel):
+    """Routing metadata for a sent message between team members."""
+
+    sender: str  # Name of the sending agent
+    senderColor: str | None = None  # Terminal color of sender (absent for team-lead)
+    target: str  # Recipient (prefixed with @)
+    targetColor: str | None = None  # Terminal color of target (absent when sender is teammate)
+    summary: str  # Brief summary of the message
+    content: str  # Full message content
+
+
+class SendMessageToolResult(StrictModel):
+    """Result from SendMessage tool - confirms message delivery between teammates."""
+
+    success: bool
+    message: str  # Delivery confirmation (e.g., "Message sent to X's inbox")
+    routing: SendMessageRouting
+
+
+# ==============================================================================
 # MCP Tool Result (Third-Party Tools)
 # ==============================================================================
 
@@ -1829,6 +1903,10 @@ ToolResult = Annotated[
     | ReadMcpResourceToolResult  # ReadMcpResourceTool result
     | HandoffCommandResult  # Handoff command
     | SkillToolResult  # Skill tool result
+    | EnterWorktreeToolResult  # EnterWorktree result (2.1.63+)
+    | TeamCreateToolResult  # TeamCreate result (2.1.63+)
+    | AgentTeammateSpawnedResult  # Agent teammate spawned result (2.1.63+)
+    | SendMessageToolResult  # SendMessage result (2.1.63+)
     | MCPToolResult,  # Fallback for MCP tools (PermissiveModel for observability)
     pydantic.Field(union_mode='left_to_right'),
 ]
