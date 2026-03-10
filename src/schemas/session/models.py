@@ -43,6 +43,9 @@ CLAUDE CODE VERSION COMPATIBILITY:
                   TeamCreateToolInput, SendMessageToolInput, Agent tool team_name/name fields,
                   migrated services from SessionRecordAdapter to validate_session_record (2.1.63+)
 - Schema v0.2.16: Added LastPromptRecord, made AgentProgressData.normalizedMessages optional (2.1.69+)
+- Schema v0.2.17: Added agentId to LocalCommand/Microcompact/TurnDuration system records,
+                  isolation to TaskToolInput (Agent tool), preview to QuestionOption,
+                  made TaskCreateToolInput.activeForm optional (2.1.71+)
 - If validation fails, Claude Code schema may have changed - update models accordingly
 
 NEW FIELDS IN CLAUDE CODE 2.0.51+ (Schema v0.1.3):
@@ -112,11 +115,11 @@ from src.schemas.types import BaseStrictModel, EmptyDict, EmptySequence, ModelId
 # Schema Version
 # ==============================================================================
 
-SCHEMA_VERSION = '0.2.16'
+SCHEMA_VERSION = '0.2.17'
 CLAUDE_CODE_MIN_VERSION = '2.0.35'
-CLAUDE_CODE_MAX_VERSION = '2.1.69'
-LAST_VALIDATED = '2026-03-06'
-VALIDATION_RECORD_COUNT = 966_684
+CLAUDE_CODE_MAX_VERSION = '2.1.71'
+LAST_VALIDATED = '2026-03-10'
+VALIDATION_RECORD_COUNT = 257_522
 
 
 # ==============================================================================
@@ -423,6 +426,7 @@ class TaskToolInput(StrictModel):
     max_turns: int | None = None  # Maximum agentic turns before stopping (2.1.25+)
     name: str | None = None  # Agent name within team (team mode only)
     team_name: str | None = None  # Team name (team mode only)
+    isolation: str | None = None  # Isolation mode (e.g., "worktree") for Agent tool
 
 
 # ==============================================================================
@@ -467,7 +471,7 @@ class TaskCreateToolInput(StrictModel):
 
     subject: str
     description: str
-    activeForm: str
+    activeForm: str | None = None
 
 
 # ==============================================================================
@@ -1497,6 +1501,7 @@ class QuestionOption(StrictModel):
     label: str
     description: str
     markdown: str | None = None  # Markdown preview of the option (Claude Code 2.1.50+)
+    preview: str | None = None  # Preview text for the option (alternative to markdown)
 
 
 class UserQuestion(StrictModel):
@@ -2108,6 +2113,7 @@ class LocalCommandSystemRecord(BaseRecord):
     slug: str | None = pydantic.Field(None, description='Human-readable session slug (Claude Code 2.0.51+)')
     teamName: str | None = None
     agentName: str | None = None
+    agentId: str | None = None  # Present in agent subfiles
 
 
 class CompactBoundarySystemRecord(BaseRecord):
@@ -2148,6 +2154,7 @@ class MicrocompactBoundarySystemRecord(BaseRecord):
     slug: str | None = None
     teamName: str | None = None
     agentName: str | None = None
+    agentId: str | None = None  # Present in agent subfiles
     microcompactMetadata: MicrocompactMetadata
 
 
@@ -2209,6 +2216,7 @@ class TurnDurationSystemRecord(BaseRecord):
     slug: str | None = None
     teamName: str | None = None
     agentName: str | None = None
+    agentId: str | None = None  # Present in agent subfiles
 
 
 class HookInfo(StrictModel):
