@@ -167,7 +167,7 @@ Compatible with strict=True and the json.loads() -> model_validate() pattern.
 Python-mode model_dump() returns raw bytes; JSON-mode returns base64 string.
 """
 
-ToolResultExtension = Literal['.txt', '.json']
+ToolResultExtension = Literal['.txt', '.json', '.xlsx']
 """Known file extensions for tool result files in Claude Code sessions.
 
 Tool results are stored as individual files under:

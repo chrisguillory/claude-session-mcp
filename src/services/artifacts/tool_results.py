@@ -6,7 +6,7 @@ Handles:
 - Tool result collection from session directories
 - Tool result writing to new session locations
 
-Path pattern: ~/.claude/projects/<encoded-path>/<session-id>/tool-results/<tool-use-id>{.txt,.json}
+Path pattern: ~/.claude/projects/<encoded-path>/<session-id>/tool-results/<tool-use-id>{.txt,.json,.xlsx}
 
 Key insight: Tool results are nested under session_id, so no ID conflicts.
 The tool_use_id can be preserved unchanged.
