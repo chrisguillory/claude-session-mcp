@@ -43,9 +43,9 @@ CLAUDE CODE VERSION COMPATIBILITY:
                   TeamCreateToolInput, SendMessageToolInput, Agent tool team_name/name fields,
                   migrated services from SessionRecordAdapter to validate_session_record (2.1.63+)
 - Schema v0.2.16: Added LastPromptRecord, made AgentProgressData.normalizedMessages optional (2.1.69+)
-- Schema v0.2.17: Added agentId to LocalCommand/Microcompact/TurnDuration system records,
-                  isolation to TaskToolInput (Agent tool), preview to QuestionOption,
-                  made TaskCreateToolInput.activeForm optional (2.1.71+)
+- Schema v0.2.17: Added promptId to UserRecord, agentId to LocalCommand/Microcompact/TurnDuration
+                 system records, isolation to TaskToolInput (Agent tool), preview to QuestionOption,
+                 made TaskCreateToolInput.activeForm optional (2.1.74+)
 - If validation fails, Claude Code schema may have changed - update models accordingly
 
 NEW FIELDS IN CLAUDE CODE 2.0.51+ (Schema v0.1.3):
@@ -117,9 +117,9 @@ from src.schemas.types import BaseStrictModel, EmptyDict, EmptySequence, ModelId
 
 SCHEMA_VERSION = '0.2.17'
 CLAUDE_CODE_MIN_VERSION = '2.0.35'
-CLAUDE_CODE_MAX_VERSION = '2.1.71'
-LAST_VALIDATED = '2026-03-10'
-VALIDATION_RECORD_COUNT = 257_522
+CLAUDE_CODE_MAX_VERSION = '2.1.74'
+LAST_VALIDATED = '2026-03-12'
+VALIDATION_RECORD_COUNT = 1_064_010
 
 
 # ==============================================================================
@@ -2009,6 +2009,7 @@ class UserRecord(BaseRecord):
     mcpMeta: McpMeta | None = pydantic.Field(
         None, description='MCP tool structured content metadata (Claude Code 2.1.19+)'
     )
+    promptId: str | None = pydantic.Field(None, description='Prompt identifier (Claude Code 2.1.74+)')
     teamName: str | None = pydantic.Field(None, description='Team name when running in multi-agent team mode')
     agentName: str | None = pydantic.Field(None, description='Agent name within team (may be absent for lead agent)')
 
@@ -2111,9 +2112,9 @@ class LocalCommandSystemRecord(BaseRecord):
     version: str
     gitBranch: str
     slug: str | None = pydantic.Field(None, description='Human-readable session slug (Claude Code 2.0.51+)')
+    agentId: str | None = None
     teamName: str | None = None
     agentName: str | None = None
-    agentId: str | None = None  # Present in agent subfiles
 
 
 class CompactBoundarySystemRecord(BaseRecord):
@@ -2152,9 +2153,9 @@ class MicrocompactBoundarySystemRecord(BaseRecord):
     version: str
     gitBranch: str
     slug: str | None = None
+    agentId: str | None = None
     teamName: str | None = None
     agentName: str | None = None
-    agentId: str | None = None  # Present in agent subfiles
     microcompactMetadata: MicrocompactMetadata
 
 
@@ -2214,9 +2215,9 @@ class TurnDurationSystemRecord(BaseRecord):
     version: str
     gitBranch: str
     slug: str | None = None
+    agentId: str | None = None
     teamName: str | None = None
     agentName: str | None = None
-    agentId: str | None = None  # Present in agent subfiles
 
 
 class HookInfo(StrictModel):
