@@ -246,3 +246,18 @@ _AllModelIds = Literal[
     # Special
     '<synthetic>',
 ]
+
+# All entrypoint values known to Claude Code 2.1.80 (not currently used for validation)
+# Sourced from CLAUDE_CODE_ENTRYPOINT env var - external callers can set arbitrary values
+_KnownEntrypoints = Literal[
+    'cli',
+    'claude-code-github-action',
+    'claude-desktop',
+    'claude-vscode',
+    'local-agent',
+    'mcp',
+    'remote',
+    'sdk-cli',
+    'sdk-py',
+    'sdk-ts',
+]

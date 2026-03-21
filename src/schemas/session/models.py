@@ -46,6 +46,10 @@ CLAUDE CODE VERSION COMPATIBILITY:
 - Schema v0.2.17: Added promptId to UserRecord, agentId to LocalCommand/Microcompact/TurnDuration
                  system records, isolation to TaskToolInput (Agent tool), preview to QuestionOption,
                  made TaskCreateToolInput.activeForm optional (2.1.74+)
+- Schema v0.2.18: Added entrypoint field to all record types (from CLAUDE_CODE_ENTRYPOINT env var;
+                 known values: cli, sdk-cli, sdk-ts, sdk-py, mcp, claude-vscode, claude-desktop,
+                 claude-code-github-action, local-agent, remote), made AgentToolInput.subagent_type
+                 optional (2.1.80+)
 - If validation fails, Claude Code schema may have changed - update models accordingly
 
 NEW FIELDS IN CLAUDE CODE 2.0.51+ (Schema v0.1.3):
@@ -115,11 +119,11 @@ from src.schemas.types import BaseStrictModel, EmptyDict, EmptySequence, ModelId
 # Schema Version
 # ==============================================================================
 
-SCHEMA_VERSION = '0.2.17'
+SCHEMA_VERSION = '0.2.18'
 CLAUDE_CODE_MIN_VERSION = '2.0.35'
-CLAUDE_CODE_MAX_VERSION = '2.1.74'
-LAST_VALIDATED = '2026-03-12'
-VALIDATION_RECORD_COUNT = 1_064_010
+CLAUDE_CODE_MAX_VERSION = '2.1.80'
+LAST_VALIDATED = '2026-03-20'
+VALIDATION_RECORD_COUNT = 1_011_970
 
 
 # ==============================================================================
@@ -417,7 +421,7 @@ class TaskToolInput(StrictModel):
 
     description: str | None = None  # Usually present but some early records lack it
     prompt: str
-    subagent_type: str
+    subagent_type: str | None = None  # Agent type - may be absent in newer versions (2.1.80+)
     allowed_tools: Sequence[str] | None = None  # Tools to grant the subagent
     run_in_background: bool | None = None
     model: str | None = None
@@ -2010,6 +2014,7 @@ class UserRecord(BaseRecord):
         None, description='MCP tool structured content metadata (Claude Code 2.1.19+)'
     )
     promptId: str | None = pydantic.Field(None, description='Prompt identifier (Claude Code 2.1.74+)')
+    entrypoint: str | None = pydantic.Field(None, description='Client entrypoint (e.g., "cli") (Claude Code 2.1.80+)')
     teamName: str | None = pydantic.Field(None, description='Team name when running in multi-agent team mode')
     agentName: str | None = pydantic.Field(None, description='Agent name within team (may be absent for lead agent)')
 
@@ -2055,6 +2060,7 @@ class AssistantRecord(BaseRecord):
         None, description='Error type for API error messages'
     )
     slug: str | None = pydantic.Field(None, description='Human-readable session slug (Claude Code 2.0.51+)')
+    entrypoint: str | None = pydantic.Field(None, description='Client entrypoint (e.g., "cli") (Claude Code 2.1.80+)')
     teamName: str | None = pydantic.Field(None, description='Team name when running in multi-agent team mode')
     agentName: str | None = pydantic.Field(None, description='Agent name within team')
 
@@ -2112,6 +2118,7 @@ class LocalCommandSystemRecord(BaseRecord):
     version: str
     gitBranch: str
     slug: str | None = pydantic.Field(None, description='Human-readable session slug (Claude Code 2.0.51+)')
+    entrypoint: str | None = None  # Client entrypoint (e.g., "cli") (Claude Code 2.1.80+)
     agentId: str | None = None
     teamName: str | None = None
     agentName: str | None = None
@@ -2132,6 +2139,7 @@ class CompactBoundarySystemRecord(BaseRecord):
     version: str
     gitBranch: str
     slug: str | None = pydantic.Field(None, description='Human-readable session slug (Claude Code 2.0.51+)')
+    entrypoint: str | None = None  # Client entrypoint (e.g., "cli") (Claude Code 2.1.80+)
     teamName: str | None = None
     agentName: str | None = None
     logicalParentUuid: str | None = None
@@ -2153,6 +2161,7 @@ class MicrocompactBoundarySystemRecord(BaseRecord):
     version: str
     gitBranch: str
     slug: str | None = None
+    entrypoint: str | None = None  # Client entrypoint (e.g., "cli") (Claude Code 2.1.80+)
     agentId: str | None = None
     teamName: str | None = None
     agentName: str | None = None
@@ -2172,6 +2181,7 @@ class ApiErrorSystemRecord(BaseRecord):
     version: str | None = None  # Optional for api_error
     gitBranch: str | None = None  # Optional for api_error
     slug: str | None = pydantic.Field(None, description='Human-readable session slug (Claude Code 2.0.51+)')
+    entrypoint: str | None = None  # Client entrypoint (e.g., "cli") (Claude Code 2.1.80+)
     teamName: str | None = None
     agentName: str | None = None
     cause: ConnectionError | None = None  # Connection error details (for network failures)
@@ -2197,6 +2207,7 @@ class InformationalSystemRecord(BaseRecord):
     userType: str | None = None
     version: str | None = None
     gitBranch: str | None = None
+    entrypoint: str | None = None  # Client entrypoint (e.g., "cli") (Claude Code 2.1.80+)
     teamName: str | None = None
     agentName: str | None = None
 
@@ -2215,6 +2226,7 @@ class TurnDurationSystemRecord(BaseRecord):
     version: str
     gitBranch: str
     slug: str | None = None
+    entrypoint: str | None = None  # Client entrypoint (e.g., "cli") (Claude Code 2.1.80+)
     agentId: str | None = None
     teamName: str | None = None
     agentName: str | None = None
@@ -2246,6 +2258,7 @@ class StopHookSummarySystemRecord(BaseRecord):
     gitBranch: str | None = None
     toolUseID: str | None = None  # Tool use ID if triggered by tool
     slug: str | None = None  # Human-readable session slug
+    entrypoint: str | None = None  # Client entrypoint (e.g., "cli") (Claude Code 2.1.80+)
     teamName: str | None = None
     agentName: str | None = None
 
@@ -2265,6 +2278,7 @@ class BridgeStatusSystemRecord(BaseRecord):
     version: str
     gitBranch: str
     slug: str | None = None
+    entrypoint: str | None = None  # Client entrypoint (e.g., "cli") (Claude Code 2.1.80+)
     teamName: str | None = None
     agentName: str | None = None
 
@@ -2470,6 +2484,7 @@ class ProgressRecord(StrictModel):
     parentToolUseID: str
     toolUseID: str
     slug: str | None = None  # Missing on first record before slug assigned
+    entrypoint: str | None = None  # Client entrypoint (e.g., "cli") (Claude Code 2.1.80+)
     agentId: str | None = None  # Present in agent subfiles (references agent-{agentId}.jsonl)
     teamName: str | None = pydantic.Field(None, description='Team name when running in multi-agent team mode')
     agentName: str | None = pydantic.Field(None, description='Agent name within team')
@@ -2513,6 +2528,7 @@ class SavedHookContextRecord(StrictModel):
     hookName: str
     toolUseID: str
     hookEvent: str
+    entrypoint: str | None = None  # Client entrypoint (e.g., "cli") (Claude Code 2.1.80+)
 
 
 # ==============================================================================
