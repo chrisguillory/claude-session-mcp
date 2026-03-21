@@ -487,17 +487,23 @@ Agent invocations create separate `agent-{agentId}.jsonl` files, referenced via 
 | Agent warmup    | Opus/Haiku | Pre-populate prompt cache                 |
 | Token counting  | N/A        | ~100 `/count_tokens` calls (one per tool) |
 
-**Extended Thinking**:
+**Thinking & Effort** (see [docs/thinking.md](docs/thinking.md) for comprehensive reference):
 
-| Trigger      | Budget                  | Notes                  |
-|--------------|-------------------------|------------------------|
-| `ultrathink` | Maximum (31,999 tokens) | Full reasoning budget  |
-| Shift+Tab    | Configurable            | Toggle thinking on/off |
+Two independent API parameters control reasoning depth:
+
+| System   | Default (Opus 4.6)      | Control                                                    |
+|----------|-------------------------|------------------------------------------------------------|
+| Thinking | Adaptive (model decides)| `CLAUDE_CODE_DISABLE_ADAPTIVE_THINKING=1` for fixed budget |
+| Effort   | Medium                  | `effortLevel` in settings.json, `/effort` command          |
+
+| Trigger      | Effect                               | Notes                               |
+|--------------|--------------------------------------|--------------------------------------|
+| `ultrathink` | Sets effort to `high` for one turn   | Restored v2.1.68. System message injection, not API param. |
+| `/effort max`| Unconstrained thinking depth         | Session only, Opus 4.6 only         |
 
 - Stored in `thinking` content blocks with `signature` field
 - NOT counted in context window (output tokens only)
-- Configure cap via `MAX_THINKING_TOKENS` env var
-- See [docs/thinking.md](docs/thinking.md) for deeper research on ThinkingMetadata structure
+- Upper limit raised to 128K output tokens (v2.1.77) for Opus 4.6 and Sonnet 4.6
 
 **Prompt Cache** (explains `cache_read_input_tokens` field):
 
@@ -518,10 +524,9 @@ Cache invalidates when: user edits/rewinds message, TTL expires, or content pref
 
 **API-only Features** (not in Claude Code):
 
-| Feature        | Status     | Notes                                                     |
-|----------------|------------|-----------------------------------------------------------|
-| Effort control | Beta API   | Levels: high/medium/low. Medium = 76% fewer output tokens |
-| Batch API      | Production | 50% discount, async (incompatible with interactive CLI)   |
+| Feature   | Status     | Notes                                                   |
+|-----------|------------|---------------------------------------------------------|
+| Batch API | Production | 50% discount, async (incompatible with interactive CLI) |
 
 **Session Startup Overhead**:
 
@@ -542,46 +547,59 @@ strings $(which claude) | grep -oE 'process\.env\.[A-Z_0-9]+' | sort -u
 # ... (~416 total in v2.1.14)
 ```
 
-### Verified Working (tested via mitmproxy 2.1.14)
+### Verified Working (tested via mitmproxy 2.1.14, updated via binary analysis 2.1.80)
 
-| Variable                               | Effect                           | Min  | Default                       | Max   |
-|----------------------------------------|----------------------------------|------|-------------------------------|-------|
-| `ANTHROPIC_MODEL`                      | Default model                    | -    | `default`                     | -     |
-| `CLAUDE_CODE_SUBAGENT_MODEL`           | Model for Task subagents         | -    | -                             | -     |
-| `CLAUDE_CODE_MAX_OUTPUT_TOKENS`        | Max tokens per response          | 1*   | 32000                         | 64000 |
-| `MAX_THINKING_TOKENS`                  | Thinking budget                  | 1024 | 31999 (interactive), off (-p) | 63999 |
-| `CLAUDE_CODE_BLOCKING_LIMIT_OVERRIDE`  | Bypass client-side context limit | -    | ~197000                       | -     |
-| `CLAUDE_CODE_MAX_TOOL_USE_CONCURRENCY` | Parallel tool execution limit†   | -    | 10                            | -     |
+| Variable                               | Effect                            | Min  | Default (Opus 4.6)     | Max (Opus 4.6) |
+|----------------------------------------|-----------------------------------|------|------------------------|-----------------|
+| `ANTHROPIC_MODEL`                      | Default model                     | -    | `default`              | -               |
+| `CLAUDE_CODE_SUBAGENT_MODEL`           | Model for Task subagents          | -    | -                      | -               |
+| `CLAUDE_CODE_MAX_OUTPUT_TOKENS`        | Max tokens per response           | 1*   | 64000                  | 128000          |
+| `MAX_THINKING_TOKENS`                  | Thinking budget / enable toggle   | -    | 127999                 | -†              |
+| `CLAUDE_CODE_BLOCKING_LIMIT_OVERRIDE`  | Bypass client-side context limit  | -    | ~197000                | -               |
+| `CLAUDE_CODE_MAX_TOOL_USE_CONCURRENCY` | Parallel tool execution limit‡    | -    | 10                     | -               |
 
 *No API minimum, but values <100 cause truncation errors.
-†Undocumented; found in binary via `parseInt(process.env.CLAUDE_CODE_MAX_TOOL_USE_CONCURRENCY||"",10)||10`
+†No upper-bound validation. Clamped at request time to `max_tokens - 1`.
+‡Undocumented; found in binary via `parseInt(process.env.CLAUDE_CODE_MAX_TOOL_USE_CONCURRENCY||"",10)||10`
 
 **Model values:**
-- `ANTHROPIC_MODEL`: Accepts aliases (`opus`, `sonnet`, `haiku`) or full IDs
-- `CLAUDE_CODE_SUBAGENT_MODEL`: Requires full model ID (e.g., `claude-opus-4-5-20251101`). Overrides default model for all subagents including Explore (normally Haiku) - verified via mitmproxy.
+- `ANTHROPIC_MODEL`: Accepts aliases (`opus`, `sonnet`, `haiku`) or full IDs, with optional context suffix (e.g., `opus[1m]`)
+- `CLAUDE_CODE_SUBAGENT_MODEL`: Accepts same format. Overrides default model for all subagents including Explore (normally Haiku).
 
-**Thinking behavior:**
-- Interactive mode: thinking enabled by default at 31999 tokens
+**Thinking behavior (Opus 4.6):**
+- Adaptive thinking by default (`thinking: {type: "adaptive"}`)
+- `MAX_THINKING_TOKENS` acts as boolean with adaptive (>0 = enabled, 0 = disabled)
+- Set `CLAUDE_CODE_DISABLE_ADAPTIVE_THINKING=1` to use fixed `budget_tokens` mode
 - Print mode (`-p`): thinking disabled unless `MAX_THINKING_TOKENS` is set
-- Formula: `max_tokens = thinking_budget + 1` (model limit 64000)
+- API requires `budget_tokens < max_tokens` (the -1 offset)
+- See [docs/thinking.md](docs/thinking.md) for per-model limits, effort levels, and configuration recipes
 
 Set in `~/.claude/settings.json` (takes precedence over inline env vars):
 ```json
 {
   "env": {
-    "ANTHROPIC_MODEL": "opus",
-    "CLAUDE_CODE_SUBAGENT_MODEL": "claude-opus-4-5-20251101"
+    "ANTHROPIC_MODEL": "opus[1m]",
+    "CLAUDE_CODE_SUBAGENT_MODEL": "opus[1m]"
   }
 }
 ```
 
+### Thinking & Effort Variables
+
+| Variable                                  | Effect                                      | Default             |
+|-------------------------------------------|---------------------------------------------|---------------------|
+| `CLAUDE_CODE_DISABLE_ADAPTIVE_THINKING`   | `1` to force fixed `budget_tokens` on 4.6   | unset (adaptive)    |
+| `CLAUDE_CODE_DISABLE_THINKING`            | `1` to disable thinking entirely            | unset               |
+| `CLAUDE_CODE_EFFORT_LEVEL`                | Override effort level (not in env allowlist) | unset               |
+| `CLAUDE_CODE_ALWAYS_ENABLE_EFFORT`        | `1` to send effort for all models           | unset               |
+
+`CLAUDE_CODE_EFFORT_LEVEL` reads directly from `process.env` — must be a real shell variable, not in settings.json `env` block. See [docs/thinking.md](docs/thinking.md) for the full effort/thinking configuration landscape.
+
 ### Deprecated/Non-functional
 
-| Variable                   | Status     | Notes                                                                        |
-|----------------------------|------------|------------------------------------------------------------------------------|
-| `CLAUDE_CODE_EFFORT_LEVEL` | No effect  | Present in binary but does not modify API requests (tested 2.1.14)           |
-| `ENABLE_COMMIT_ATTRIBUTION`| No effect  | Does not disable Co-Authored-By line; use `attribution` setting instead     |
-| `ultrathink`               | Deprecated | "Ultrathink no longer does anything. Thinking budget is now max by default." |
+| Variable                    | Status     | Notes                                                                    |
+|-----------------------------|------------|--------------------------------------------------------------------------|
+| `ENABLE_COMMIT_ATTRIBUTION` | No effect  | Does not disable Co-Authored-By line; use `attribution` setting instead |
 
 ### Additional Useful Variables (from Perplexity research)
 
@@ -656,10 +674,9 @@ See `docs/session-memory.md` for complete analysis including the tweakcc binary 
 
 **Other:**
 
-| Variable                       | Effect                             |
-|--------------------------------|------------------------------------|
-| `DISABLE_INTERLEAVED_THINKING` | Disable extended thinking entirely |
-| `DISABLE_AUTOUPDATER`          | Disable auto-updates               |
+| Variable              | Effect               |
+|-----------------------|----------------------|
+| `DISABLE_AUTOUPDATER` | Disable auto-updates |
 
 ### Settings.json Env Allowlist (v2.1.44)
 
