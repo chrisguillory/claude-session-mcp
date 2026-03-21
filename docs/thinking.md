@@ -70,18 +70,18 @@ Effort is a separate API parameter (`output_config.effort`) providing soft guida
 
 The API natively accepts `low`, `high`, `max`. Claude Code adds `medium` at the application layer.
 
-### The "max" Persistence Problem
+### Persisting "max" Effort
 
-`"max"` cannot be saved to `settings.json`. The Zod schema only accepts `low`, `medium`, `high`. The settings serializer (`vK_`) returns `undefined` for `"max"`, silently dropping it. Binary-confirmed.
+The top-level `effortLevel` setting rejects `"max"` — the Zod schema only accepts `low`, `medium`, `high`, and the
+serializer (`vK_`) silently drops it. However, `CLAUDE_CODE_EFFORT_LEVEL` in the `env` block **does** accept and persist
+`"max"` (confirmed v2.1.80).
 
-| Method                           | Accepts `max`?        | Persists?     |
-|----------------------------------|-----------------------|---------------|
-| `settings.json` `effortLevel`   | No (silently dropped) | N/A           |
-| `/effort max`                    | Yes                   | Session only  |
-| `CLAUDE_CODE_EFFORT_LEVEL=max`  | Yes (in code)         | N/A (env var) |
-| `--effort max`                   | Rejected for Claude.ai subscribers | N/A |
-
-15+ open GitHub issues about this. Zero Anthropic engineer responses as of March 2026.
+| Method                                          | Accepts `max`?                     | Persists?  |
+|--------------------------------------------------|------------------------------------|------------|
+| `settings.json` `effortLevel`                   | No (silently dropped)              | N/A        |
+| `settings.json` `env.CLAUDE_CODE_EFFORT_LEVEL`  | **Yes**                            | **Yes**    |
+| `/effort max`                                    | Yes                                | Session only |
+| `--effort max`                                   | Rejected for Claude.ai subscribers | N/A        |
 
 ## Ultrathink
 
@@ -136,14 +136,21 @@ Session files record keyword detection on user records. This is local-only metad
 | `CLAUDE_CODE_EFFORT_LEVEL`                | Override effort level                      | unset                |
 | `CLAUDE_CODE_ALWAYS_ENABLE_EFFORT`        | `1` to send effort for all models          | unset                |
 
-`CLAUDE_CODE_EFFORT_LEVEL` is **not in the settings.json env allowlist**. It must be set as a real shell environment variable, not in the `env` block of settings.json.
+`CLAUDE_CODE_EFFORT_LEVEL` accepts `max` and **works from the settings.json `env` block** (confirmed v2.1.80). This is
+the reliable way to persist max effort — the top-level `effortLevel` setting rejects `"max"`, but the env var does not.
 
 ### Settings
 
-Top-level key in `settings.json`. Accepts `low`, `medium`, `high` only:
+Top-level key in `settings.json`. Accepts `low`, `medium`, `high` only (`max` silently dropped):
 
 ```json
 {"effortLevel": "high"}
+```
+
+To persist max effort, use the env var instead:
+
+```json
+{"env": {"CLAUDE_CODE_EFFORT_LEVEL": "max"}}
 ```
 
 ### Slash Commands
@@ -188,15 +195,15 @@ All limits are decimal (128,000 not 131,072). Values above the upper limit are s
 
 ```json
 {
-  "effortLevel": "high",
   "env": {
+    "CLAUDE_CODE_EFFORT_LEVEL": "max",
     "CLAUDE_CODE_MAX_OUTPUT_TOKENS": "128000",
     "MAX_THINKING_TOKENS": "127999"
   }
 }
 ```
 
-Run `/effort max` at session start for unconstrained depth. `MAX_THINKING_TOKENS` acts as boolean only (>0 = enabled). Interleaved thinking enabled. `high` persists across sessions; `max` must be re-applied per session.
+Unconstrained thinking depth via the env var (persists across sessions). `MAX_THINKING_TOKENS` acts as boolean only (>0 = enabled). Interleaved thinking enabled. Opus 4.6 only — other models downgrade `max` to `high`.
 
 ### Maximum thinking — fixed budget (deterministic)
 

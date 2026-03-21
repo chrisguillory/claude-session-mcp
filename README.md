@@ -590,10 +590,10 @@ Set in `~/.claude/settings.json` (takes precedence over inline env vars):
 |-------------------------------------------|---------------------------------------------|---------------------|
 | `CLAUDE_CODE_DISABLE_ADAPTIVE_THINKING`   | `1` to force fixed `budget_tokens` on 4.6   | unset (adaptive)    |
 | `CLAUDE_CODE_DISABLE_THINKING`            | `1` to disable thinking entirely            | unset               |
-| `CLAUDE_CODE_EFFORT_LEVEL`                | Override effort level (not in env allowlist) | unset               |
+| `CLAUDE_CODE_EFFORT_LEVEL`                | Override effort level (accepts `max`)       | unset               |
 | `CLAUDE_CODE_ALWAYS_ENABLE_EFFORT`        | `1` to send effort for all models           | unset               |
 
-`CLAUDE_CODE_EFFORT_LEVEL` reads directly from `process.env` — must be a real shell variable, not in settings.json `env` block. See [docs/thinking.md](docs/thinking.md) for the full effort/thinking configuration landscape.
+`CLAUDE_CODE_EFFORT_LEVEL` works from the settings.json `env` block (confirmed v2.1.80). This is the reliable way to persist `max` effort — the top-level `effortLevel` setting rejects `"max"`. See [docs/thinking.md](docs/thinking.md) for the full effort/thinking configuration landscape.
 
 ### Deprecated/Non-functional
 
