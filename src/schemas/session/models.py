@@ -50,6 +50,7 @@ CLAUDE CODE VERSION COMPATIBILITY:
                  known values: cli, sdk-cli, sdk-ts, sdk-py, mcp, claude-vscode, claude-desktop,
                  claude-code-github-action, local-agent, remote), made AgentToolInput.subagent_type
                  optional (2.1.80+)
+- Schema v0.2.19: Added agentId to CompactBoundary/ApiError system records (agent sidechain files)
 - If validation fails, Claude Code schema may have changed - update models accordingly
 
 NEW FIELDS IN CLAUDE CODE 2.0.51+ (Schema v0.1.3):
@@ -119,11 +120,11 @@ from src.schemas.types import BaseStrictModel, EmptyDict, EmptySequence, ModelId
 # Schema Version
 # ==============================================================================
 
-SCHEMA_VERSION = '0.2.18'
+SCHEMA_VERSION = '0.2.19'
 CLAUDE_CODE_MIN_VERSION = '2.0.35'
 CLAUDE_CODE_MAX_VERSION = '2.1.80'
-LAST_VALIDATED = '2026-03-20'
-VALIDATION_RECORD_COUNT = 1_011_970
+LAST_VALIDATED = '2026-03-21'
+VALIDATION_RECORD_COUNT = 315_107
 
 
 # ==============================================================================
@@ -2144,6 +2145,7 @@ class CompactBoundarySystemRecord(BaseRecord):
     gitBranch: str
     slug: str | None = pydantic.Field(None, description='Human-readable session slug (Claude Code 2.0.51+)')
     entrypoint: str | None = None  # Client entrypoint (e.g., "cli") (Claude Code 2.1.80+)
+    agentId: str | None = None
     teamName: str | None = None
     agentName: str | None = None
     logicalParentUuid: str | None = None
@@ -2186,6 +2188,7 @@ class ApiErrorSystemRecord(BaseRecord):
     gitBranch: str | None = None  # Optional for api_error
     slug: str | None = pydantic.Field(None, description='Human-readable session slug (Claude Code 2.0.51+)')
     entrypoint: str | None = None  # Client entrypoint (e.g., "cli") (Claude Code 2.1.80+)
+    agentId: str | None = None
     teamName: str | None = None
     agentName: str | None = None
     cause: ConnectionError | None = None  # Connection error details (for network failures)
