@@ -18,6 +18,8 @@ from src.schemas.session.models import (
     # Schema version
     SCHEMA_VERSION,
     VALIDATION_RECORD_COUNT,
+    # Record types
+    AgentNameRecord,
     # Tool inputs (alphabetical)
     AgentOutputToolInput,
     # Progress data
@@ -210,6 +212,8 @@ __all__ = [
     'ToolResultContentBlock',
     'MessageContent',
     'ClearThinkingEdit',
+    # Record types
+    'AgentNameRecord',
     # Tool inputs (alphabetical)
     'AgentOutputToolInput',
     'AskUserQuestionToolInput',

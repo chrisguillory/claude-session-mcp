@@ -633,6 +633,7 @@ class ExitPlanModeToolInput(StrictModel):
     launchSwarm: bool | None = None
     allowedPrompts: Sequence[PromptPermission] | None = None
     pushToRemote: bool | None = None
+    planFilePath: str | None = None
 
 
 # ==============================================================================
@@ -1300,6 +1301,8 @@ class BashToolResult(StrictModel):
     noOutputExpected: bool | None = None  # Bash tool hint (Claude Code 2.1.38+)
     persistedOutputPath: PathField | None = None  # Path to persisted large output file (Claude Code 2.1.45+)
     persistedOutputSize: int | None = None  # Size of persisted output in bytes (Claude Code 2.1.45+)
+    tokenSaverOutput: str | None = None  # Summarized output for token savings (Claude Code 2.1.80+)
+    assistantAutoBackgrounded: bool | None = None  # True if assistant auto-backgrounded the task (2.1.80+)
 
 
 class ReadTextToolResult(StrictModel):
@@ -1438,6 +1441,7 @@ class TaskUpdateSuccessResult(StrictModel):
     updatedFields: Sequence[str]
     statusChange: str | StatusChange | None = None
     error: str | None = None  # Present when update fails
+    verificationNudgeNeeded: bool | None = None  # Hint to verify task completion (2.1.80+)
 
 
 class TaskGetItem(StrictModel):
@@ -2532,6 +2536,22 @@ class SavedHookContextRecord(StrictModel):
 
 
 # ==============================================================================
+# Agent Name Record (Claude Code 2.1.80+)
+# ==============================================================================
+
+
+class AgentNameRecord(StrictModel):
+    """Records the human-readable name assigned to a worker agent session.
+
+    Written to main session files to associate agent sessions with descriptive names.
+    """
+
+    type: Literal['agent-name']
+    agentName: str
+    sessionId: str
+
+
+# ==============================================================================
 # Last Prompt Record (Claude Code 2.1.69+)
 # ==============================================================================
 
@@ -2570,6 +2590,7 @@ SessionRecord = Annotated[
     | ProgressRecord
     | PrLinkRecord
     | SavedHookContextRecord
+    | AgentNameRecord
     | LastPromptRecord,
     pydantic.Field(union_mode='left_to_right'),
 ]
@@ -2596,6 +2617,7 @@ _custom_title_adapter = pydantic.TypeAdapter(CustomTitleRecord)
 _progress_adapter = pydantic.TypeAdapter(ProgressRecord)
 _pr_link_adapter = pydantic.TypeAdapter(PrLinkRecord)
 _saved_hook_context_adapter = pydantic.TypeAdapter(SavedHookContextRecord)
+_agent_name_adapter = pydantic.TypeAdapter(AgentNameRecord)
 _last_prompt_adapter = pydantic.TypeAdapter(LastPromptRecord)
 
 
@@ -2642,6 +2664,8 @@ def validate_session_record(data: dict[str, Any]) -> SessionRecord:
         return _pr_link_adapter.validate_python(data)
     elif record_type == 'saved_hook_context':
         return _saved_hook_context_adapter.validate_python(data)
+    elif record_type == 'agent-name':
+        return _agent_name_adapter.validate_python(data)
     elif record_type == 'last-prompt':
         return _last_prompt_adapter.validate_python(data)
     else:
