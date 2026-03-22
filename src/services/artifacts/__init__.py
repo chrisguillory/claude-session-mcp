@@ -72,8 +72,15 @@ from .todos import (
 )
 from .tool_results import (
     TOOL_RESULT_EXTENSIONS,
+    DiscoveredDirectory,
+    DiscoveredFile,
+    DiscoveryResult,
+    ToolResultCollection,
+    ToolResultDirectory,
+    ToolResultDirectoryFile,
     ToolResultFile,
     collect_tool_results,
+    discover_tool_results,
     get_tool_results_dir,
     write_tool_results,
 )
@@ -117,7 +124,14 @@ __all__ = [
     'TOOL_RESULT_EXTENSIONS',
     'ToolResultExtension',
     'ToolResultFile',
+    'ToolResultDirectoryFile',
+    'ToolResultDirectory',
+    'ToolResultCollection',
+    'DiscoveredFile',
+    'DiscoveredDirectory',
+    'DiscoveryResult',
     'get_tool_results_dir',
+    'discover_tool_results',
     'collect_tool_results',
     'write_tool_results',
     # tasks

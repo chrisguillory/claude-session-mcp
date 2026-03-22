@@ -135,7 +135,7 @@ class SessionCloneService:
         # Collect tool results from source session
         tool_results = collect_tool_results(source_session_dir, session_info.session_id)
         if logger:
-            await logger.info(f'Found {len(tool_results)} tool result files')
+            await logger.info(f'Found {tool_results.total_file_count} tool result files')
 
         # Collect todos from source session
         todos = collect_todos(session_info.session_id)
@@ -220,10 +220,13 @@ class SessionCloneService:
                 # Flat: <target>/agent-*.jsonl
                 all_output_paths.append(target_dir / new_filename)
 
-        # 3. Tool results
+        # 3. Tool results (flat files + directory files)
         if tool_results:
             tool_results_dir = target_dir / new_session_id / 'tool-results'
-            all_output_paths.extend(tool_results_dir / tr.filename for tr in tool_results)
+            all_output_paths.extend(tool_results_dir / tr.filename for tr in tool_results.files)
+            for d in tool_results.directories:
+                subdir = tool_results_dir / d.name
+                all_output_paths.extend(subdir / f.filename for f in d.files)
 
         # 4. Todos
         if todos:
@@ -377,7 +380,7 @@ class SessionCloneService:
             main_records_restored=main_records_cloned,
             agent_records_restored=agent_records_cloned,
             plan_files_restored=plan_files_cloned,
-            tool_results_restored=len(tool_results),
+            tool_results_restored=tool_results.total_file_count,
             todos_restored=todos_cloned,
             tasks_restored=tasks_cloned,
             paths_translated=translator is not None,

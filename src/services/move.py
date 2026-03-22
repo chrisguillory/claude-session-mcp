@@ -156,7 +156,7 @@ class SessionMoveService:
         custom_title = extract_custom_title_from_records(files_data)
 
         if log:
-            await log.info(f'Found {len(agent_infos)} agent files, {len(tool_results)} tool results')
+            await log.info(f'Found {len(agent_infos)} agent files, {tool_results.total_file_count} tool results')
             if session_memory:
                 await log.info('Found session-memory/summary.md')
 
@@ -179,10 +179,13 @@ class SessionMoveService:
             else:
                 all_output_paths.append(target_dir / filename)
 
-        # Tool results
+        # Tool results (flat files + directory files)
         if tool_results:
             tool_results_dir = target_dir / sid / 'tool-results'
-            all_output_paths.extend(tool_results_dir / tr.filename for tr in tool_results)
+            all_output_paths.extend(tool_results_dir / tr.filename for tr in tool_results.files)
+            for d in tool_results.directories:
+                subdir = tool_results_dir / d.name
+                all_output_paths.extend(subdir / f.filename for f in d.files)
 
         # Session memory
         if session_memory:
@@ -261,7 +264,7 @@ class SessionMoveService:
         if tool_results:
             write_tool_results(tool_results, target_dir, sid)
             if log:
-                await log.info(f'Wrote {len(tool_results)} tool result files')
+                await log.info(f'Wrote {tool_results.total_file_count} tool result files')
 
         # Write session memory (raw copy)
         if session_memory:
@@ -312,11 +315,20 @@ class SessionMoveService:
                 agent_path.unlink()
                 files_deleted += 1
 
-            # Delete tool results
-            for tr in tool_results:
-                tr_path = source_session_dir / sid / 'tool-results' / tr.filename
-                tr_path.unlink()
+            # Delete tool results (flat files)
+            source_tool_results_dir = source_session_dir / sid / 'tool-results'
+            for tr in tool_results.files:
+                (source_tool_results_dir / tr.filename).unlink()
                 files_deleted += 1
+
+            # Delete tool result directory contents then directories
+            for d in tool_results.directories:
+                subdir = source_tool_results_dir / d.name
+                for f in d.files:
+                    (subdir / f.filename).unlink()
+                    files_deleted += 1
+                if not any(subdir.iterdir()):  # guard against .DS_Store
+                    subdir.rmdir()
 
             # Delete session memory
             if session_memory:

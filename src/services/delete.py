@@ -53,10 +53,13 @@ from src.services.artifacts import (
     SESSION_ENV_DIR,
     TASKS_DIR,
     TODOS_DIR,
-    TOOL_RESULT_EXTENSIONS,
+    ToolResultCollection,
+    ToolResultDirectory,
+    ToolResultDirectoryFile,
     ToolResultFile,
     classify_task_directory,
     create_session_env_dir,
+    discover_tool_results,
     extract_slugs_from_records,
     get_tool_results_dir,
     write_jsonl,
@@ -94,9 +97,6 @@ class SessionDeleteService:
 
     # Backup location - separate from ~/.claude/
     DELETED_SESSIONS_DIR = Path.home() / '.claude-session-mcp' / 'deleted'
-
-    # Expected file extensions in tool-results directory (shared with collect_tool_results)
-    EXPECTED_TOOL_RESULT_EXTENSIONS = TOOL_RESULT_EXTENSIONS
 
     # Only permission errors are truly "expected" - environment issue, not a bug
     # Other errors indicate unexpected state and should propagate after rollback:
@@ -331,31 +331,31 @@ class SessionDeleteService:
         if logger:
             await logger.info(f'Found {len(slugs)} slugs, {len(plan_file_paths)} plan files')
 
-        # 4. Tool results - explicit enumeration with extension validation
+        # 4. Tool results - unified discovery with extension validation
         tool_results_dir = get_tool_results_dir(session_dir, session_id)
         tool_results_parent = session_dir / session_id
 
         if tool_results_dir.exists():
-            for path in tool_results_dir.rglob('*'):
-                if path.is_file():
-                    if path.suffix in self.EXPECTED_TOOL_RESULT_EXTENSIONS:
-                        size = path.stat().st_size
-                        artifacts.append(
-                            ArtifactFile(
-                                path=str(path),
-                                size_bytes=size,
-                                artifact_type='tool_result',
-                            )
-                        )
-                        tool_result_paths.append(str(path))
-                    else:
-                        # Unexpected file type - Claude Code may have changed
-                        unexpected_files.append(str(path))
-                elif path.is_dir():
-                    # Track subdirectories for cleanup
-                    directories_to_cleanup.append(str(path))
+            discovery = discover_tool_results(session_dir, session_id)
 
-            # Track tool-results directory itself
+            # Map discovered flat files -> artifacts + tool_result_paths
+            for f in discovery.files:
+                size = f.path.stat().st_size
+                artifacts.append(ArtifactFile(path=str(f.path), size_bytes=size, artifact_type='tool_result'))
+                tool_result_paths.append(str(f.path))
+
+            # Map discovered directory files -> artifacts + tool_result_paths + dirs
+            for d in discovery.directories:
+                for fp in d.file_paths:
+                    size = fp.stat().st_size
+                    artifacts.append(ArtifactFile(path=str(fp), size_bytes=size, artifact_type='tool_result'))
+                    tool_result_paths.append(str(fp))
+                directories_to_cleanup.append(str(d.path))
+
+            # Map unknowns -> unexpected_files (delete's graceful error handling)
+            unexpected_files.extend(str(p) for p in discovery.unknown_files)
+
+            # Track tool-results directory itself for cleanup
             directories_to_cleanup.append(str(tool_results_dir))
 
         # Track parent session directory if it exists
@@ -797,13 +797,25 @@ class SessionDeleteService:
             logger.info(f'Restored: {agent_path}')
 
         # Restore tool results (exist_ok=True: files may survive partial deletion)
-        if archive.tool_results:
-            tool_result_files = [
-                ToolResultFile(tool_use_id=tr.tool_use_id, content=tr.content, extension=tr.extension)
-                for tr in archive.tool_results
-            ]
-            write_tool_results(tool_result_files, target_dir, archive.session_id, exist_ok=True)
-            logger.info(f'Restored {len(archive.tool_results)} tool result files')
+        if archive.tool_results or archive.tool_result_dirs:
+            collection = ToolResultCollection(
+                files=[
+                    ToolResultFile(tool_use_id=tr.tool_use_id, content=tr.content, extension=tr.extension)
+                    for tr in archive.tool_results
+                ],
+                directories=[
+                    ToolResultDirectory(
+                        name=d.name,
+                        files=[
+                            ToolResultDirectoryFile(filename=f.filename, content=f.content, extension=f.extension)
+                            for f in d.files
+                        ],
+                    )
+                    for d in archive.tool_result_dirs
+                ],
+            )
+            write_tool_results(collection, target_dir, archive.session_id, exist_ok=True)
+            logger.info(f'Restored {collection.total_file_count} tool result files')
 
         # Restore todo files (exist_ok=True: files may survive partial deletion)
         if archive.todos:

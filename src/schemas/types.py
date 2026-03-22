@@ -167,11 +167,14 @@ Compatible with strict=True and the json.loads() -> model_validate() pattern.
 Python-mode model_dump() returns raw bytes; JSON-mode returns base64 string.
 """
 
-ToolResultExtension = Literal['.txt', '.json', '.xlsx']
+ToolResultExtension = Literal['.bin', '.jpg', '.json', '.pdf', '.txt', '.xlsx']
 """Known file extensions for tool result files in Claude Code sessions.
 
-Tool results are stored as individual files under:
-    ~/.claude/projects/<encoded-path>/<session-id>/tool-results/<tool-use-id>{extension}
+Tool results are stored as individual files or in subdirectories under:
+    ~/.claude/projects/<encoded-path>/<session-id>/tool-results/
+
+Flat files: <tool-use-id>{.bin,.json,.pdf,.txt,.xlsx}
+Directories: pdf-<uuid>/page-NN{.jpg} (PDF page renders from Claude Code's Read tool)
 
 Defined here (not in services layer) to avoid circular imports:
 schemas.operations.archive needs this type, but services imports from schemas.

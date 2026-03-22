@@ -27,6 +27,8 @@ from src.schemas.operations.archive import (
     PlanFileEntry,
     SessionArchiveV2,
     TodoFileEntry,
+    ToolResultDirectoryEntry,
+    ToolResultDirectoryFileEntry,
     ToolResultEntry,
     parse_agent_metadata,
 )
@@ -295,7 +297,7 @@ class SessionArchiveService:
 
         # Collect tool results (v1.2+)
         tool_results = collect_tool_results(project_folder, self.session_id)
-        await log.info(f'Collected {len(tool_results)} tool result files')
+        await log.info(f'Collected {tool_results.total_file_count} tool result files')
 
         # Collect todos (v1.2+)
         todos = collect_todos(self.session_id)
@@ -359,7 +361,18 @@ class SessionArchiveService:
 
         tool_result_entries = [
             ToolResultEntry(tool_use_id=tr.tool_use_id, content=tr.content, extension=tr.extension)
-            for tr in tool_results
+            for tr in tool_results.files
+        ]
+
+        tool_result_dir_entries = [
+            ToolResultDirectoryEntry(
+                name=d.name,
+                files=[
+                    ToolResultDirectoryFileEntry(filename=f.filename, content=f.content, extension=f.extension)
+                    for f in d.files
+                ],
+            )
+            for d in tool_results.directories
         ]
 
         # Extract agent_id from todo filename: {session_id}-agent-{agent_id}.json
@@ -394,6 +407,7 @@ class SessionArchiveService:
             agent_files=agent_entries,
             plan_files=plan_entries,
             tool_results=tool_result_entries,
+            tool_result_dirs=tool_result_dir_entries,
             todos=todo_entries,
             tasks=tasks,
             task_metadata=task_metadata,

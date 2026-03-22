@@ -23,8 +23,13 @@ from src.schemas.types import Base64JsonBytes, JsonDatetime, ToolResultExtension
 # Archive Format Version
 # ==============================================================================
 
-ARCHIVE_FORMAT_VERSION = '2.0'
-"""Current archive format version. Used when creating new archives."""
+ARCHIVE_FORMAT_VERSION = '2.1'
+"""Current archive format version. Used when creating new archives.
+
+Version history:
+- 2.1: Added tool_result_dirs for pdf-<uuid>/page-NN.jpg directory structures
+- 2.0: Explicit artifact models, tasks support, agent structure preservation
+"""
 
 
 # ==============================================================================
@@ -72,9 +77,10 @@ class ArchiveMetadata(StrictModel):
 
 class SessionArchiveV2(StrictModel):
     """
-    Archive format v2.0 - explicit artifact models.
+    Archive format v2.x - explicit artifact models.
 
     Version history:
+    - 2.1: Added tool_result_dirs for directory-based tool results (pdf page renders)
     - 2.0: Explicit artifact models, tasks support, agent structure preservation
     - 1.4: Added custom_title field
     - 1.3: Added machine_id field
@@ -109,6 +115,7 @@ class SessionArchiveV2(StrictModel):
     agent_files: Sequence[AgentFileEntry] = ()
     plan_files: Sequence[PlanFileEntry] = ()
     tool_results: Sequence[ToolResultEntry] = ()
+    tool_result_dirs: Sequence[ToolResultDirectoryEntry] = ()
     todos: Sequence[TodoFileEntry] = ()
     tasks: Sequence[Task] = ()  # Canonical Task model from session/models.py
     task_metadata: Mapping[str, str] = pydantic.Field(
@@ -184,6 +191,29 @@ class ToolResultEntry(StrictModel):
     tool_use_id: str
     content: Base64JsonBytes
     extension: ToolResultExtension
+
+
+class ToolResultDirectoryFileEntry(StrictModel):
+    """A file within a tool result directory (e.g., page-01.jpg in pdf-<uuid>/).
+
+    Derived fields:
+    - location: projects/<enc>/<sid>/tool-results/{parent.name}/{filename}
+    """
+
+    filename: str
+    content: Base64JsonBytes
+    extension: ToolResultExtension
+
+
+class ToolResultDirectoryEntry(StrictModel):
+    """A tool result directory (e.g., pdf-<uuid>/ containing page images).
+
+    Derived fields:
+    - location: projects/<enc>/<sid>/tool-results/{name}/
+    """
+
+    name: str
+    files: Sequence[ToolResultDirectoryFileEntry]
 
 
 class TodoFileEntry(StrictModel):
